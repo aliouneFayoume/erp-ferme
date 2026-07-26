@@ -1,12 +1,23 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const { signToken, requireAuth } = require('../auth');
 const { logAudit } = require('../audit');
+
+// Limite le brute-force sur les mots de passe : 10 tentatives / 15 min par IP, au-delà d'un usage
+// normal (un utilisateur qui se trompe de mot de passe) mais bien en-deçà d'un balayage automatisé.
+const limiteurLogin = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erreur: 'Trop de tentatives de connexion. Réessayez plus tard.' },
+});
 
 module.exports = function authRoutes(pool) {
     const router = express.Router();
 
-    router.post('/login', async (req, res) => {
+    router.post('/login', limiteurLogin, async (req, res) => {
         const { email, password } = req.body;
         if (!email || !password) {
             return res.status(400).json({ erreur: 'Email et mot de passe requis.' });

@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const path = require('path');
 
 const { createPool } = require('./db');
@@ -11,6 +12,24 @@ const PORT = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json());
+
+// CSP alignée sur les ressources externes réellement utilisées par le frontend (Leaflet via unpkg,
+// tuiles OpenStreetMap) : aucune autre origine externe n'est chargée, donc pas de relâchement au-delà.
+app.use(
+    helmet({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'", 'https://unpkg.com'],
+                styleSrc: ["'self'", 'https://unpkg.com', "'unsafe-inline'"], // styles inline ponctuels (frontend) + Leaflet
+                imgSrc: ["'self'", 'data:', 'https://*.tile.openstreetmap.org'],
+                fontSrc: ["'self'"],
+                connectSrc: ["'self'"],
+                objectSrc: ["'none'"],
+            },
+        },
+    })
+);
 
 async function main() {
     const { pool, mode } = createPool();
