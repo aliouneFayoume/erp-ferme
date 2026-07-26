@@ -3,6 +3,7 @@ window.Views = window.Views || {};
 window.Views.clients = {
   async render(container) {
     const clients = await Api.get('/clients');
+    const moi = Api.getUser();
 
     container.innerHTML = `
       <div class="panel">
@@ -36,7 +37,7 @@ window.Views.clients = {
       <div class="panel">
         <h2>Clients (${clients.length})</h2>
         <table>
-          <thead><tr><th>Nom</th><th>Type</th><th>Catégorie</th><th>Téléphone</th><th>Encours / Limite</th><th>GPS</th></tr></thead>
+          <thead><tr><th>Nom</th><th>Type</th><th>Catégorie</th><th>Téléphone</th><th>Encours / Limite</th><th>GPS</th><th></th></tr></thead>
           <tbody>
             ${clients
               .map(
@@ -47,6 +48,7 @@ window.Views.clients = {
                   <td>${esc(c.telephone)}</td>
                   <td class="num">${c.type_client === 'B2B' ? `${fmt(c.solde_encours)} / ${fmt(c.limite_credit)}` : '-'}</td>
                   <td class="num">${Number(c.gps_lat).toFixed(4)}, ${Number(c.gps_lng).toFixed(4)}</td>
+                  <td>${moi.role === 'admin' ? `<button class="danger" data-supprimer="${c.id}">Supprimer</button>` : ''}</td>
                 </tr>`
               )
               .join('')}
@@ -93,6 +95,23 @@ window.Views.clients = {
       } catch (err) {
         showToast(err.message, 'error');
       }
+    });
+
+    container.querySelectorAll('button[data-supprimer]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const c = clients.find((x) => x.id === Number(btn.dataset.supprimer));
+        const values = await Modal.open(`Supprimer ${c.nom} ?`, [
+          { name: 'confirmer', label: 'Tapez "OUI" pour confirmer', type: 'text', value: '' },
+        ]);
+        if (!values || values.confirmer.trim().toUpperCase() !== 'OUI') return;
+        try {
+          await Api.del(`/clients/${btn.dataset.supprimer}`);
+          showToast('Client supprimé.', 'success');
+          window.Views.clients.render(container);
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
     });
   },
 };
