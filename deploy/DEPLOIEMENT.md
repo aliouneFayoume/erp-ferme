@@ -1,18 +1,27 @@
 # Déploiement sur VPS — ERP Ferme Massla
 
-Ce dossier contient tout ce qu'il faut pour déployer l'application une fois qu'un VPS est
-disponible. Rien ici n'a été exécuté sur un serveur réel — c'est un point de départ prêt à
-l'emploi. Recommandation cahier des charges : VPS localisé en **Europe** (latence optimisée vers
-le Sénégal) et backups externalisés toutes les 6h.
+## État actuel (déployé et vérifié)
+
+- VPS : Oracle Cloud Infrastructure, Ubuntu 24.04, IP `40.233.98.20`, utilisateur SSH `ubuntu`.
+- Domaine : `massla.sn` (+ `www.massla.sn`), DNS pointé vers l'IP ci-dessus.
+- HTTPS actif via Let's Encrypt (`https://massla.sn`), HTTP redirige automatiquement en 301.
+- Renouvellement du certificat automatisé (`erp-ferme-renew.timer`, 2x/jour).
+- Sauvegardes Postgres automatisées (`erp-ferme-backup.timer`, toutes les 6h, rétention 14 jours).
+- Base : Supabase Postgres 17 via connexion pooler (`server/.env`, non commité).
+
+Ce qui suit reste utile comme référence/point de départ pour un nouveau déploiement ou une
+migration de VPS.
 
 ## Prérequis
 
-- Un VPS Europe (ex : Hetzner, OVH, Scaleway) avec accès SSH root ou sudo.
+- Un VPS avec accès SSH root ou sudo, Docker + docker compose plugin installés.
 - Un nom de domaine dont le DNS pointe vers l'IP du VPS (A record). Nécessaire pour le TLS.
 - La base Supabase déjà configurée (`server/.env` avec `DATABASE_URL` + `JWT_SECRET`, voir
-  README.md racine) — copier ce fichier sur le VPS, **ne jamais le committer dans git**.
+  README.md racine) — copier ce fichier sur le VPS, **ne jamais le committer dans git**. Le
+  fichier doit être encodé en UTF-8 **sans BOM** (un BOM en tête fait échouer le parsing
+  `EnvironmentFile=` de systemd utilisé par les timers de sauvegarde/renouvellement).
 
-## Option A — Docker (recommandé)
+## Option A — Docker (recommandé, utilisée en production)
 
 ```bash
 # Sur le VPS, après avoir installé Docker + docker compose plugin :
@@ -46,43 +55,65 @@ départ pour `/etc/nginx/sites-available/erp-ferme` (adapter `proxy_pass` vers
 
 ## TLS (HTTPS) avec Let's Encrypt
 
-Une fois le DNS du domaine pointé vers le VPS et nginx qui répond sur le port 80 :
+Une fois le DNS du domaine pointé vers le VPS et nginx qui répond sur le port 80, décommenter les
+volumes `certbot/conf` et `certbot/www` dans `docker-compose.yml` (déjà fait pour ce déploiement),
+puis :
 
 ```bash
-# Docker : certbot en conteneur ponctuel partageant les volumes déclarés (commentés) dans docker-compose.yml
-docker run --rm -v ./deploy/certbot/conf:/etc/letsencrypt -v ./deploy/certbot/www:/var/www/certbot \
-  certbot/certbot certonly --webroot -w /var/www/certbot -d votre-domaine.tld
+docker compose up -d nginx   # recrée le conteneur avec les volumes montés
 
-# Sans Docker :
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d votre-domaine.tld
+docker run --rm -v ./deploy/certbot/conf:/etc/letsencrypt -v ./deploy/certbot/www:/var/www/certbot \
+  certbot/certbot certonly --webroot -w /var/www/certbot -d votre-domaine.tld -d www.votre-domaine.tld \
+  --non-interactive --agree-tos -m votre@email.tld
 ```
 
-Puis décommenter le bloc HTTPS dans `deploy/nginx.conf` (et le port 443 dans
-`docker-compose.yml` si Docker), recharger nginx. Penser au renouvellement automatique
-(`certbot renew`, généralement déjà planifié par le paquet certbot ; en Docker, prévoir un cron
-qui relance la commande `certonly` puis `docker compose exec nginx nginx -s reload`).
+Puis dans `deploy/nginx.conf` : le bloc `server_name` du port 80 devient une redirection 301 vers
+HTTPS, et le bloc `listen 443 ssl` (avec les chemins `ssl_certificate`/`ssl_certificate_key`) est
+actif — voir le fichier actuel pour l'état final. Ouvrir le port 443 dans `docker-compose.yml`
+(`ports: - "443:443"`) et dans le pare-feu du VPS (`iptables`/`netfilter-persistent` si pas
+d'`ufw`), puis `docker compose up -d nginx`.
 
-## Sauvegardes externalisées toutes les 6h
+### Renouvellement automatique
+
+`deploy/certbot-renew.sh` relance `certbot renew` (webroot) puis recharge nginx ; certbot ne
+renouvelle réellement que si l'échéance est proche (~30 jours), donc l'exécuter souvent ne fait
+rien tant que ce n'est pas nécessaire.
 
 ```bash
-sudo apt install postgresql-client   # fournit pg_dump
+sudo cp deploy/erp-ferme-renew.service deploy/erp-ferme-renew.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now erp-ferme-renew.timer
+systemctl list-timers erp-ferme-renew.timer   # vérifier la prochaine exécution
+```
+
+## Sauvegardes toutes les 6h
+
+```bash
+# Ubuntu 24.04 : le paquet postgresql-client par défaut (v16) ne peut PAS dumper un serveur
+# Postgres 17 (cas de Supabase) — ajouter le dépôt officiel PGDG pour avoir la bonne version :
+sudo install -d /usr/share/postgresql-common/pgdg
+sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+echo 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main' | sudo tee /etc/apt/sources.list.d/pgdg.list
+sudo apt-get update && sudo apt-get install -y postgresql-client-17
+
 sudo cp deploy/erp-ferme-backup.service deploy/erp-ferme-backup.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now erp-ferme-backup.timer
 systemctl list-timers erp-ferme-backup.timer   # vérifier la prochaine exécution
 ```
 
-`deploy/backup.sh` ne fait qu'un `pg_dump` **local** sur le VPS — lire les commentaires du script
-pour brancher une synchronisation vers un stockage externe (S3, rclone, etc.) une fois le
-prestataire de stockage choisi.
+`deploy/backup.sh` ne fait qu'un `pg_dump` **local** sur le VPS (`/home/ubuntu/erp-ferme/backups`
+pour ce déploiement) — lire les commentaires du script pour brancher une synchronisation vers un
+stockage externe (S3, rclone, etc.) une fois le prestataire de stockage choisi. C'est le point
+restant pour respecter pleinement l'exigence « backups externalisés » du cahier des charges.
 
 ## Checklist sécurité avant mise en production réelle
 
-- [ ] Changer les mots de passe des comptes de démonstration (`demo1234`) via le module
+- [x] Changer les mots de passe des comptes de démonstration (`demo1234`) via le module
       Utilisateurs, ou les supprimer et créer de vrais comptes.
-- [ ] `JWT_SECRET` doit être une valeur longue et unique par environnement (déjà appliqué : le
+- [x] `JWT_SECRET` doit être une valeur longue et unique par environnement (déjà appliqué : le
       serveur refuse de démarrer sans, dès que `DATABASE_URL` est défini).
-- [ ] Pare-feu VPS : n'ouvrir que 22 (SSH, idéalement par clé uniquement), 80 et 443.
+- [x] Pare-feu VPS : n'ouvrir que 22 (SSH, idéalement par clé uniquement), 80 et 443.
 - [ ] Restreindre l'accès SSH (clé uniquement, `PasswordAuthentication no`).
-- [ ] Vérifier que `server/.env` n'est jamais commité (déjà exclu par `.gitignore`).
+- [x] Vérifier que `server/.env` n'est jamais commité (déjà exclu par `.gitignore`).
+- [ ] Externaliser les sauvegardes hors du VPS (S3, rclone...).

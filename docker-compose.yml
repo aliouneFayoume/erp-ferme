@@ -21,8 +21,8 @@ services:
       - app
     ports:
       - "80:80"
-      # - "443:443"   # décommenter une fois le certificat TLS obtenu (voir deploy/DEPLOIEMENT.md)
+      - "443:443"
     volumes:
       - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      # - ./deploy/certbot/conf:/etc/letsencrypt:ro
-      # - ./deploy/certbot/www:/var/www/certbot:ro
+      - ./deploy/certbot/conf:/etc/letsencrypt:ro
+      - ./deploy/certbot/www:/var/www/certbot:ro

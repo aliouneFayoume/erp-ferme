@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Sauvegarde de la base (cahier des charges §4 : "backups externalisés toutes les 6 heures").
 # Nécessite le paquet postgresql-client (pour pg_dump) sur le VPS.
-# Usage : DATABASE_URL=... ./backup.sh   (ou renseigner DATABASE_URL dans /opt/erp-ferme/server/.env
+# Usage : DATABASE_URL=... ./backup.sh   (ou renseigner DATABASE_URL dans server/.env
 #         et lancer via le service systemd erp-ferme-backup, voir DEPLOIEMENT.md)
 
 set -euo pipefail
 
-BACKUP_DIR="${BACKUP_DIR:-/opt/erp-ferme/backups}"
+BACKUP_DIR="${BACKUP_DIR:-/home/ubuntu/erp-ferme/backups}"
 RETENTION_JOURS="${RETENTION_JOURS:-14}"
 HORODATAGE=$(date -u +%Y%m%dT%H%M%SZ)
 
 if [ -z "${DATABASE_URL:-}" ]; then
-  echo "DATABASE_URL doit être défini (charger /opt/erp-ferme/server/.env avant d'appeler ce script)." >&2
+  echo "DATABASE_URL doit être défini (charger server/.env avant d'appeler ce script)." >&2
   exit 1
 fi
 
