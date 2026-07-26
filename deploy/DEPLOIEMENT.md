@@ -7,7 +7,10 @@
 - HTTPS actif via Let's Encrypt (`https://massla.sn`), HTTP redirige automatiquement en 301.
 - Renouvellement du certificat automatisé (`erp-ferme-renew.timer`, 2x/jour).
 - Sauvegardes Postgres automatisées (`erp-ferme-backup.timer`, toutes les 6h, rétention 14 jours).
+- Surveillance de disponibilité (`erp-ferme-monitor.timer`, toutes les 2h, alerte push via ntfy.sh).
 - Base : Supabase Postgres 17 via connexion pooler (`server/.env`, non commité).
+- CI/CD : GitHub Actions (`aliouneFayoume/erp-ferme`) — tests à chaque push, déploiement
+  automatique sur le VPS (`git pull` + rebuild Docker) sur push vers `main`.
 
 Ce qui suit reste utile comme référence/point de départ pour un nouveau déploiement ou une
 migration de VPS.
@@ -107,6 +110,26 @@ pour ce déploiement) — lire les commentaires du script pour brancher une sync
 stockage externe (S3, rclone, etc.) une fois le prestataire de stockage choisi. C'est le point
 restant pour respecter pleinement l'exigence « backups externalisés » du cahier des charges.
 
+## Surveillance de disponibilité (toutes les 2h)
+
+`deploy/monitor.sh` vérifie `https://massla.sn/api/health` et envoie une notification push via
+[ntfy.sh](https://ntfy.sh) (gratuit, sans compte, sur un topic non listé) uniquement si l'appli ne
+répond pas — silence total quand tout va bien. Limite connue : le contrôle tourne sur le VPS
+lui-même, donc si le VPS entier est injoignable (réseau/panne matérielle), le contrôle ne s'exécute
+pas et aucune alerte n'est envoyée — seule une panne applicative (conteneur planté, etc.) est
+couverte.
+
+```bash
+sudo cp deploy/erp-ferme-monitor.service deploy/erp-ferme-monitor.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now erp-ferme-monitor.timer
+systemctl list-timers erp-ferme-monitor.timer   # vérifier la prochaine exécution
+```
+
+Pour recevoir les alertes : installer l'app **ntfy** (iOS/Android) ou ouvrir
+`https://ntfy.sh/<topic>` dans un navigateur, et s'abonner au topic configuré dans
+`deploy/monitor.sh` (`NTFY_TOPIC`).
+
 ## Checklist sécurité avant mise en production réelle
 
 - [x] Changer les mots de passe des comptes de démonstration (`demo1234`) via le module
@@ -114,6 +137,7 @@ restant pour respecter pleinement l'exigence « backups externalisés » du cahi
 - [x] `JWT_SECRET` doit être une valeur longue et unique par environnement (déjà appliqué : le
       serveur refuse de démarrer sans, dès que `DATABASE_URL` est défini).
 - [x] Pare-feu VPS : n'ouvrir que 22 (SSH, idéalement par clé uniquement), 80 et 443.
-- [ ] Restreindre l'accès SSH (clé uniquement, `PasswordAuthentication no`).
+- [x] Restreindre l'accès SSH (clé uniquement, `PasswordAuthentication no` — déjà actif par défaut
+      sur cette image Ubuntu, vérifié dans `/etc/ssh/sshd_config.d/60-cloudimg-settings.conf`).
 - [x] Vérifier que `server/.env` n'est jamais commité (déjà exclu par `.gitignore`).
 - [ ] Externaliser les sauvegardes hors du VPS (S3, rclone...).

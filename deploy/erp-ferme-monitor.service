@@ -1,0 +1,7 @@
+[Unit]
+Description=Vérifie la disponibilité d'ERP Ferme Massla et alerte en cas de panne
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/home/ubuntu/erp-ferme/deploy/monitor.sh
