@@ -20,11 +20,20 @@ const Api = (() => {
     const token = getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const res = await fetch(`/api${path}`, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+    let res;
+    try {
+      res = await fetch(`/api${path}`, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+    } catch (err) {
+      // fetch() rejette (pas de réseau) — distinct d'une réponse HTTP d'erreur : le formulaire
+      // appelant peut choisir de mettre l'action en file d'attente hors-ligne plutôt que l'échouer.
+      const erreurReseau = new Error('Pas de connexion réseau.');
+      erreurReseau.reseau = true;
+      throw erreurReseau;
+    }
 
     let data = null;
     try {

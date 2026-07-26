@@ -8,15 +8,41 @@ window.Views.logistique = {
   },
 };
 
+const CACHE_TOURNEE_KEY = 'erp_cache_tournee_livreur';
+
 async function renderLivreur(container) {
-  const [tourneeRes, caisses] = await Promise.all([Api.get('/logistique/tournees'), Api.get('/logistique/caisse')]);
+  let tourneeRes, caisses, horsLigne = false;
+  try {
+    [tourneeRes, caisses] = await Promise.all([Api.get('/logistique/tournees'), Api.get('/logistique/caisse')]);
+    localStorage.setItem(CACHE_TOURNEE_KEY, JSON.stringify({ tourneeRes, caisses, ts: new Date().toISOString() }));
+  } catch (err) {
+    if (!err.reseau) throw err;
+    const cache = localStorage.getItem(CACHE_TOURNEE_KEY);
+    if (!cache) {
+      container.innerHTML = `<div class="panel"><p class="empty">Hors ligne et aucune tournée en cache. Reconnectez-vous une fois pour la charger.</p></div>`;
+      return;
+    }
+    const parsed = JSON.parse(cache);
+    tourneeRes = parsed.tourneeRes;
+    caisses = parsed.caisses;
+    horsLigne = parsed.ts;
+  }
+
   const { depot, arrets: tournees } = tourneeRes;
   const distanceTotaleKm = tournees.reduce((s, t) => s + Number(t.distance_depuis_precedent_km || 0), 0);
   const aujourdhui = new Date().toISOString().slice(0, 10);
   const caisseDuJour = caisses.find((c) => String(c.date_caisse).slice(0, 10) === aujourdhui);
+  const caisseOuvertureEnAttente = OfflineQueue.lire().some((i) => i.path === '/logistique/caisse/ouvrir');
+  const livraisonsEnAttente = new Set(
+    OfflineQueue.lire()
+      .filter((i) => i.path.startsWith('/logistique/livraisons/'))
+      .map((i) => i.path.split('/')[3])
+  );
 
   let caisseHtml;
-  if (!caisseDuJour) {
+  if (caisseOuvertureEnAttente) {
+    caisseHtml = `<span class="badge warn">Ouverture en attente d'envoi (hors ligne)</span>`;
+  } else if (!caisseDuJour) {
     caisseHtml = `<button id="btn-ouvrir-caisse">Ouvrir ma caisse du jour</button>`;
   } else if (caisseDuJour.statut === 'OUVERTE') {
     caisseHtml = `<span class="badge ok">Ouverte — ${fmt(caisseDuJour.montant_theorique)} FCFA encaissés</span>`;
@@ -25,6 +51,7 @@ async function renderLivreur(container) {
   }
 
   container.innerHTML = `
+    ${horsLigne ? `<div class="panel"><p class="empty" style="margin:0">Hors ligne — dernières données connues (${new Date(horsLigne).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}). Vos actions seront envoyées à la reconnexion.</p></div>` : ''}
     <div class="panel">
       <div class="panel-row">
         <div>
@@ -82,8 +109,9 @@ async function renderLivreur(container) {
   const list = container.querySelector('#tournee-list');
   list.innerHTML = tournees.length
     ? tournees
-        .map(
-          (t) => `
+        .map((t) => {
+          const enAttente = livraisonsEnAttente.has(String(t.livraison_id));
+          return `
         <div class="lot-card">
           <div class="panel-row" style="margin-bottom:0">
             <div class="code">Arrêt #${t.ordre} — ${esc(t.client_nom)}</div>
@@ -93,16 +121,20 @@ async function renderLivreur(container) {
           <div class="kpi"><span>Commande</span><b>${esc(t.numero_commande)}</b></div>
           <div class="kpi"><span>Montant</span><b>${fmt(t.montant_total)} FCFA</b></div>
           <div class="kpi"><span>Statut</span><b>${esc(t.statut)}</b></div>
-          <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+          ${
+            enAttente
+              ? `<div style="margin-top:10px"><span class="badge warn">Livraison en attente d'envoi (hors ligne)</span></div>`
+              : `<div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
             <input type="text" placeholder="Preuve de livraison (nom du réceptionnaire, signature...)" class="input-preuve" data-id="${t.livraison_id}" />
             <div style="display:flex;gap:8px">
               <input type="number" placeholder="Espèces encaissées" class="input-encaissement" data-id="${t.livraison_id}" style="flex:1" />
               <button class="btn-terminer" data-id="${t.livraison_id}">Livré</button>
             </div>
-          </div>
+          </div>`
+          }
         </div>
-      `
-        )
+      `;
+        })
         .join('')
     : '<div class="empty">Aucune livraison prévue aujourd\'hui.</div>';
 
@@ -114,7 +146,13 @@ async function renderLivreur(container) {
         showToast('Caisse ouverte.', 'success');
         window.Views.logistique.render(container);
       } catch (err) {
-        showToast(err.message, 'error');
+        if (err.reseau) {
+          OfflineQueue.ajouter({ method: 'POST', path: '/logistique/caisse/ouvrir', body: {}, label: 'Ouverture de caisse' });
+          showToast("Hors ligne : ouverture de caisse enregistrée, sera envoyée à la reconnexion.", 'info');
+          window.Views.logistique.render(container);
+        } else {
+          showToast(err.message, 'error');
+        }
       }
     });
   }
@@ -128,16 +166,20 @@ async function renderLivreur(container) {
         showToast('Merci de renseigner une preuve de livraison (nom du réceptionnaire, signature...).', 'error');
         return;
       }
+      const path = `/logistique/livraisons/${btn.dataset.id}/statut`;
+      const payload = { statut: 'TERMINEE', encaissement_especes, preuve_livraison: preuveInput.value.trim() };
       try {
-        await Api.put(`/logistique/livraisons/${btn.dataset.id}/statut`, {
-          statut: 'TERMINEE',
-          encaissement_especes,
-          preuve_livraison: preuveInput.value.trim(),
-        });
+        await Api.put(path, payload);
         showToast('Livraison marquée terminée.', 'success');
         window.Views.logistique.render(container);
       } catch (err) {
-        showToast(err.message, 'error');
+        if (err.reseau) {
+          OfflineQueue.ajouter({ method: 'PUT', path, body: payload, label: `Livraison ${btn.dataset.id}` });
+          showToast('Hors ligne : livraison enregistrée, sera envoyée à la reconnexion.', 'info');
+          window.Views.logistique.render(container);
+        } else {
+          showToast(err.message, 'error');
+        }
       }
     });
   });

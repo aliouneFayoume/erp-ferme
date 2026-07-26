@@ -39,6 +39,7 @@
       <div class="who">
         <div id="who-name"></div>
         <span id="who-role" class="role-pill"></span>
+        <span id="sync-badge" class="badge warn hidden" title="Actions en attente d'envoi au serveur"></span>
         <div style="margin-top:8px;"><button class="secondary" id="btn-logout">Déconnexion</button></div>
       </div>
     </header>
@@ -50,6 +51,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/js/api.js"></script>
+  <script src="/js/offline-queue.js"></script>
   <script src="/js/views/dashboard.js"></script>
   <script src="/js/views/production.js"></script>
   <script src="/js/views/catalogue.js"></script>

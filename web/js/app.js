@@ -23,6 +23,28 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// Synchronisation de la file d'attente hors-ligne (preuves de livraison, encaissements saisis sans
+// réseau) : à la reconnexion, périodiquement, et une fois au démarrage — pas besoin d'action de
+// l'utilisateur. Le badge reste discret (masqué) tant qu'il n'y a rien en attente.
+function rafraichirBadgeSync() {
+  const badge = document.getElementById('sync-badge');
+  if (!badge) return;
+  const n = OfflineQueue.taille();
+  badge.classList.toggle('hidden', n === 0);
+  badge.textContent = n > 0 ? `${n} en attente` : '';
+}
+OfflineQueue.surChangement(rafraichirBadgeSync);
+
+async function tenterSyncHorsLigne() {
+  const { reussies } = await OfflineQueue.synchroniser();
+  if (reussies > 0) {
+    showToast(`${reussies} action(s) hors-ligne envoyée(s) au serveur.`, 'success');
+    if (currentTab === 'logistique') selectTab('logistique');
+  }
+}
+window.addEventListener('online', tenterSyncHorsLigne);
+setInterval(tenterSyncHorsLigne, 30000);
+
 function showToast(message, type = 'info') {
   const el = document.createElement('div');
   el.className = `toast ${type}`;
@@ -217,6 +239,8 @@ function showApp() {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app-shell').classList.remove('hidden');
   buildShell(Api.getUser());
+  rafraichirBadgeSync();
+  tenterSyncHorsLigne();
 }
 
 function showLogin() {
