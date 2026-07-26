@@ -1,0 +1,117 @@
+const fs = require('fs');
+const path = require('path');
+const express = require('express');
+const { newDb } = require('pg-mem');
+
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-erp-massla';
+
+const { signToken } = require('../../src/auth');
+
+/** Base pg-mem fraîche avec le schéma réel appliqué — une par test (isolation totale). */
+function createTestPool() {
+    const db = newDb({ autoCreateForeignKeyIndices: true });
+    db.public.registerFunction({
+        name: 'current_setting',
+        args: [],
+        returns: 'text',
+        implementation: () => null,
+    });
+    const schema = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'schema.sql'), 'utf-8');
+    db.public.none(schema);
+    const { Pool } = db.adapters.createPg();
+    return new Pool();
+}
+
+/** Monte uniquement les routes nécessaires au test sur un pool donné. */
+function buildApp(pool, routeNames) {
+    const app = express();
+    app.use(express.json());
+    for (const name of routeNames) {
+        app.use(`/api/${name}`, require(`../../src/routes/${name}`)(pool));
+    }
+    return app;
+}
+
+/** Jeu de données minimal partagé (rôles + secteurs), requis par les FK d'utilisateurs/produits. */
+async function seedRolesEtSecteurs(pool) {
+    const roles = ['admin', 'comptable', 'chef_prod', 'livreur'];
+    for (const r of roles) {
+        await pool.query(`INSERT INTO roles (nom) VALUES ($1)`, [r]);
+    }
+    const secteurs = ['Avicole', 'Piscicole', 'Maraîcher'];
+    for (const s of secteurs) {
+        await pool.query(`INSERT INTO secteurs (nom) VALUES ($1)`, [s]);
+    }
+}
+
+async function creerClient(pool, overrides = {}) {
+    const c = {
+        nom: 'Client Test',
+        type_client: 'B2C',
+        categorie_tarifaire: 'standard',
+        telephone: `+22177${Math.floor(1000000 + Math.random() * 8999999)}`,
+        limite_credit: 0,
+        ...overrides,
+    };
+    const res = await pool.query(
+        `INSERT INTO clients (nom, type_client, categorie_tarifaire, telephone, limite_credit, solde_encours)
+         VALUES ($1, $2, $3, $4, $5, 0) RETURNING *`,
+        [c.nom, c.type_client, c.categorie_tarifaire, c.telephone, c.limite_credit]
+    );
+    return res.rows[0];
+}
+
+async function creerProduitAvecStock(pool, overrides = {}) {
+    const p = {
+        secteur_id: 1,
+        nom: 'Produit Test',
+        unite_mesure: 'KG',
+        prix_unitaire_b2b: 1000,
+        prix_unitaire_b2c: 1500,
+        prix_unitaire_grossiste: null,
+        quantite_disponible: 100,
+        ...overrides,
+    };
+    const res = await pool.query(
+        `INSERT INTO produits (secteur_id, nom, unite_mesure, prix_unitaire_b2b, prix_unitaire_b2c, prix_unitaire_grossiste)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [p.secteur_id, p.nom, p.unite_mesure, p.prix_unitaire_b2b, p.prix_unitaire_b2c, p.prix_unitaire_grossiste]
+    );
+    const produit = res.rows[0];
+    await pool.query(`INSERT INTO stocks (produit_id, quantite_disponible) VALUES ($1, $2)`, [produit.id, p.quantite_disponible]);
+    return produit;
+}
+
+/**
+ * Fabrique un token JWT valide sans passer par bcrypt/login (tests ciblés sur la logique métier).
+ * Ne crée PAS de ligne dans `utilisateurs` — à réserver aux tests qui n'exercent pas le journal
+ * d'audit (celui-ci a une FK vers utilisateurs.id, voir creerUtilisateurEtToken ci-dessous).
+ */
+function tokenPour({ id = 1, role = 'admin', nom_complet = 'Testeur', secteur_id = null } = {}) {
+    return signToken({ id, role_nom: role, nom_complet, secteur_id });
+}
+
+/**
+ * Crée un vrai utilisateur en base (requiert que seedRolesEtSecteurs ait tourné) et renvoie un
+ * token correspondant à son id réel — nécessaire dès qu'une route appelle logAudit avec ce userId,
+ * sous peine de violer la FK audit_logs.utilisateur_id -> utilisateurs.id.
+ */
+async function creerUtilisateurEtToken(pool, { role = 'admin', nom_complet = 'Testeur', secteur_id = null } = {}) {
+    const roleRes = await pool.query(`SELECT id FROM roles WHERE nom = $1`, [role]);
+    const email = `${role}-${Date.now()}-${Math.floor(Math.random() * 100000)}@test.sn`;
+    const res = await pool.query(
+        `INSERT INTO utilisateurs (nom_complet, email, mot_de_passe_hash, role_id, secteur_id) VALUES ($1, $2, 'x', $3, $4) RETURNING id`,
+        [nom_complet, email, roleRes.rows[0].id, secteur_id]
+    );
+    return signToken({ id: res.rows[0].id, role_nom: role, nom_complet, secteur_id });
+}
+
+module.exports = {
+    createTestPool,
+    buildApp,
+    seedRolesEtSecteurs,
+    creerClient,
+    creerProduitAvecStock,
+    tokenPour,
+    creerUtilisateurEtToken,
+};

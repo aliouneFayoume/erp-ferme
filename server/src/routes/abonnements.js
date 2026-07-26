@@ -62,6 +62,10 @@ module.exports = function abonnementsRoutes(pool) {
         const JOURS = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
         const jourDuJour = JOURS[new Date().getUTCDay()];
 
+        // Toute la fonction est protégée : une erreur non rattrapée ici (y compris hors de la boucle,
+        // ex. journal d'audit) laisserait sinon la requête sans réponse au lieu de renvoyer une 500.
+        try {
+
         const abonnements = await pool.query(
             `SELECT a.*, p.nom as produit_nom, p.prix_unitaire_b2c, s.quantite_disponible
              FROM abonnements a
@@ -131,6 +135,10 @@ module.exports = function abonnementsRoutes(pool) {
 
         await logAudit(pool, { table: 'commandes', action: 'CREATE', userId: req.user.id, details: { source: 'abonnements', ...resultats } });
         res.json({ jour: jourDuJour, ...resultats });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la génération des commandes récurrentes.' });
+        }
     });
 
     return router;

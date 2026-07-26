@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/index.js",
     "migrate": "node src/migrate.js",
-    "migrate:seed": "node src/migrate.js --seed"
+    "migrate:seed": "node src/migrate.js --seed",
+    "test": "jest --runInBand"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -17,5 +18,15 @@
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.13.0",
     "pg-mem": "^3.0.4"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2",
+    "supertest": "^7.2.2"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "<rootDir>/tests/**/*.test.js"
+    ]
   }
 }
