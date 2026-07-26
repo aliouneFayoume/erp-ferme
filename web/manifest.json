@@ -1,0 +1,15 @@
+{
+  "name": "ERP Ferme Massla",
+  "short_name": "Ferme Massla",
+  "description": "Gestion intégrée Avicole, Piscicole et Maraîchage — production, ventes B2B/B2C, logistique et finances.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F6F2E7",
+  "theme_color": "#2E2A22",
+  "lang": "fr",
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

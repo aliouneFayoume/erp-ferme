@@ -1,0 +1,9 @@
+[Unit]
+Description=Déclenche la sauvegarde ERP Ferme Massla toutes les 6 heures
+
+[Timer]
+OnCalendar=00/6:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

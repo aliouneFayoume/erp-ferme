@@ -1,0 +1,28 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./server/.env
+    environment:
+      - PORT=4000
+    expose:
+      - "4000"
+    # Décommenter pour exposer directement sans nginx (utile en test) :
+    # ports:
+    #   - "4000:4000"
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      # - "443:443"   # décommenter une fois le certificat TLS obtenu (voir deploy/DEPLOIEMENT.md)
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # - ./deploy/certbot/conf:/etc/letsencrypt:ro
+      # - ./deploy/certbot/www:/var/www/certbot:ro

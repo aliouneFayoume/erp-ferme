@@ -1,0 +1,15 @@
+[Unit]
+Description=ERP Ferme Massla (Node/Express)
+After=network.target
+
+[Service]
+Type=simple
+User=erpferme
+WorkingDirectory=/opt/erp-ferme/server
+EnvironmentFile=/opt/erp-ferme/server/.env
+ExecStart=/usr/bin/node src/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

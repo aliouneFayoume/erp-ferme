@@ -1,0 +1,66 @@
+const express = require('express');
+const { requireAuth, checkRole } = require('../auth');
+const { logAudit } = require('../audit');
+
+module.exports = function clientsRoutes(pool) {
+    const router = express.Router();
+
+    router.get('/', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
+        const { type } = req.query;
+        const params = [];
+        let where = 'deleted_at IS NULL';
+        if (type) {
+            params.push(type);
+            where += ` AND type_client = $${params.length}`;
+        }
+        const result = await pool.query(`SELECT * FROM clients WHERE ${where} ORDER BY nom`, params);
+        res.json(result.rows);
+    });
+
+    router.post('/', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
+        const { nom, type_client, categorie_tarifaire, telephone, adresse, gps_lat, gps_lng, limite_credit, est_abonne } = req.body;
+        if (!gps_lat || !gps_lng) {
+            return res.status(400).json({ erreur: "Un point GPS précis est obligatoire pour l'adressage client." });
+        }
+        try {
+            const result = await pool.query(
+                `INSERT INTO clients (nom, type_client, categorie_tarifaire, telephone, adresse, gps_lat, gps_lng, limite_credit, est_abonne)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+                [nom, type_client, categorie_tarifaire || 'standard', telephone, adresse, gps_lat, gps_lng, limite_credit || 0, !!est_abonne]
+            );
+            await logAudit(pool, { table: 'clients', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, details: req.body });
+            res.status(201).json(result.rows[0]);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la création du client (téléphone déjà utilisé ?).' });
+        }
+    });
+
+    router.put('/:id', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
+        const { nom, categorie_tarifaire, telephone, adresse, gps_lat, gps_lng, limite_credit } = req.body;
+        try {
+            const result = await pool.query(
+                `UPDATE clients SET nom = COALESCE($1, nom), categorie_tarifaire = COALESCE($2, categorie_tarifaire),
+                        telephone = COALESCE($3, telephone), adresse = COALESCE($4, adresse),
+                        gps_lat = COALESCE($5, gps_lat), gps_lng = COALESCE($6, gps_lng),
+                        limite_credit = COALESCE($7, limite_credit)
+                 WHERE id = $8 AND deleted_at IS NULL RETURNING *`,
+                [nom, categorie_tarifaire, telephone, adresse, gps_lat, gps_lng, limite_credit, req.params.id]
+            );
+            if (result.rows.length === 0) return res.status(404).json({ erreur: 'Client introuvable.' });
+            await logAudit(pool, { table: 'clients', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, details: req.body });
+            res.json(result.rows[0]);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la mise à jour du client.' });
+        }
+    });
+
+    router.delete('/:id', requireAuth, checkRole(['admin']), async (req, res) => {
+        await pool.query(`UPDATE clients SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1`, [req.params.id]);
+        await logAudit(pool, { table: 'clients', rowId: req.params.id, action: 'DELETE', userId: req.user.id });
+        res.status(204).end();
+    });
+
+    return router;
+};

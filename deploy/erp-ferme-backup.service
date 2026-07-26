@@ -1,0 +1,8 @@
+[Unit]
+Description=Sauvegarde ERP Ferme Massla
+
+[Service]
+Type=oneshot
+User=erpferme
+EnvironmentFile=/opt/erp-ferme/server/.env
+ExecStart=/opt/erp-ferme/deploy/backup.sh
