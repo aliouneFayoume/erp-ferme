@@ -1,11 +1,23 @@
 const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+const { genererFacturePDF } = require('../facturePdf');
 
 module.exports = function financeRoutes(pool) {
     const router = express.Router();
 
     router.get('/factures', requireAuth, checkRole(['comptable']), async (req, res) => {
+        // Bascule automatique en retard : pas de tâche planifiée dédiée, le statut est simplement
+        // remis à jour à chaque consultation de l'écran (même logique "à la demande" que la
+        // génération des commandes d'abonnement ailleurs dans ce projet).
+        // Date du jour calculée en JS plutôt que CURRENT_DATE : pg-mem (simulation) renvoie un
+        // horodatage complet pour CURRENT_DATE plutôt qu'une date tronquée, ce qui ferait basculer
+        // une facture en retard dès le jour même de son échéance au lieu du lendemain.
+        const aujourdhui = new Date().toISOString().slice(0, 10);
+        await pool.query(
+            `UPDATE factures SET statut = 'EN_RETARD' WHERE statut = 'A_PAYER' AND date_echeance < $1 AND montant_restant > 0`,
+            [aujourdhui]
+        );
         const result = await pool.query(
             `SELECT f.*, c.numero_commande, cl.nom as client_nom, cl.type_client
              FROM factures f
@@ -14,6 +26,33 @@ module.exports = function financeRoutes(pool) {
              ORDER BY f.date_echeance ASC LIMIT 200`
         );
         res.json(result.rows);
+    });
+
+    /** Génère et télécharge la facture PDF correspondante (client, lignes, montants, échéance). */
+    router.get('/factures/:id/pdf', requireAuth, checkRole(['comptable']), async (req, res) => {
+        const factureRes = await pool.query(
+            `SELECT f.*, c.numero_commande, c.montant_total, c.client_id
+             FROM factures f JOIN commandes c ON f.commande_id = c.id
+             WHERE f.id = $1`,
+            [req.params.id]
+        );
+        if (factureRes.rows.length === 0) return res.status(404).json({ erreur: 'Facture introuvable.' });
+        const facture = factureRes.rows[0];
+
+        const clientRes = await pool.query(`SELECT * FROM clients WHERE id = $1`, [facture.client_id]);
+        const lignesRes = await pool.query(
+            `SELECT lc.*, p.nom as produit_nom FROM lignes_commande lc JOIN produits p ON lc.produit_id = p.id WHERE lc.commande_id = $1`,
+            [facture.commande_id]
+        );
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="facture-${facture.numero_commande}.pdf"`);
+        genererFacturePDF(res, {
+            facture,
+            commande: { numero_commande: facture.numero_commande, montant_total: facture.montant_total },
+            client: clientRes.rows[0],
+            lignes: lignesRes.rows,
+        });
     });
 
     router.get('/paiements', requireAuth, checkRole(['comptable']), async (req, res) => {

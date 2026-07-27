@@ -37,8 +37,9 @@ window.Views.finance = {
 
       <div class="panel">
         <h2>Factures</h2>
+        ${facturesEnRetardBanner(factures)}
         <table>
-          <thead><tr><th>Commande</th><th>Client</th><th>Type</th><th>Échéance</th><th>Restant dû</th><th>Statut</th></tr></thead>
+          <thead><tr><th>Commande</th><th>Client</th><th>Type</th><th>Échéance</th><th>Restant dû</th><th>Statut</th><th></th></tr></thead>
           <tbody>
             ${factures
               .map(
@@ -49,6 +50,7 @@ window.Views.finance = {
                   <td>${fmtDate(f.date_echeance)}</td>
                   <td class="num">${fmt(f.montant_restant)} FCFA</td>
                   <td>${factureBadge(f.statut)}</td>
+                  <td><button class="secondary" data-facture-pdf="${f.id}" data-numero="${esc(f.numero_commande)}">PDF</button></td>
                 </tr>`
               )
               .join('')}
@@ -77,8 +79,33 @@ window.Views.finance = {
         showToast(err.message, 'error');
       }
     });
+
+    container.querySelectorAll('button[data-facture-pdf]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          const blob = await Api.getBlob(`/finance/factures/${btn.dataset.facturePdf}/pdf`);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `facture-${btn.dataset.numero}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+    });
   },
 };
+
+function facturesEnRetardBanner(factures) {
+  const enRetard = factures.filter((f) => f.statut === 'EN_RETARD');
+  if (enRetard.length === 0) return '';
+  const total = enRetard.reduce((s, f) => s + Number(f.montant_restant), 0);
+  return `<div class="offline-banner"><span>${enRetard.length} facture(s) en retard, ${fmt(total)} FCFA au total</span></div>`;
+}
 
 function renderPaiements(container, paiements) {
   const body = container.querySelector('#paiements-body');

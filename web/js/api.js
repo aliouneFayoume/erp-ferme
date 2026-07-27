@@ -49,6 +49,33 @@ const Api = (() => {
     return data;
   }
 
+  // Téléchargement d'un fichier protégé (ex. PDF de facture) : un <a href> normal ne peut pas
+  // porter l'en-tête Authorization, donc on récupère le fichier en mémoire (Blob) via fetch
+  // authentifié, et c'est l'appelant qui déclenche le téléchargement avec un lien blob: temporaire.
+  async function getBlob(path) {
+    const headers = {};
+    const token = getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    let res;
+    try {
+      res = await fetch(`/api${path}`, { headers });
+    } catch (err) {
+      throw new Error('Pas de connexion réseau.');
+    }
+    if (!res.ok) {
+      let message = `Erreur ${res.status}`;
+      try {
+        const data = await res.json();
+        if (data && data.erreur) message = data.erreur;
+      } catch (e) {
+        // réponse non-JSON (ex. page d'erreur HTML) : on garde le message par défaut
+      }
+      throw new Error(message);
+    }
+    return res.blob();
+  }
+
   return {
     getToken,
     getUser,
@@ -58,5 +85,6 @@ const Api = (() => {
     post: (path, body) => request(path, { method: 'POST', body }),
     put: (path, body) => request(path, { method: 'PUT', body }),
     del: (path) => request(path, { method: 'DELETE' }),
+    getBlob,
   };
 })();
