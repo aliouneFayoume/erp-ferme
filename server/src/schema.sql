@@ -9,6 +9,20 @@
 -- ==============================================================================
 
 -- --------------------------------------------------------
+-- 0. ORGANISATIONS (PROTOTYPE MULTI-TENANT)
+-- --------------------------------------------------------
+-- Prototype d'isolement multi-organisations (cf. plan multi-tenant) : chaque organisation est une
+-- ferme cliente distincte. roles/permissions restent globaux (pas propres à une organisation) ;
+-- tout le reste des données métier (utilisateurs, clients, secteurs, produits, commandes, lots,
+-- caisses chauffeur) est rattaché à une organisation via tenant_id.
+
+CREATE TABLE organisations (
+    id SERIAL PRIMARY KEY,
+    nom VARCHAR(100) NOT NULL,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- --------------------------------------------------------
 -- 1. UTILISATEURS & SÉCURITÉ (RBAC)
 -- --------------------------------------------------------
 
@@ -19,8 +33,9 @@ CREATE TABLE roles (
 
 CREATE TABLE utilisateurs (
     id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
     nom_complet VARCHAR(100) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL, -- reste global pour ce prototype (voir plan : résolution de tenant à la connexion non traitée ici)
     mot_de_passe_hash VARCHAR(255) NOT NULL,
     role_id INT REFERENCES roles(id),
     secteur_id INT, -- pour un chef de prod : secteur unique auquel il a accès
@@ -35,6 +50,7 @@ CREATE TABLE utilisateurs (
 
 CREATE TABLE clients (
     id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
     nom VARCHAR(100) NOT NULL,
     type_client VARCHAR(10) CHECK (type_client IN ('B2B', 'B2C')),
     categorie_tarifaire VARCHAR(20) DEFAULT 'standard', -- 'standard', 'grossiste', 'restaurant'
@@ -67,11 +83,14 @@ CREATE TABLE abonnements (
 
 CREATE TABLE secteurs (
     id SERIAL PRIMARY KEY,
-    nom VARCHAR(50) NOT NULL -- 'Avicole', 'Piscicole', 'Maraîcher'
+    tenant_id INT REFERENCES organisations(id),
+    nom VARCHAR(50) NOT NULL, -- libre par organisation (prototype) : plus limité à 'Avicole'/'Piscicole'/'Maraîcher'
+    suivi_recolte BOOLEAN DEFAULT FALSE -- coché pour un secteur de type culture (maturité/récolte à suivre), ex-"Maraîcher"
 );
 
 CREATE TABLE lots_production (
     id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
     secteur_id INT REFERENCES secteurs(id),
     code_lot VARCHAR(50) UNIQUE NOT NULL, -- ex: 'A-45'
     quantite_initiale INT NOT NULL,
@@ -107,6 +126,7 @@ CREATE TABLE releves_journaliers (
 
 CREATE TABLE produits (
     id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
     secteur_id INT REFERENCES secteurs(id),
     nom VARCHAR(100) NOT NULL,
     unite_mesure VARCHAR(20) CHECK (unite_mesure IN ('TETE', 'KG', 'CAISSE', 'BOTTES')),
@@ -135,6 +155,7 @@ CREATE TABLE stocks (
 
 CREATE TABLE commandes (
     id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
     numero_commande VARCHAR(20) UNIQUE NOT NULL, -- ex: 'CMD-8492'
     client_id INT REFERENCES clients(id),
     statut VARCHAR(20) CHECK (statut IN ('EN_ATTENTE', 'PREPAREE', 'EN_LIVRAISON', 'LIVREE', 'ANNULEE')),
@@ -190,6 +211,7 @@ CREATE TABLE paiements (
 -- Caisse Chauffeur Virtuelle : ouverture/clôture journalière par livreur
 CREATE TABLE caisses_chauffeur (
     id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
     livreur_id INT REFERENCES utilisateurs(id),
     date_caisse DATE NOT NULL,
     statut VARCHAR(20) CHECK (statut IN ('OUVERTE', 'CLOTUREE')) DEFAULT 'OUVERTE',

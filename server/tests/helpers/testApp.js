@@ -87,8 +87,8 @@ async function creerProduitAvecStock(pool, overrides = {}) {
  * Ne crée PAS de ligne dans `utilisateurs` — à réserver aux tests qui n'exercent pas le journal
  * d'audit (celui-ci a une FK vers utilisateurs.id, voir creerUtilisateurEtToken ci-dessous).
  */
-function tokenPour({ id = 1, role = 'admin', nom_complet = 'Testeur', secteur_id = null } = {}) {
-    return signToken({ id, role_nom: role, nom_complet, secteur_id });
+function tokenPour({ id = 1, role = 'admin', nom_complet = 'Testeur', secteur_id = null, tenant_id = null } = {}) {
+    return signToken({ id, role_nom: role, nom_complet, secteur_id, tenant_id });
 }
 
 /**
@@ -96,14 +96,14 @@ function tokenPour({ id = 1, role = 'admin', nom_complet = 'Testeur', secteur_id
  * token correspondant à son id réel — nécessaire dès qu'une route appelle logAudit avec ce userId,
  * sous peine de violer la FK audit_logs.utilisateur_id -> utilisateurs.id.
  */
-async function creerUtilisateurEtToken(pool, { role = 'admin', nom_complet = 'Testeur', secteur_id = null } = {}) {
+async function creerUtilisateurEtToken(pool, { role = 'admin', nom_complet = 'Testeur', secteur_id = null, tenant_id = null } = {}) {
     const roleRes = await pool.query(`SELECT id FROM roles WHERE nom = $1`, [role]);
     const email = `${role}-${Date.now()}-${Math.floor(Math.random() * 100000)}@test.sn`;
     const res = await pool.query(
-        `INSERT INTO utilisateurs (nom_complet, email, mot_de_passe_hash, role_id, secteur_id) VALUES ($1, $2, 'x', $3, $4) RETURNING id`,
-        [nom_complet, email, roleRes.rows[0].id, secteur_id]
+        `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, secteur_id) VALUES ($1, $2, $3, 'x', $4, $5) RETURNING id`,
+        [tenant_id, nom_complet, email, roleRes.rows[0].id, secteur_id]
     );
-    return signToken({ id: res.rows[0].id, role_nom: role, nom_complet, secteur_id });
+    return signToken({ id: res.rows[0].id, role_nom: role, nom_complet, secteur_id, tenant_id });
 }
 
 module.exports = {

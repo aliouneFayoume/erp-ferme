@@ -15,7 +15,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-simulation-ferme-massla
 
 function signToken(user) {
     return jwt.sign(
-        { id: user.id, role: user.role_nom, nom: user.nom_complet, secteur_id: user.secteur_id },
+        { id: user.id, role: user.role_nom, nom: user.nom_complet, secteur_id: user.secteur_id, tenant_id: user.tenant_id },
         JWT_SECRET,
         { expiresIn: '12h' }
     );

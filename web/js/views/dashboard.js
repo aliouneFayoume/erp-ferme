@@ -8,11 +8,11 @@ window.Views.dashboard = {
       <div class="grid-stats">
         ${statCard("Chiffre d'affaires du jour", `${fmt(stats.chiffreAffairesJour)} FCFA`, null, 'var(--finance)')}
         ${statCard('Commandes B2C du jour', stats.commandesB2C, null, 'var(--clients)')}
-        ${statCard('Stock Avicole disponible', fmt(stats.stockAvicole), 'toutes unités confondues', 'var(--avicole)')}
+        ${statCard('Stock total disponible', fmt(stats.stockTotal), 'tous secteurs, toutes unités confondues', 'var(--avicole)')}
         ${statCard('Encours B2B total', `${fmt(stats.encoursB2B)} FCFA`, 'crédit accordé aux pros', 'var(--danger)')}
         ${statCard('Caisses chauffeur ouvertes', stats.caissesOuvertes, null, 'var(--livraison)')}
         ${statCard('Lots de production actifs', stats.lotsActifs, null, 'var(--maraicher)')}
-        ${statCard('Récoltes proches (≤7j)', stats.recoltesProches, 'Maraîcher', stats.recoltesProches > 0 ? 'var(--warn)' : 'var(--maraicher)')}
+        ${statCard('Récoltes proches (≤7j)', stats.recoltesProches, 'secteurs à suivi de récolte', stats.recoltesProches > 0 ? 'var(--warn)' : 'var(--maraicher)')}
       </div>
       <div class="panel">
         <h2>Bienvenue sur le tableau de bord</h2>
