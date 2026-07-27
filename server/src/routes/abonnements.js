@@ -11,8 +11,9 @@ module.exports = function abonnementsRoutes(pool) {
              FROM abonnements a
              JOIN clients c ON a.client_id = c.id
              JOIN produits p ON a.produit_id = p.id
-             WHERE a.deleted_at IS NULL
-             ORDER BY a.actif DESC, a.jour_livraison`
+             WHERE a.tenant_id = $1 AND a.deleted_at IS NULL
+             ORDER BY a.actif DESC, a.jour_livraison`,
+            [req.user.tenant_id]
         );
         res.json(result.rows);
     });
@@ -24,12 +25,12 @@ module.exports = function abonnementsRoutes(pool) {
         }
         try {
             const result = await pool.query(
-                `INSERT INTO abonnements (client_id, produit_id, quantite, frequence, jour_livraison, actif)
-                 VALUES ($1, $2, $3, $4, $5, TRUE) RETURNING *`,
-                [client_id, produit_id, quantite || 1, frequence || 'HEBDOMADAIRE', jour_livraison]
+                `INSERT INTO abonnements (tenant_id, client_id, produit_id, quantite, frequence, jour_livraison, actif)
+                 VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING *`,
+                [req.user.tenant_id, client_id, produit_id, quantite || 1, frequence || 'HEBDOMADAIRE', jour_livraison]
             );
-            await pool.query(`UPDATE clients SET est_abonne = TRUE WHERE id = $1`, [client_id]);
-            await logAudit(pool, { table: 'abonnements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, details: req.body });
+            await pool.query(`UPDATE clients SET est_abonne = TRUE WHERE id = $1 AND tenant_id = $2`, [client_id, req.user.tenant_id]);
+            await logAudit(pool, { table: 'abonnements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.status(201).json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -39,15 +40,18 @@ module.exports = function abonnementsRoutes(pool) {
 
     router.put('/:id/statut', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
         const { actif } = req.body;
-        const result = await pool.query(`UPDATE abonnements SET actif = $1 WHERE id = $2 RETURNING *`, [!!actif, req.params.id]);
+        const result = await pool.query(
+            `UPDATE abonnements SET actif = $1 WHERE id = $2 AND tenant_id = $3 RETURNING *`,
+            [!!actif, req.params.id, req.user.tenant_id]
+        );
         if (result.rows.length === 0) return res.status(404).json({ erreur: 'Abonnement introuvable.' });
-        await logAudit(pool, { table: 'abonnements', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, details: { actif } });
+        await logAudit(pool, { table: 'abonnements', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { actif } });
         res.json(result.rows[0]);
     });
 
     router.delete('/:id', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
-        await pool.query(`UPDATE abonnements SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1`, [req.params.id]);
-        await logAudit(pool, { table: 'abonnements', rowId: req.params.id, action: 'DELETE', userId: req.user.id });
+        await pool.query(`UPDATE abonnements SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);
+        await logAudit(pool, { table: 'abonnements', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
         res.status(204).end();
     });
 
@@ -66,13 +70,14 @@ module.exports = function abonnementsRoutes(pool) {
         // ex. journal d'audit) laisserait sinon la requête sans réponse au lieu de renvoyer une 500.
         try {
 
+        const tenantId = req.user.tenant_id;
         const abonnements = await pool.query(
             `SELECT a.*, p.nom as produit_nom, p.prix_unitaire_b2c, s.quantite_disponible
              FROM abonnements a
              JOIN produits p ON a.produit_id = p.id
              JOIN stocks s ON s.produit_id = p.id
-             WHERE a.actif = TRUE AND a.deleted_at IS NULL AND a.jour_livraison = $1`,
-            [jourDuJour]
+             WHERE a.tenant_id = $1 AND a.actif = TRUE AND a.deleted_at IS NULL AND a.jour_livraison = $2`,
+            [tenantId, jourDuJour]
         );
 
         const resultats = { creees: 0, echecs: [] };
@@ -90,8 +95,8 @@ module.exports = function abonnementsRoutes(pool) {
                 const dejaGeneree = await client.query(
                     `SELECT c.id FROM commandes c
                      JOIN lignes_commande lc ON lc.commande_id = c.id
-                     WHERE c.client_id = $1 AND lc.produit_id = $2 AND c.cree_le >= $3`,
-                    [ab.client_id, ab.produit_id, new Date().toISOString().slice(0, 10)]
+                     WHERE c.tenant_id = $1 AND c.client_id = $2 AND lc.produit_id = $3 AND c.cree_le >= $4`,
+                    [tenantId, ab.client_id, ab.produit_id, new Date().toISOString().slice(0, 10)]
                 );
                 if (dejaGeneree.rows.length > 0) {
                     await client.query('ROLLBACK');
@@ -107,8 +112,8 @@ module.exports = function abonnementsRoutes(pool) {
                 const montant = Number(ab.prix_unitaire_b2c) * Number(ab.quantite);
                 const numero = `ABO-${Date.now().toString().slice(-6)}-${ab.id}`;
                 const commande = await client.query(
-                    `INSERT INTO commandes (numero_commande, client_id, statut, montant_total) VALUES ($1, $2, 'EN_ATTENTE', $3) RETURNING id`,
-                    [numero, ab.client_id, montant]
+                    `INSERT INTO commandes (tenant_id, numero_commande, client_id, statut, montant_total) VALUES ($1, $2, $3, 'EN_ATTENTE', $4) RETURNING id`,
+                    [tenantId, numero, ab.client_id, montant]
                 );
                 await client.query(
                     `INSERT INTO lignes_commande (commande_id, produit_id, quantite, prix_unitaire_applique, sous_total) VALUES ($1, $2, $3, $4, $5)`,
@@ -119,8 +124,8 @@ module.exports = function abonnementsRoutes(pool) {
                     [-ab.quantite, ab.quantite, ab.produit_id]
                 );
                 await client.query(
-                    `INSERT INTO factures (commande_id, date_echeance, statut, montant_restant) VALUES ($1, $2, 'A_PAYER', $3)`,
-                    [commande.rows[0].id, new Date().toISOString().slice(0, 10), montant]
+                    `INSERT INTO factures (tenant_id, commande_id, date_echeance, statut, montant_restant) VALUES ($1, $2, $3, 'A_PAYER', $4)`,
+                    [tenantId, commande.rows[0].id, new Date().toISOString().slice(0, 10), montant]
                 );
 
                 await client.query('COMMIT');
@@ -133,7 +138,7 @@ module.exports = function abonnementsRoutes(pool) {
             }
         }
 
-        await logAudit(pool, { table: 'commandes', action: 'CREATE', userId: req.user.id, details: { source: 'abonnements', ...resultats } });
+        await logAudit(pool, { table: 'commandes', action: 'CREATE', userId: req.user.id, tenantId, details: { source: 'abonnements', ...resultats } });
         res.json({ jour: jourDuJour, ...resultats });
         } catch (err) {
             console.error(err);

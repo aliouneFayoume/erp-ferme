@@ -2,26 +2,31 @@ const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
 
-// Un chef de prod ne doit lire/écrire que les lots de son propre secteur (admin/comptable illimités).
+// Un utilisateur ne doit jamais accéder à un lot d'une autre organisation, quel que soit son rôle ;
+// un chef de prod est en plus restreint à son propre secteur au sein de son organisation.
 async function verifierAccesLot(pool, lotId, user) {
-    if (user.role !== 'chef_prod' || !user.secteur_id) return true;
-    const lot = await pool.query(`SELECT secteur_id FROM lots_production WHERE id = $1`, [lotId]);
-    return lot.rows.length > 0 && Number(lot.rows[0].secteur_id) === Number(user.secteur_id);
+    const lot = await pool.query(`SELECT tenant_id, secteur_id FROM lots_production WHERE id = $1`, [lotId]);
+    if (lot.rows.length === 0) return false;
+    if (Number(lot.rows[0].tenant_id) !== Number(user.tenant_id)) return false;
+    if (user.role === 'chef_prod' && user.secteur_id) {
+        return Number(lot.rows[0].secteur_id) === Number(user.secteur_id);
+    }
+    return true;
 }
 
 module.exports = function productionRoutes(pool) {
     const router = express.Router();
 
     router.get('/secteurs', requireAuth, async (req, res) => {
-        const result = await pool.query(`SELECT * FROM secteurs ORDER BY id`);
+        const result = await pool.query(`SELECT * FROM secteurs WHERE tenant_id = $1 ORDER BY id`, [req.user.tenant_id]);
         res.json(result.rows);
     });
 
-    // Un chef de prod ne voit que les lots de son secteur ; admin/comptable voient tout.
+    // Un chef de prod ne voit que les lots de son secteur ; admin/comptable voient tout ceux de leur organisation.
     router.get('/lots', requireAuth, async (req, res) => {
         try {
-            const params = [];
-            let where = `l.deleted_at IS NULL`;
+            const params = [req.user.tenant_id];
+            let where = `l.tenant_id = $1 AND l.deleted_at IS NULL`;
             if (req.user.role === 'chef_prod' && req.user.secteur_id) {
                 params.push(req.user.secteur_id);
                 where += ` AND l.secteur_id = $${params.length}`;
@@ -49,12 +54,14 @@ module.exports = function productionRoutes(pool) {
             return res.status(403).json({ erreur: 'Vous ne pouvez créer un lot que pour votre secteur.' });
         }
         try {
+            const secteurRes = await pool.query(`SELECT id FROM secteurs WHERE id = $1 AND tenant_id = $2`, [secteur_id, req.user.tenant_id]);
+            if (secteurRes.rows.length === 0) return res.status(400).json({ erreur: 'Secteur invalide.' });
             const result = await pool.query(
-                `INSERT INTO lots_production (secteur_id, code_lot, quantite_initiale, date_demarrage, statut, culture, duree_maturite_jours, cree_par)
-                 VALUES ($1, $2, $3, $4, 'EN_COURS', $5, $6, $7) RETURNING *`,
-                [secteur_id, code_lot, quantite_initiale, date_demarrage, culture || null, duree_maturite_jours || null, req.user.id]
+                `INSERT INTO lots_production (tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, statut, culture, duree_maturite_jours, cree_par)
+                 VALUES ($1, $2, $3, $4, $5, 'EN_COURS', $6, $7, $8) RETURNING *`,
+                [req.user.tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, culture || null, duree_maturite_jours || null, req.user.id]
             );
-            await logAudit(pool, { table: 'lots_production', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, details: req.body });
+            await logAudit(pool, { table: 'lots_production', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.status(201).json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -74,11 +81,11 @@ module.exports = function productionRoutes(pool) {
         }
         try {
             const result = await pool.query(
-                `UPDATE lots_production SET statut = $1 WHERE id = $2 AND deleted_at IS NULL RETURNING *`,
-                [statut, req.params.id]
+                `UPDATE lots_production SET statut = $1 WHERE id = $2 AND tenant_id = $3 AND deleted_at IS NULL RETURNING *`,
+                [statut, req.params.id, req.user.tenant_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Lot introuvable.' });
-            await logAudit(pool, { table: 'lots_production', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, details: { statut } });
+            await logAudit(pool, { table: 'lots_production', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { statut } });
             res.json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -104,13 +111,17 @@ module.exports = function productionRoutes(pool) {
         if (req.user.role === 'chef_prod' && req.user.secteur_id) {
             const result = await pool.query(
                 `SELECT r.* FROM releves_journaliers r JOIN lots_production l ON r.lot_id = l.id
-                 WHERE l.secteur_id = $1 ORDER BY r.date_releve DESC LIMIT 100`,
-                [req.user.secteur_id]
+                 WHERE l.tenant_id = $1 AND l.secteur_id = $2 ORDER BY r.date_releve DESC LIMIT 100`,
+                [req.user.tenant_id, req.user.secteur_id]
             );
             return res.json(result.rows);
         }
 
-        const result = await pool.query(`SELECT * FROM releves_journaliers ORDER BY date_releve DESC LIMIT 100`);
+        const result = await pool.query(
+            `SELECT r.* FROM releves_journaliers r JOIN lots_production l ON r.lot_id = l.id
+             WHERE l.tenant_id = $1 ORDER BY r.date_releve DESC LIMIT 100`,
+            [req.user.tenant_id]
+        );
         res.json(result.rows);
     });
 
@@ -162,7 +173,7 @@ module.exports = function productionRoutes(pool) {
             }
 
             await client.query('COMMIT');
-            await logAudit(pool, { table: 'releves_journaliers', action: 'CREATE', userId: req.user.id, details: { count: releves.length } });
+            await logAudit(pool, { table: 'releves_journaliers', action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { count: releves.length } });
             res.status(200).json({ message: `${releves.length} relevé(s) synchronisé(s) avec succès.` });
         } catch (err) {
             await client.query('ROLLBACK');
@@ -177,7 +188,7 @@ module.exports = function productionRoutes(pool) {
     // FCR = aliment consommé (kg) / gain de poids produit (kg) — indicateur clé Avicole/Piscicole
     router.get('/lots/:id/fcr', requireAuth, async (req, res) => {
         try {
-            const lot = await pool.query(`SELECT * FROM lots_production WHERE id = $1`, [req.params.id]);
+            const lot = await pool.query(`SELECT * FROM lots_production WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);
             if (lot.rows.length === 0) return res.status(404).json({ erreur: 'Lot introuvable.' });
             if (!(await verifierAccesLot(pool, req.params.id, req.user))) {
                 return res.status(403).json({ erreur: 'Ce lot ne relève pas de votre secteur.' });

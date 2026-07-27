@@ -67,6 +67,7 @@ CREATE TABLE clients (
 
 CREATE TABLE abonnements (
     id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
     client_id INT REFERENCES clients(id),
     produit_id INT, -- FK ajoutée après création de produits
     quantite INT NOT NULL DEFAULT 1,
@@ -175,6 +176,7 @@ CREATE TABLE lignes_commande (
 
 CREATE TABLE livraisons (
     id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
     commande_id INT REFERENCES commandes(id),
     livreur_id INT REFERENCES utilisateurs(id),
     date_prevue DATE NOT NULL,
@@ -190,6 +192,7 @@ CREATE TABLE livraisons (
 
 CREATE TABLE factures (
     id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
     commande_id INT REFERENCES commandes(id),
     date_echeance DATE NOT NULL, -- Pour la gestion des encours à 30 jours (B2B)
     statut VARCHAR(20) CHECK (statut IN ('A_PAYER', 'PAYEE_PARTIEL', 'PAYEE', 'EN_RETARD')),
@@ -198,6 +201,7 @@ CREATE TABLE factures (
 
 CREATE TABLE paiements (
     id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
     commande_id INT REFERENCES commandes(id),
     client_id INT REFERENCES clients(id),
     montant NUMERIC NOT NULL,
@@ -232,6 +236,7 @@ CREATE TABLE caisses_chauffeur (
 -- Dépenses par pôle (aliment, intrants, main d'œuvre, ...) : permet de calculer la marge par secteur.
 CREATE TABLE depenses (
     id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
     secteur_id INT REFERENCES secteurs(id), -- NULL = dépense générale (non rattachée à un pôle)
     categorie VARCHAR(50) NOT NULL, -- 'Aliment', 'Intrants', 'Main d''œuvre', 'Vétérinaire', 'Logistique', 'Autre'
     montant NUMERIC NOT NULL,
@@ -245,6 +250,7 @@ CREATE TABLE depenses (
 -- Relevés bancaires (saisie manuelle simulant un import) et rapprochement avec les paiements.
 CREATE TABLE releves_bancaires (
     id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
     date_operation DATE NOT NULL,
     libelle TEXT NOT NULL,
     montant NUMERIC NOT NULL,
@@ -262,6 +268,7 @@ CREATE TABLE releves_bancaires (
 
 CREATE TABLE audit_logs (
     id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
     table_name VARCHAR(50) NOT NULL,
     row_id INT,
     action VARCHAR(20) NOT NULL, -- 'CREATE', 'UPDATE', 'DELETE', 'LOGIN'

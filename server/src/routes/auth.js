@@ -42,7 +42,7 @@ module.exports = function authRoutes(pool) {
             }
 
             const token = signToken(user);
-            await logAudit(pool, { table: 'utilisateurs', rowId: user.id, action: 'LOGIN', userId: user.id });
+            await logAudit(pool, { table: 'utilisateurs', rowId: user.id, action: 'LOGIN', userId: user.id, tenantId: user.tenant_id });
 
             res.json({
                 token,

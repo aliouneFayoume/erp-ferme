@@ -44,8 +44,15 @@ async function seedRolesEtSecteurs(pool) {
     }
 }
 
+/** Organisation de test (prototype multi-tenant) — requise dès qu'une route filtre par tenant_id. */
+async function creerOrganisation(pool, nom = 'Organisation Test') {
+    const res = await pool.query(`INSERT INTO organisations (nom) VALUES ($1) RETURNING id`, [nom]);
+    return res.rows[0].id;
+}
+
 async function creerClient(pool, overrides = {}) {
     const c = {
+        tenant_id: null,
         nom: 'Client Test',
         type_client: 'B2C',
         categorie_tarifaire: 'standard',
@@ -54,15 +61,16 @@ async function creerClient(pool, overrides = {}) {
         ...overrides,
     };
     const res = await pool.query(
-        `INSERT INTO clients (nom, type_client, categorie_tarifaire, telephone, limite_credit, solde_encours)
-         VALUES ($1, $2, $3, $4, $5, 0) RETURNING *`,
-        [c.nom, c.type_client, c.categorie_tarifaire, c.telephone, c.limite_credit]
+        `INSERT INTO clients (tenant_id, nom, type_client, categorie_tarifaire, telephone, limite_credit, solde_encours)
+         VALUES ($1, $2, $3, $4, $5, $6, 0) RETURNING *`,
+        [c.tenant_id, c.nom, c.type_client, c.categorie_tarifaire, c.telephone, c.limite_credit]
     );
     return res.rows[0];
 }
 
 async function creerProduitAvecStock(pool, overrides = {}) {
     const p = {
+        tenant_id: null,
         secteur_id: 1,
         nom: 'Produit Test',
         unite_mesure: 'KG',
@@ -73,9 +81,9 @@ async function creerProduitAvecStock(pool, overrides = {}) {
         ...overrides,
     };
     const res = await pool.query(
-        `INSERT INTO produits (secteur_id, nom, unite_mesure, prix_unitaire_b2b, prix_unitaire_b2c, prix_unitaire_grossiste)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-        [p.secteur_id, p.nom, p.unite_mesure, p.prix_unitaire_b2b, p.prix_unitaire_b2c, p.prix_unitaire_grossiste]
+        `INSERT INTO produits (tenant_id, secteur_id, nom, unite_mesure, prix_unitaire_b2b, prix_unitaire_b2c, prix_unitaire_grossiste)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [p.tenant_id, p.secteur_id, p.nom, p.unite_mesure, p.prix_unitaire_b2b, p.prix_unitaire_b2c, p.prix_unitaire_grossiste]
     );
     const produit = res.rows[0];
     await pool.query(`INSERT INTO stocks (produit_id, quantite_disponible) VALUES ($1, $2)`, [produit.id, p.quantite_disponible]);
@@ -110,6 +118,7 @@ module.exports = {
     createTestPool,
     buildApp,
     seedRolesEtSecteurs,
+    creerOrganisation,
     creerClient,
     creerProduitAvecStock,
     tokenPour,

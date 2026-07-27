@@ -22,11 +22,12 @@ module.exports = function logistiqueRoutes(pool) {
                 JOIN commandes c ON l.commande_id = c.id
                 JOIN clients cl ON c.client_id = cl.id
                 WHERE (l.livreur_id = $1 OR $1 IS NULL)
-                AND l.date_prevue = $2
+                AND c.tenant_id = $2
+                AND l.date_prevue = $3
                 AND l.statut IN ('A_FAIRE', 'EN_COURS')
                 ORDER BY l.statut DESC, l.id ASC
             `;
-            const result = await pool.query(query, [livreurId || null, aujourdhui]);
+            const result = await pool.query(query, [livreurId || null, req.user.tenant_id, aujourdhui]);
             const tournee = optimiserTournee(result.rows);
             res.json({ depot: FARM_DEPOT, arrets: tournee });
         } catch (err) {
@@ -43,19 +44,23 @@ module.exports = function logistiqueRoutes(pool) {
              JOIN commandes c ON l.commande_id = c.id
              JOIN clients cl ON c.client_id = cl.id
              LEFT JOIN utilisateurs u ON l.livreur_id = u.id
-             ORDER BY l.mise_a_jour_le DESC LIMIT 100`
+             WHERE l.tenant_id = $1
+             ORDER BY l.mise_a_jour_le DESC LIMIT 100`,
+            [req.user.tenant_id]
         );
         res.json(result.rows);
     });
 
     router.post('/livraisons', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
         const { commande_id, livreur_id, date_prevue } = req.body;
+        const commandeRes = await pool.query(`SELECT id FROM commandes WHERE id = $1 AND tenant_id = $2`, [commande_id, req.user.tenant_id]);
+        if (commandeRes.rows.length === 0) return res.status(400).json({ erreur: 'Commande invalide.' });
         const result = await pool.query(
-            `INSERT INTO livraisons (commande_id, livreur_id, date_prevue, statut) VALUES ($1, $2, $3, 'A_FAIRE') RETURNING *`,
-            [commande_id, livreur_id, date_prevue]
+            `INSERT INTO livraisons (tenant_id, commande_id, livreur_id, date_prevue, statut) VALUES ($1, $2, $3, $4, 'A_FAIRE') RETURNING *`,
+            [req.user.tenant_id, commande_id, livreur_id, date_prevue]
         );
-        await pool.query(`UPDATE commandes SET statut = 'EN_LIVRAISON' WHERE id = $1`, [commande_id]);
-        await logAudit(pool, { table: 'livraisons', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, details: { commande_id, livreur_id } });
+        await pool.query(`UPDATE commandes SET statut = 'EN_LIVRAISON' WHERE id = $1 AND tenant_id = $2`, [commande_id, req.user.tenant_id]);
+        await logAudit(pool, { table: 'livraisons', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { commande_id, livreur_id } });
         res.status(201).json(result.rows[0]);
     });
 
@@ -65,8 +70,9 @@ module.exports = function logistiqueRoutes(pool) {
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
+            const tenantId = req.user.tenant_id;
 
-            const livraisonRes = await client.query(`SELECT * FROM livraisons WHERE id = $1 FOR UPDATE`, [req.params.id]);
+            const livraisonRes = await client.query(`SELECT * FROM livraisons WHERE id = $1 AND tenant_id = $2 FOR UPDATE`, [req.params.id, tenantId]);
             if (livraisonRes.rows.length === 0) throw { statut: 404, message: 'Livraison introuvable.' };
             const livraison = livraisonRes.rows[0];
 
@@ -83,13 +89,13 @@ module.exports = function logistiqueRoutes(pool) {
             );
 
             if (statut === 'TERMINEE') {
-                const commandeRes = await client.query(`SELECT * FROM commandes WHERE id = $1`, [livraison.commande_id]);
+                const commandeRes = await client.query(`SELECT * FROM commandes WHERE id = $1 AND tenant_id = $2`, [livraison.commande_id, tenantId]);
                 const commande = commandeRes.rows[0];
                 await client.query(`UPDATE commandes SET statut = 'LIVREE' WHERE id = $1`, [commande.id]);
 
                 // Libère le pool réservé : le stock est désormais consommé (livré).
                 const lignes = await client.query(`SELECT * FROM lignes_commande WHERE commande_id = $1`, [commande.id]);
-                const clientRes = await client.query(`SELECT * FROM clients WHERE id = $1`, [commande.client_id]);
+                const clientRes = await client.query(`SELECT * FROM clients WHERE id = $1 AND tenant_id = $2`, [commande.client_id, tenantId]);
                 const colonnePool = clientRes.rows[0].type_client === 'B2B' ? 'quantite_reservee_b2b' : 'quantite_reservee_b2c';
                 // Note : pg-mem (simulation) inverse le signe de "colonne - $param" ; on ajoute une valeur
                 // négative pour rester compatible avec pg-mem ET PostgreSQL réel.
@@ -102,35 +108,36 @@ module.exports = function logistiqueRoutes(pool) {
 
                 if (encaissement_especes && Number(encaissement_especes) > 0) {
                     await client.query(
-                        `INSERT INTO paiements (commande_id, client_id, montant, methode_paiement, statut, livreur_id)
-                         VALUES ($1, $2, $3, 'ESPECES', 'VALIDE', $4)`,
-                        [commande.id, commande.client_id, encaissement_especes, req.user.id]
+                        `INSERT INTO paiements (tenant_id, commande_id, client_id, montant, methode_paiement, statut, livreur_id)
+                         VALUES ($1, $2, $3, $4, 'ESPECES', 'VALIDE', $5)`,
+                        [tenantId, commande.id, commande.client_id, encaissement_especes, req.user.id]
                     );
                     const moinsEncaissement = -Number(encaissement_especes);
                     await client.query(
                         `UPDATE factures SET montant_restant = GREATEST(montant_restant + $1, 0),
                                 statut = CASE WHEN montant_restant + $1 <= 0 THEN 'PAYEE' ELSE 'PAYEE_PARTIEL' END
-                         WHERE commande_id = $2`,
-                        [moinsEncaissement, commande.id]
+                         WHERE commande_id = $2 AND tenant_id = $3`,
+                        [moinsEncaissement, commande.id, tenantId]
                     );
                     if (clientRes.rows[0].type_client === 'B2B') {
-                        await client.query(`UPDATE clients SET solde_encours = GREATEST(solde_encours + $1, 0) WHERE id = $2`, [
+                        await client.query(`UPDATE clients SET solde_encours = GREATEST(solde_encours + $1, 0) WHERE id = $2 AND tenant_id = $3`, [
                             moinsEncaissement,
                             commande.client_id,
+                            tenantId,
                         ]);
                     }
 
                     const aujourdhui = new Date().toISOString().slice(0, 10);
                     await client.query(
                         `UPDATE caisses_chauffeur SET montant_theorique = montant_theorique + $1
-                         WHERE livreur_id = $2 AND date_caisse = $3 AND statut = 'OUVERTE'`,
-                        [encaissement_especes, req.user.id, aujourdhui]
+                         WHERE livreur_id = $2 AND date_caisse = $3 AND statut = 'OUVERTE' AND tenant_id = $4`,
+                        [encaissement_especes, req.user.id, aujourdhui, tenantId]
                     );
                 }
             }
 
             await client.query('COMMIT');
-            await logAudit(pool, { table: 'livraisons', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, details: { statut } });
+            await logAudit(pool, { table: 'livraisons', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: { statut } });
             res.json(updated.rows[0]);
         } catch (err) {
             await client.query('ROLLBACK');
@@ -147,11 +154,11 @@ module.exports = function logistiqueRoutes(pool) {
         try {
             const aujourdhui = new Date().toISOString().slice(0, 10);
             const result = await pool.query(
-                `INSERT INTO caisses_chauffeur (livreur_id, date_caisse, statut) VALUES ($1, $2, 'OUVERTE')
+                `INSERT INTO caisses_chauffeur (tenant_id, livreur_id, date_caisse, statut) VALUES ($1, $2, $3, 'OUVERTE')
                  ON CONFLICT (livreur_id, date_caisse) DO UPDATE SET statut = caisses_chauffeur.statut RETURNING *`,
-                [req.user.id, aujourdhui]
+                [req.user.tenant_id, req.user.id, aujourdhui]
             );
-            await logAudit(pool, { table: 'caisses_chauffeur', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id });
+            await logAudit(pool, { table: 'caisses_chauffeur', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id });
             res.status(201).json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -160,11 +167,11 @@ module.exports = function logistiqueRoutes(pool) {
     });
 
     router.get('/caisse', requireAuth, checkRole(['comptable', 'livreur']), async (req, res) => {
-        const params = [];
-        let where = '1=1';
+        const params = [req.user.tenant_id];
+        let where = 'cc.tenant_id = $1';
         if (req.user.role === 'livreur') {
             params.push(req.user.id);
-            where = `cc.livreur_id = $${params.length}`;
+            where += ` AND cc.livreur_id = $${params.length}`;
         }
         const result = await pool.query(
             `SELECT cc.*, u.nom_complet as livreur_nom FROM caisses_chauffeur cc
@@ -179,7 +186,7 @@ module.exports = function logistiqueRoutes(pool) {
     router.put('/caisse/:id/cloturer', requireAuth, checkRole(['comptable']), async (req, res) => {
         const { montant_depose, notes } = req.body;
         try {
-            const caisseRes = await pool.query(`SELECT * FROM caisses_chauffeur WHERE id = $1`, [req.params.id]);
+            const caisseRes = await pool.query(`SELECT * FROM caisses_chauffeur WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);
             if (caisseRes.rows.length === 0) return res.status(404).json({ erreur: 'Caisse introuvable.' });
             const theorique = Number(caisseRes.rows[0].montant_theorique);
             const ecart = Number(montant_depose) - theorique;
@@ -190,7 +197,7 @@ module.exports = function logistiqueRoutes(pool) {
                  WHERE id = $5 RETURNING *`,
                 [montant_depose, ecart, req.user.id, notes || null, req.params.id]
             );
-            await logAudit(pool, { table: 'caisses_chauffeur', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, details: { montant_depose, ecart } });
+            await logAudit(pool, { table: 'caisses_chauffeur', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { montant_depose, ecart } });
             res.json(result.rows[0]);
         } catch (err) {
             console.error(err);

@@ -1,13 +1,15 @@
 const request = require('supertest');
-const { createTestPool, buildApp, seedRolesEtSecteurs, creerClient, creerProduitAvecStock, creerUtilisateurEtToken } = require('./helpers/testApp');
+const { createTestPool, buildApp, seedRolesEtSecteurs, creerOrganisation, creerClient, creerProduitAvecStock, creerUtilisateurEtToken } = require('./helpers/testApp');
 
 describe('commandes', () => {
     let pool;
     let app;
+    let tenantId;
 
     beforeEach(async () => {
         pool = createTestPool();
         await seedRolesEtSecteurs(pool);
+        tenantId = await creerOrganisation(pool);
         app = buildApp(pool, ['commandes']);
     });
 
@@ -16,12 +18,12 @@ describe('commandes', () => {
     });
 
     test('commande B2C : réserve le pool B2C et applique le tarif prix_unitaire_b2c', async () => {
-        const client = await creerClient(pool, { type_client: 'B2C' });
-        const produit = await creerProduitAvecStock(pool, { prix_unitaire_b2b: 1000, prix_unitaire_b2c: 1500, quantite_disponible: 100 });
+        const client = await creerClient(pool, { tenant_id: tenantId, type_client: 'B2C' });
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId, prix_unitaire_b2b: 1000, prix_unitaire_b2c: 1500, quantite_disponible: 100 });
 
         const res = await request(app)
             .post('/api/commandes')
-            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'admin' })}`)
+            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'admin', tenant_id: tenantId })}`)
             .send({ client_id: client.id, lignes: [{ produit_id: produit.id, quantite: 10 }] });
 
         expect(res.status).toBe(201);
@@ -34,12 +36,12 @@ describe('commandes', () => {
     });
 
     test('commande B2B grossiste : utilise le tarif préférentiel et réserve le pool B2B', async () => {
-        const client = await creerClient(pool, { type_client: 'B2B', categorie_tarifaire: 'grossiste', limite_credit: 1000000 });
-        const produit = await creerProduitAvecStock(pool, { prix_unitaire_b2b: 1000, prix_unitaire_grossiste: 800, quantite_disponible: 100 });
+        const client = await creerClient(pool, { tenant_id: tenantId, type_client: 'B2B', categorie_tarifaire: 'grossiste', limite_credit: 1000000 });
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId, prix_unitaire_b2b: 1000, prix_unitaire_grossiste: 800, quantite_disponible: 100 });
 
         const res = await request(app)
             .post('/api/commandes')
-            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'comptable' })}`)
+            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'comptable', tenant_id: tenantId })}`)
             .send({ client_id: client.id, lignes: [{ produit_id: produit.id, quantite: 5 }] });
 
         expect(res.status).toBe(201);
@@ -51,12 +53,12 @@ describe('commandes', () => {
     });
 
     test("commande B2B bloquée si l'encours dépasse la limite de crédit, sans effet de bord", async () => {
-        const client = await creerClient(pool, { type_client: 'B2B', limite_credit: 5000 });
-        const produit = await creerProduitAvecStock(pool, { prix_unitaire_b2b: 1000, quantite_disponible: 100 });
+        const client = await creerClient(pool, { tenant_id: tenantId, type_client: 'B2B', limite_credit: 5000 });
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId, prix_unitaire_b2b: 1000, quantite_disponible: 100 });
 
         const res = await request(app)
             .post('/api/commandes')
-            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'admin' })}`)
+            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'admin', tenant_id: tenantId })}`)
             .send({ client_id: client.id, lignes: [{ produit_id: produit.id, quantite: 10 }] });
 
         expect(res.status).toBe(403);
@@ -76,12 +78,12 @@ describe('commandes', () => {
     });
 
     test('commande refusée si stock insuffisant, sans effet de bord', async () => {
-        const client = await creerClient(pool, { type_client: 'B2C' });
-        const produit = await creerProduitAvecStock(pool, { quantite_disponible: 3 });
+        const client = await creerClient(pool, { tenant_id: tenantId, type_client: 'B2C' });
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId, quantite_disponible: 3 });
 
         const res = await request(app)
             .post('/api/commandes')
-            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'admin' })}`)
+            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'admin', tenant_id: tenantId })}`)
             .send({ client_id: client.id, lignes: [{ produit_id: produit.id, quantite: 10 }] });
 
         expect(res.status).toBe(409);
@@ -90,10 +92,10 @@ describe('commandes', () => {
     });
 
     test('annulation B2B : libère le stock réservé et réduit l\'encours client', async () => {
-        const client = await creerClient(pool, { type_client: 'B2B', limite_credit: 1000000 });
-        const produit = await creerProduitAvecStock(pool, { prix_unitaire_b2b: 1000, quantite_disponible: 100 });
+        const client = await creerClient(pool, { tenant_id: tenantId, type_client: 'B2B', limite_credit: 1000000 });
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId, prix_unitaire_b2b: 1000, quantite_disponible: 100 });
 
-        const admin = await creerUtilisateurEtToken(pool,{ role: 'admin' });
+        const admin = await creerUtilisateurEtToken(pool,{ role: 'admin', tenant_id: tenantId });
         const creation = await request(app)
             .post('/api/commandes')
             .set('Authorization', `Bearer ${admin}`)
@@ -116,9 +118,9 @@ describe('commandes', () => {
     });
 
     test('impossible d\'annuler une commande déjà livrée', async () => {
-        const client = await creerClient(pool, { type_client: 'B2C' });
-        const produit = await creerProduitAvecStock(pool, { quantite_disponible: 100 });
-        const admin = await creerUtilisateurEtToken(pool,{ role: 'admin' });
+        const client = await creerClient(pool, { tenant_id: tenantId, type_client: 'B2C' });
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId, quantite_disponible: 100 });
+        const admin = await creerUtilisateurEtToken(pool,{ role: 'admin', tenant_id: tenantId });
 
         const creation = await request(app)
             .post('/api/commandes')
@@ -137,12 +139,12 @@ describe('commandes', () => {
     });
 
     test('RBAC : un livreur ne peut pas créer de commande', async () => {
-        const client = await creerClient(pool, { type_client: 'B2C' });
-        const produit = await creerProduitAvecStock(pool);
+        const client = await creerClient(pool, { tenant_id: tenantId, type_client: 'B2C' });
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId });
 
         const res = await request(app)
             .post('/api/commandes')
-            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'livreur' })}`)
+            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'livreur', tenant_id: tenantId })}`)
             .send({ client_id: client.id, lignes: [{ produit_id: produit.id, quantite: 1 }] });
 
         expect(res.status).toBe(403);

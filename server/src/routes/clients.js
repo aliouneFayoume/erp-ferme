@@ -28,7 +28,7 @@ module.exports = function clientsRoutes(pool) {
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
                 [req.user.tenant_id, nom, type_client, categorie_tarifaire || 'standard', telephone, adresse, gps_lat, gps_lng, limite_credit || 0, !!est_abonne]
             );
-            await logAudit(pool, { table: 'clients', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, details: req.body });
+            await logAudit(pool, { table: 'clients', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.status(201).json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -48,7 +48,7 @@ module.exports = function clientsRoutes(pool) {
                 [nom, categorie_tarifaire, telephone, adresse, gps_lat, gps_lng, limite_credit, req.params.id, req.user.tenant_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Client introuvable.' });
-            await logAudit(pool, { table: 'clients', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, details: req.body });
+            await logAudit(pool, { table: 'clients', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -58,7 +58,7 @@ module.exports = function clientsRoutes(pool) {
 
     router.delete('/:id', requireAuth, checkRole(['admin']), async (req, res) => {
         await pool.query(`UPDATE clients SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);
-        await logAudit(pool, { table: 'clients', rowId: req.params.id, action: 'DELETE', userId: req.user.id });
+        await logAudit(pool, { table: 'clients', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
         res.status(204).end();
     });
 

@@ -60,6 +60,9 @@ async function seed(pool) {
         commandeB2B: { numero: 'CMD-100001', clientIndex: 0, produitIndex: 0, quantite: 30, prixUnitaire: 2800, montant: 84000 },
         commandeB2C: { numero: 'CMD-100002', clientIndex: 4, produitIndex: 2, quantite: 2, prixUnitaire: 2300, montant: 4600, livreurEmail: 'livreur1@massla.sn' },
         caisseLivreurEmail: 'livreur1@massla.sn',
+        abonnement: { clientIndex: 4, produitIndex: 2, quantite: 1, jour_livraison: 'LUNDI' },
+        depense: { secteur: 'Avicole', categorie: 'Aliment', montant: 45000, description: 'Aliment volaille (croissance)', date: '2026-07-15', cree_par: 'comptable@massla.sn' },
+        releveBancaire: { libelle: 'VIR WAVE CLIENT - HOTEL TERANGA', montant: 84000, type: 'CREDIT', cree_par: 'comptable@massla.sn' },
     }, roleIds, motDePasse);
 
     const orgSahel = await seedOrganisation(pool, {
@@ -91,6 +94,9 @@ async function seed(pool) {
         commandeB2B: { numero: 'CMD-SB-1001', clientIndex: 0, produitIndex: 0, quantite: 2, prixUnitaire: 180000, montant: 360000 },
         commandeB2C: { numero: 'CMD-SB-1002', clientIndex: 2, produitIndex: 1, quantite: 5, prixUnitaire: 550, montant: 2750, livreurEmail: 'livreur1@sahelbio.sn' },
         caisseLivreurEmail: 'livreur1@sahelbio.sn',
+        abonnement: { clientIndex: 2, produitIndex: 1, quantite: 2, jour_livraison: 'MERCREDI' },
+        depense: { secteur: 'Élevage bovin', categorie: 'Vétérinaire', montant: 20000, description: 'Vaccination cheptel', date: '2026-07-12', cree_par: 'comptable@sahelbio.sn' },
+        releveBancaire: { libelle: 'VIR ORANGE MONEY - BOUCHERIE NDAR', montant: 360000, type: 'CREDIT', cree_par: 'comptable@sahelbio.sn' },
     }, roleIds, motDePasse);
 
     return { organisations: { massla: orgMassla, sahelBio: orgSahel } };
@@ -164,8 +170,8 @@ async function seedOrganisation(pool, def, roleIds, motDePasse) {
         [cmdB2B.rows[0].id, produitIds[b2b.produitIndex], b2b.quantite, b2b.prixUnitaire, b2b.montant]
     );
     await pool.query(
-        `INSERT INTO factures (commande_id, date_echeance, statut, montant_restant) VALUES ($1, $2, 'A_PAYER', $3)`,
-        [cmdB2B.rows[0].id, dans30jours, b2b.montant]
+        `INSERT INTO factures (tenant_id, commande_id, date_echeance, statut, montant_restant) VALUES ($1, $2, $3, 'A_PAYER', $4)`,
+        [tenantId, cmdB2B.rows[0].id, dans30jours, b2b.montant]
     );
     await pool.query(`UPDATE clients SET solde_encours = solde_encours + $1 WHERE id = $2`, [b2b.montant, clientIds[b2b.clientIndex]]);
 
@@ -179,17 +185,38 @@ async function seedOrganisation(pool, def, roleIds, motDePasse) {
         [cmdB2C.rows[0].id, produitIds[b2c.produitIndex], b2c.quantite, b2c.prixUnitaire, b2c.montant]
     );
     await pool.query(
-        `INSERT INTO factures (commande_id, date_echeance, statut, montant_restant) VALUES ($1, $2, 'A_PAYER', $3)`,
-        [cmdB2C.rows[0].id, aujourdhui, b2c.montant]
+        `INSERT INTO factures (tenant_id, commande_id, date_echeance, statut, montant_restant) VALUES ($1, $2, $3, 'A_PAYER', $4)`,
+        [tenantId, cmdB2C.rows[0].id, aujourdhui, b2c.montant]
     );
     await pool.query(
-        `INSERT INTO livraisons (commande_id, livreur_id, date_prevue, statut) VALUES ($1, $2, $3, 'A_FAIRE')`,
-        [cmdB2C.rows[0].id, userIds[b2c.livreurEmail], aujourdhui]
+        `INSERT INTO livraisons (tenant_id, commande_id, livreur_id, date_prevue, statut) VALUES ($1, $2, $3, $4, 'A_FAIRE')`,
+        [tenantId, cmdB2C.rows[0].id, userIds[b2c.livreurEmail], aujourdhui]
     );
 
     await pool.query(
         `INSERT INTO caisses_chauffeur (tenant_id, livreur_id, date_caisse, statut) VALUES ($1, $2, $3, 'OUVERTE')`,
         [tenantId, userIds[def.caisseLivreurEmail], aujourdhui]
+    );
+
+    const ab = def.abonnement;
+    await pool.query(
+        `INSERT INTO abonnements (tenant_id, client_id, produit_id, quantite, frequence, jour_livraison, actif)
+         VALUES ($1, $2, $3, $4, 'HEBDOMADAIRE', $5, TRUE)`,
+        [tenantId, clientIds[ab.clientIndex], produitIds[ab.produitIndex], ab.quantite, ab.jour_livraison]
+    );
+
+    const dep = def.depense;
+    await pool.query(
+        `INSERT INTO depenses (tenant_id, secteur_id, categorie, montant, description, date_depense, cree_par)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [tenantId, secteurIds[dep.secteur], dep.categorie, dep.montant, dep.description, dep.date, userIds[dep.cree_par]]
+    );
+
+    const rb = def.releveBancaire;
+    await pool.query(
+        `INSERT INTO releves_bancaires (tenant_id, date_operation, libelle, montant, type_operation, cree_par)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [tenantId, aujourdhui, rb.libelle, rb.montant, rb.type, userIds[rb.cree_par]]
     );
 
     return { tenantId, secteurIds, userIds, clientIds, produitIds, lotIds };
