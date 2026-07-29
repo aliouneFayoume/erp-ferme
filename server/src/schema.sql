@@ -45,6 +45,8 @@ CREATE TABLE clients (
     limite_credit NUMERIC DEFAULT 0.00, -- Limite d'encours pour B2B
     solde_encours NUMERIC DEFAULT 0.00, -- Dette actuelle (pour le Dashboard)
     est_abonne BOOLEAN DEFAULT FALSE, -- Pour les paniers B2C récurrents
+    pin_hash VARCHAR(255), -- Code d'accès au portail client (haché comme un mot de passe), NULL tant qu'aucun n'a été généré
+    pin_version INT NOT NULL DEFAULT 1, -- Incrémenté à chaque régénération du PIN : invalide immédiatement les sessions portail déjà émises
     deleted_at TIMESTAMP,
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -253,10 +255,13 @@ CREATE TABLE tickets (
 );
 
 -- Fil d'échanges d'un ticket (notes internes + suivi des réponses au client).
+-- Auteur d'un message : soit un membre du staff (utilisateur_id), soit le client lui-même via le
+-- portail (auteur_client_id) — exactement un des deux est renseigné.
 CREATE TABLE ticket_messages (
     id SERIAL PRIMARY KEY,
     ticket_id INT REFERENCES tickets(id) ON DELETE CASCADE,
     utilisateur_id INT REFERENCES utilisateurs(id),
+    auteur_client_id INT REFERENCES clients(id),
     message TEXT NOT NULL,
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

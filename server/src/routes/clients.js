@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
 
@@ -54,6 +55,25 @@ module.exports = function clientsRoutes(pool) {
             console.error(err);
             res.status(500).json({ erreur: 'Erreur lors de la mise à jour du client.' });
         }
+    });
+
+    /**
+     * (Re)génère le code d'accès au portail client — un PIN à 6 chiffres à transmettre
+     * manuellement au client (téléphone, SMS...), même logique "manuelle pour l'instant" que le
+     * téléchargement de facture PDF. Le PIN en clair n'est renvoyé qu'une fois, jamais stocké ni
+     * journalisé ; pin_version incrémenté invalide immédiatement toute session portail existante.
+     */
+    router.post('/:id/pin', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
+        const pin = String(Math.floor(100000 + Math.random() * 900000));
+        const pinHash = await bcrypt.hash(pin, 10);
+        const result = await pool.query(
+            `UPDATE clients SET pin_hash = $1, pin_version = pin_version + 1
+             WHERE id = $2 AND deleted_at IS NULL RETURNING id, nom, telephone`,
+            [pinHash, req.params.id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ erreur: 'Client introuvable.' });
+        await logAudit(pool, { table: 'clients', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, details: { action: 'regeneration_pin_portail' } });
+        res.json({ client: result.rows[0], pin });
     });
 
     router.delete('/:id', requireAuth, checkRole(['admin']), async (req, res) => {

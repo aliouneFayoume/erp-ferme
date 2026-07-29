@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ferme Massla — Espace client</title>
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+  <meta name="theme-color" content="#2E2A22" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <div id="login-screen">
+    <div class="login-box">
+      <h1>Ferme Massla</h1>
+      <p class="sub">Espace client — suivi de vos commandes, factures et demandes</p>
+      <form id="login-form">
+        <label>Téléphone
+          <input type="tel" name="telephone" required autocomplete="tel" />
+        </label>
+        <label>Code d'accès
+          <input type="text" name="pin" required inputmode="numeric" maxlength="6" autocomplete="one-time-code" />
+        </label>
+        <div id="login-error" class="login-error hidden"></div>
+        <button type="submit">Se connecter</button>
+      </form>
+      <p class="sub" style="margin-top:16px;">Le code d'accès vous est communiqué par la ferme.</p>
+    </div>
+  </div>
+
+  <div id="app-shell" class="hidden">
+    <header class="top">
+      <div>
+        <div class="brand">Ferme Massla</div>
+        <div class="sub">Espace client</div>
+      </div>
+      <div class="who">
+        <div id="who-name"></div>
+        <div style="margin-top:8px;"><button class="secondary" id="btn-logout">Déconnexion</button></div>
+      </div>
+    </header>
+
+    <nav class="tabs" id="tabs"></nav>
+
+    <main id="view"></main>
+  </div>
+
+  <script src="/js/portail.js"></script>
+</body>
+</html>

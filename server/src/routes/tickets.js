@@ -61,8 +61,11 @@ module.exports = function ticketsRoutes(pool) {
 
     router.get('/:id/messages', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
         const result = await pool.query(
-            `SELECT m.*, u.nom_complet as auteur_nom FROM ticket_messages m
-             JOIN utilisateurs u ON m.utilisateur_id = u.id
+            `SELECT m.*, COALESCE(u.nom_complet, cl.nom) as auteur_nom,
+                    CASE WHEN m.auteur_client_id IS NOT NULL THEN 'client' ELSE 'staff' END as auteur_type
+             FROM ticket_messages m
+             LEFT JOIN utilisateurs u ON m.utilisateur_id = u.id
+             LEFT JOIN clients cl ON m.auteur_client_id = cl.id
              WHERE m.ticket_id = $1 ORDER BY m.cree_le ASC`,
             [req.params.id]
         );
