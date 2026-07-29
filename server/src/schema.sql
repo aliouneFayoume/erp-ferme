@@ -235,7 +235,34 @@ CREATE TABLE releves_bancaires (
 );
 
 -- --------------------------------------------------------
--- 8. JOURNAL D'AUDIT (traçabilité obligatoire)
+-- 8. SUPPORT CLIENT (SAV)
+-- --------------------------------------------------------
+
+CREATE TABLE tickets (
+    id SERIAL PRIMARY KEY,
+    client_id INT REFERENCES clients(id),
+    sujet VARCHAR(150) NOT NULL,
+    description TEXT,
+    priorite VARCHAR(10) CHECK (priorite IN ('BASSE', 'NORMALE', 'HAUTE', 'URGENTE')) DEFAULT 'NORMALE',
+    statut VARCHAR(20) CHECK (statut IN ('OUVERT', 'EN_COURS', 'RESOLU', 'FERME')) DEFAULT 'OUVERT',
+    assigne_a INT REFERENCES utilisateurs(id),
+    cree_par INT REFERENCES utilisateurs(id),
+    deleted_at TIMESTAMP,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    mis_a_jour_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Fil d'échanges d'un ticket (notes internes + suivi des réponses au client).
+CREATE TABLE ticket_messages (
+    id SERIAL PRIMARY KEY,
+    ticket_id INT REFERENCES tickets(id) ON DELETE CASCADE,
+    utilisateur_id INT REFERENCES utilisateurs(id),
+    message TEXT NOT NULL,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- --------------------------------------------------------
+-- 9. JOURNAL D'AUDIT (traçabilité obligatoire)
 -- --------------------------------------------------------
 
 CREATE TABLE audit_logs (
@@ -256,3 +283,4 @@ CREATE INDEX idx_releves_lot_date ON releves_journaliers(lot_id, date_releve);
 CREATE INDEX idx_clients_type ON clients(type_client);
 CREATE INDEX idx_paiements_statut ON paiements(statut);
 CREATE INDEX idx_audit_table_row ON audit_logs(table_name, row_id);
+CREATE INDEX idx_tickets_statut ON tickets(statut);

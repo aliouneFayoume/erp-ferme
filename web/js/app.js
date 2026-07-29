@@ -10,6 +10,7 @@ const TAB_DEFS = [
   { key: 'logistique', label: 'Logistique', roles: ['admin', 'comptable', 'livreur'] },
   { key: 'finance', label: 'Finance', roles: ['admin', 'comptable'] },
   { key: 'comptabilite', label: 'Comptabilité', roles: ['admin', 'comptable'] },
+  { key: 'tickets', label: 'Support client', roles: ['admin', 'comptable'] },
   { key: 'utilisateurs', label: 'Utilisateurs', roles: ['admin'] },
   { key: 'audit', label: "Journal d'audit", roles: ['admin'] },
 ];

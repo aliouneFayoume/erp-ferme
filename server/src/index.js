@@ -52,6 +52,7 @@ async function main() {
     app.use('/api/utilisateurs', require('./routes/utilisateurs')(pool));
     app.use('/api/abonnements', require('./routes/abonnements')(pool));
     app.use('/api/comptabilite', require('./routes/comptabilite')(pool));
+    app.use('/api/tickets', require('./routes/tickets')(pool));
 
     app.get('/api/health', (req, res) => {
         res.json({ statut: 'En ligne', version: '1.0.0', mode, environnement: process.env.NODE_ENV || 'development' });
