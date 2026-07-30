@@ -269,7 +269,7 @@ async function openRelevePanel(container, lot) {
       lot.secteur_nom !== 'Maraîcher' && courbePoints.length >= 2
         ? `<div style="margin-top:14px">
             <div class="desc" style="margin-bottom:4px">Courbe de croissance (poids moyen, g)</div>
-            ${lineChartSvg(courbePoints, { color: SECTEUR_ACCENT[lot.secteur_nom] || '#6FA834', unit: 'g' })}
+            ${lineChartSvg(courbePoints, { color: SECTEUR_ACCENT[lot.secteur_nom] || '#5B8C3A', unit: 'g' })}
           </div>`
         : ''
     }
@@ -278,7 +278,7 @@ async function openRelevePanel(container, lot) {
       lot.secteur_nom === 'Piscicole' && courbeTaille.length >= 2
         ? `<div style="margin-top:14px">
             <div class="desc" style="margin-bottom:4px">Courbe de croissance (taille moyenne, cm)</div>
-            ${lineChartSvg(courbeTaille, { color: '#3B9C9C', unit: 'cm' })}
+            ${lineChartSvg(courbeTaille, { color: '#3B7D7D', unit: 'cm' })}
           </div>`
         : ''
     }

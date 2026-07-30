@@ -86,7 +86,7 @@ window.esc = esc;
  * dans le temps — ex : courbe de croissance (poids moyen) en Avicole/Piscicole.
  * points : [{ date: 'YYYY-MM-DD', value: number }, ...] triés du plus ancien au plus récent.
  */
-function lineChartSvg(points, { width = 560, height = 150, color = '#6FA834', unit = '' } = {}) {
+function lineChartSvg(points, { width = 560, height = 150, color = '#5B8C3A', unit = '' } = {}) {
   if (!points || points.length === 0) {
     return `<div class="empty">Pas assez de données pour tracer une courbe.</div>`;
   }

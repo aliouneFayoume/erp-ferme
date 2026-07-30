@@ -81,7 +81,7 @@ async function renderLivreur(container) {
 
     const depotIcon = L.divIcon({
       className: '',
-      html: `<div style="background:#2E2A22;color:#F6F2E7;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4)">🏠</div>`,
+      html: `<div style="background:#1A1A1A;color:#FFFFFF;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4)">🏠</div>`,
       iconSize: [28, 28],
       iconAnchor: [14, 14],
     });
@@ -101,7 +101,7 @@ async function renderLivreur(container) {
       trace.push([t.gps_lat, t.gps_lng]);
     });
     if (trace.length > 1) {
-      L.polyline(trace, { color: '#5FA8D3', weight: 3, opacity: 0.6, dashArray: '6 6' }).addTo(map);
+      L.polyline(trace, { color: '#4A7FA5', weight: 3, opacity: 0.6, dashArray: '6 6' }).addTo(map);
       map.fitBounds(trace, { padding: [24, 24] });
     }
   }
