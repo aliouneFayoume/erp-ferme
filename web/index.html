@@ -31,22 +31,26 @@
   </div>
 
   <div id="app-shell" class="hidden">
-    <header class="top">
-      <div>
-        <div class="brand">Ferme Massla</div>
-        <div class="sub">Avicole · Piscicole · Maraîchage · Finances · Logistique</div>
-      </div>
-      <div class="who">
-        <div id="who-name"></div>
-        <span id="who-role" class="role-pill"></span>
+    <header class="topbar">
+      <button class="icon-btn menu-toggle" id="btn-menu-toggle" aria-label="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <div class="topbar-brand">Ferme Massla <span class="version-pill">Massla '26</span></div>
+      <div class="topbar-who">
         <span id="sync-badge" class="badge warn hidden" title="Actions en attente d'envoi au serveur"></span>
-        <div style="margin-top:8px;"><button class="secondary" id="btn-logout">Déconnexion</button></div>
+        <span id="who-name"></span>
+        <span id="who-role" class="role-pill"></span>
+        <button class="secondary" id="btn-logout">Déconnexion</button>
       </div>
     </header>
 
-    <nav class="tabs" id="tabs"></nav>
-
-    <main id="view"></main>
+    <div class="layout">
+      <aside class="sidebar" id="sidebar">
+        <nav id="tabs"></nav>
+      </aside>
+      <div class="sidebar-overlay hidden" id="sidebar-overlay"></div>
+      <main id="view"></main>
+    </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
