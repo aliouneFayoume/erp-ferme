@@ -65,6 +65,18 @@ async function tenterSyncHorsLigne() {
 window.addEventListener('online', tenterSyncHorsLigne);
 setInterval(tenterSyncHorsLigne, 30000);
 
+// Prévient une seule fois par période hors-ligne (pas à chaque appel API) que les données
+// affichées viennent du cache local plutôt que du serveur.
+let offlineReadToastShown = false;
+window.addEventListener('erp:offline-read', () => {
+  if (offlineReadToastShown) return;
+  offlineReadToastShown = true;
+  showToast('Hors-ligne : affichage des dernières données connues (peut-être pas à jour).', 'info');
+});
+window.addEventListener('online', () => {
+  offlineReadToastShown = false;
+});
+
 function showToast(message, type = 'info') {
   const el = document.createElement('div');
   el.className = `toast ${type}`;
