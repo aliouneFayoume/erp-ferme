@@ -37,7 +37,12 @@
       </button>
       <div class="topbar-brand">Ferme Massla <span class="version-pill">Massla '26</span></div>
       <div class="topbar-who">
-        <span id="sync-badge" class="badge warn hidden" title="Actions en attente d'envoi au serveur"></span>
+        <span id="sync-indicator" class="sync-indicator synced" title="Toutes les actions sont synchronisées">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.6-1.6A4.5 4.5 0 0 0 6.5 19h11Z"/>
+          </svg>
+          <span class="sync-count hidden" id="sync-count"></span>
+        </span>
         <span id="who-name"></span>
         <span id="who-role" class="role-pill"></span>
         <button class="secondary" id="btn-logout">Déconnexion</button>
@@ -47,6 +52,10 @@
     <div class="layout">
       <aside class="sidebar" id="sidebar">
         <nav id="tabs"></nav>
+        <button class="sidebar-collapse-toggle" id="btn-sidebar-collapse" aria-label="Réduire le menu" title="Réduire le menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+          <span>Réduire</span>
+        </button>
       </aside>
       <div class="sidebar-overlay hidden" id="sidebar-overlay"></div>
       <main id="view"></main>

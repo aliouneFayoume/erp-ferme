@@ -4,16 +4,40 @@ window.Views.dashboard = {
   async render(container) {
     const stats = await Api.get('/dashboard/stats');
 
+    const alertes = [];
+    if (stats.recoltesProches > 0) {
+      alertes.push(`${stats.recoltesProches} récolte(s) maraîchère(s) prévue(s) sous 7 jours.`);
+    }
+
     container.innerHTML = `
+      ${
+        alertes.length
+          ? `<div class="panel alert-panel">
+              <h2>⚠ Alertes</h2>
+              <ul class="alert-list">${alertes.map((a) => `<li>${esc(a)}</li>`).join('')}</ul>
+            </div>`
+          : ''
+      }
+
       <div class="grid-stats">
         ${statCard("Chiffre d'affaires du jour", `${fmt(stats.chiffreAffairesJour)} FCFA`, null, 'var(--finance)')}
         ${statCard('Commandes B2C du jour', stats.commandesB2C, null, 'var(--clients)')}
         ${statCard('Stock Avicole disponible', fmt(stats.stockAvicole), 'toutes unités confondues', 'var(--avicole)')}
-        ${statCard('Encours B2B total', `${fmt(stats.encoursB2B)} FCFA`, 'crédit accordé aux pros', 'var(--danger)')}
+        ${statCard('Encours B2B total', `${fmt(stats.encoursB2B)} FCFA`, 'crédit accordé aux pros', 'var(--stock)')}
         ${statCard('Caisses chauffeur ouvertes', stats.caissesOuvertes, null, 'var(--livraison)')}
         ${statCard('Lots de production actifs', stats.lotsActifs, null, 'var(--maraicher)')}
-        ${statCard('Récoltes proches (≤7j)', stats.recoltesProches, 'Maraîcher', stats.recoltesProches > 0 ? 'var(--warn)' : 'var(--maraicher)')}
       </div>
+
+      ${
+        stats.chiffreAffairesParJour && stats.chiffreAffairesParJour.length >= 2
+          ? `<div class="panel">
+              <h2>Chiffre d'affaires — 14 derniers jours</h2>
+              <p class="desc">Évolution des commandes facturées (hors annulées).</p>
+              ${lineChartSvg(stats.chiffreAffairesParJour, { color: 'var(--finance)', unit: ' FCFA' })}
+            </div>`
+          : ''
+      }
+
       <div class="panel">
         <h2>Bienvenue sur le tableau de bord</h2>
         <p class="desc">

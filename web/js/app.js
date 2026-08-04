@@ -44,11 +44,14 @@ if ('serviceWorker' in navigator) {
 // réseau) : à la reconnexion, périodiquement, et une fois au démarrage — pas besoin d'action de
 // l'utilisateur. Le badge reste discret (masqué) tant qu'il n'y a rien en attente.
 function rafraichirBadgeSync() {
-  const badge = document.getElementById('sync-badge');
-  if (!badge) return;
+  const indicator = document.getElementById('sync-indicator');
+  const count = document.getElementById('sync-count');
+  if (!indicator || !count) return;
   const n = OfflineQueue.taille();
-  badge.classList.toggle('hidden', n === 0);
-  badge.textContent = n > 0 ? `${n} en attente` : '';
+  indicator.classList.toggle('pending', n > 0);
+  indicator.title = n > 0 ? `${n} action(s) en attente d'envoi au serveur` : 'Toutes les actions sont synchronisées';
+  count.classList.toggle('hidden', n === 0);
+  count.textContent = n > 9 ? '9+' : String(n);
 }
 OfflineQueue.surChangement(rafraichirBadgeSync);
 
@@ -195,6 +198,34 @@ const Modal = {
 };
 window.Modal = Modal;
 
+// Champ numérique avec boutons +/- (saisie terrain au doigt : mortalité, aliment, récolte...).
+// L'input reste éditable au clavier normalement ; les boutons ne font que le nudger.
+function numberStepperHTML(label, name, { value = 0, min, step = 1 } = {}) {
+  return `
+    <label>${label}
+      <div class="stepper">
+        <button type="button" class="stepper-btn" data-action="dec" aria-label="Diminuer">−</button>
+        <input type="number" name="${name}" value="${value}" ${min !== undefined ? `min="${min}"` : ''} step="${step}" inputmode="decimal" />
+        <button type="button" class="stepper-btn" data-action="inc" aria-label="Augmenter">+</button>
+      </div>
+    </label>
+  `;
+}
+window.numberStepperHTML = numberStepperHTML;
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.stepper-btn');
+  if (!btn) return;
+  const input = btn.closest('.stepper').querySelector('input');
+  const step = Number(input.step) || 1;
+  const min = input.min !== '' ? Number(input.min) : -Infinity;
+  let val = (Number(input.value) || 0) + (btn.dataset.action === 'inc' ? step : -step);
+  if (val < min) val = min;
+  const decimals = (String(step).split('.')[1] || '').length;
+  input.value = decimals ? val.toFixed(decimals) : String(val);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+});
+
 function el(html) {
   const t = document.createElement('template');
   t.innerHTML = html.trim();
@@ -237,6 +268,22 @@ function closeSidebar() {
 document.getElementById('btn-menu-toggle').addEventListener('click', openSidebar);
 document.getElementById('sidebar-overlay').addEventListener('click', closeSidebar);
 
+// Repli de la sidebar en mode icônes seules (desktop uniquement) — mémorisé pour la session suivante.
+const SIDEBAR_COLLAPSED_KEY = 'erp_sidebar_collapsed';
+function applySidebarCollapsed(collapsed) {
+  const sidebar = document.getElementById('sidebar');
+  const toggle = document.getElementById('btn-sidebar-collapse');
+  sidebar.classList.toggle('collapsed', collapsed);
+  toggle.querySelector('span').textContent = collapsed ? 'Agrandir' : 'Réduire';
+  toggle.title = collapsed ? 'Agrandir le menu' : 'Réduire le menu';
+}
+document.getElementById('btn-sidebar-collapse').addEventListener('click', () => {
+  const collapsed = !document.getElementById('sidebar').classList.contains('collapsed');
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
+  applySidebarCollapsed(collapsed);
+});
+applySidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1');
+
 function buildShell(user) {
   document.getElementById('who-name').textContent = user.nom_complet || user.email;
   document.getElementById('who-role').textContent = roleLabel(user.role);
@@ -248,6 +295,7 @@ function buildShell(user) {
     const btn = document.createElement('button');
     btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${TAB_ICONS[t.key] || ''}</svg><span>${t.label}</span>`;
     btn.dataset.key = t.key;
+    btn.title = t.label;
     btn.addEventListener('click', () => selectTab(t.key));
     nav.appendChild(btn);
   });

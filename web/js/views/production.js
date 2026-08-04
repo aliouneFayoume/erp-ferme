@@ -238,14 +238,14 @@ async function openRelevePanel(container, lot) {
   const champsSecteur =
     lot.secteur_nom === 'Piscicole'
       ? `
-        <label>Taille moyenne (cm)<input type="number" step="0.1" name="taille_moyenne_cm" /></label>
+        ${numberStepperHTML('Taille moyenne (cm)', 'taille_moyenne_cm', { step: 0.5, min: 0 })}
         <label>Température eau (°C)<input type="number" step="0.1" name="temperature_eau" /></label>
         <label>pH eau<input type="number" step="0.1" name="ph_eau" /></label>
       `
       : lot.secteur_nom === 'Maraîcher'
       ? `
         <label>Intrants utilisés<input type="text" name="intrants_utilises" placeholder="ex: NPK 20kg" /></label>
-        <label>Récolte du jour (kg)<input type="number" step="0.1" name="quantite_recoltee_kg" /></label>
+        ${numberStepperHTML('Récolte du jour (kg)', 'quantite_recoltee_kg', { step: 0.5, min: 0 })}
       `
       : '';
 
@@ -288,9 +288,9 @@ async function openRelevePanel(container, lot) {
         ? `<p class="desc" style="margin-top:16px">Ce lot est clôturé (${esc(LOT_STATUT_LABEL[lot.statut] || lot.statut)}) : aucun nouveau relevé ne peut être ajouté.</p>`
         : `<form id="form-releve" class="form-grid" style="margin-top:16px">
       <label>Date<input type="date" name="date_releve" required value="${new Date().toISOString().slice(0, 10)}" /></label>
-      <label>Mortalité<input type="number" name="mortalite" min="0" value="0" /></label>
-      <label>Conso. aliment (kg)<input type="number" step="0.1" name="conso_aliment_kg" value="0" /></label>
-      <label>Poids moyen (g)<input type="number" step="0.1" name="poids_moyen_g" value="0" /></label>
+      ${numberStepperHTML('Mortalité', 'mortalite', { step: 1, min: 0 })}
+      ${numberStepperHTML('Conso. aliment (kg)', 'conso_aliment_kg', { step: 0.5, min: 0 })}
+      ${numberStepperHTML('Poids moyen (g)', 'poids_moyen_g', { step: 10, min: 0 })}
       ${champsSecteur}
       <label>Notes<input type="text" name="notes" /></label>
       <button type="submit">Enregistrer le relevé</button>

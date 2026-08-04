@@ -16,7 +16,7 @@ module.exports = function dashboardRoutes(pool) {
         try {
             const [debutJour, finJour] = todayBounds();
 
-            const [caJour, commandesB2C, stockAvicole, encoursB2B, caissesOuvertes, lotsActifs, lotsMaraicher] = await Promise.all([
+            const [caJour, commandesB2C, stockAvicole, encoursB2B, caissesOuvertes, lotsActifs, lotsMaraicher, caParJour] = await Promise.all([
                 pool.query(
                     `SELECT COALESCE(SUM(montant_total), 0) as total FROM commandes WHERE cree_le >= $1 AND cree_le < $2 AND statut != 'ANNULEE' AND deleted_at IS NULL`,
                     [debutJour, finJour]
@@ -36,6 +36,14 @@ module.exports = function dashboardRoutes(pool) {
                      JOIN secteurs s ON l.secteur_id = s.id
                      WHERE s.nom = 'Maraîcher' AND l.statut = 'EN_COURS' AND l.deleted_at IS NULL AND l.duree_maturite_jours IS NOT NULL`
                 ),
+                // Courbe d'évolution du CA (14 derniers jours) pour le graphique du dashboard.
+                pool.query(
+                    `SELECT date_trunc('day', cree_le) as jour, COALESCE(SUM(montant_total), 0) as total
+                     FROM commandes
+                     WHERE cree_le >= $1 AND statut != 'ANNULEE' AND deleted_at IS NULL
+                     GROUP BY jour ORDER BY jour`,
+                    [new Date(Date.now() - 13 * 86400000).toISOString()]
+                ),
             ]);
 
             // Calculé en JS plutôt qu'en SQL (arithmétique de dates) pour rester portable pg-mem/PostgreSQL.
@@ -46,6 +54,14 @@ module.exports = function dashboardRoutes(pool) {
                 return joursRestants <= 7;
             }).length;
 
+            // Complète les jours sans commande à 0 pour une courbe continue sur 14 jours.
+            const parJourMap = new Map(caParJour.rows.map((r) => [r.jour.toISOString().slice(0, 10), Number(r.total)]));
+            const chiffreAffairesParJour = [];
+            for (let i = 13; i >= 0; i--) {
+                const jour = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+                chiffreAffairesParJour.push({ date: jour, value: parJourMap.get(jour) || 0 });
+            }
+
             res.json({
                 chiffreAffairesJour: Number(caJour.rows[0].total),
                 commandesB2C: Number(commandesB2C.rows[0].count),
@@ -54,6 +70,7 @@ module.exports = function dashboardRoutes(pool) {
                 caissesOuvertes: Number(caissesOuvertes.rows[0].count),
                 lotsActifs: Number(lotsActifs.rows[0].count),
                 recoltesProches,
+                chiffreAffairesParJour,
             });
         } catch (err) {
             console.error(err);
