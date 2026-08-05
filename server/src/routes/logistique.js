@@ -60,8 +60,16 @@ module.exports = function logistiqueRoutes(pool) {
     });
 
     // Mise à jour terrain : statut, preuve de livraison, et éventuel encaissement espèces (caisse chauffeur virtuelle).
+    const METHODES_PAIEMENT_VALIDES = ['ESPECES', 'WAVE', 'ORANGE_MONEY', 'VIREMENT'];
+
     router.put('/livraisons/:id/statut', requireAuth, checkRole(['livreur']), async (req, res) => {
-        const { statut, notes_livreur, preuve_livraison, encaissement_especes } = req.body;
+        const { statut, notes_livreur, preuve_livraison, montant_encaisse } = req.body;
+        // Le livreur encaisse aussi bien en espèces qu'en Wave/Orange Money reçu sur place au
+        // moment de la livraison — la caisse chauffeur virtuelle doit refléter le mode réel.
+        const methode_paiement = req.body.methode_paiement || 'ESPECES';
+        if (montant_encaisse && !METHODES_PAIEMENT_VALIDES.includes(methode_paiement)) {
+            return res.status(400).json({ erreur: 'Mode de paiement invalide.' });
+        }
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
@@ -100,13 +108,13 @@ module.exports = function logistiqueRoutes(pool) {
                     );
                 }
 
-                if (encaissement_especes && Number(encaissement_especes) > 0) {
+                if (montant_encaisse && Number(montant_encaisse) > 0) {
                     await client.query(
                         `INSERT INTO paiements (commande_id, client_id, montant, methode_paiement, statut, livreur_id)
-                         VALUES ($1, $2, $3, 'ESPECES', 'VALIDE', $4)`,
-                        [commande.id, commande.client_id, encaissement_especes, req.user.id]
+                         VALUES ($1, $2, $3, $4, 'VALIDE', $5)`,
+                        [commande.id, commande.client_id, montant_encaisse, methode_paiement, req.user.id]
                     );
-                    const moinsEncaissement = -Number(encaissement_especes);
+                    const moinsEncaissement = -Number(montant_encaisse);
                     await client.query(
                         `UPDATE factures SET montant_restant = GREATEST(montant_restant + $1, 0),
                                 statut = CASE WHEN montant_restant + $1 <= 0 THEN 'PAYEE' ELSE 'PAYEE_PARTIEL' END
@@ -120,12 +128,17 @@ module.exports = function logistiqueRoutes(pool) {
                         ]);
                     }
 
-                    const aujourdhui = new Date().toISOString().slice(0, 10);
-                    await client.query(
-                        `UPDATE caisses_chauffeur SET montant_theorique = montant_theorique + $1
-                         WHERE livreur_id = $2 AND date_caisse = $3 AND statut = 'OUVERTE'`,
-                        [encaissement_especes, req.user.id, aujourdhui]
-                    );
+                    // La caisse chauffeur virtuelle ne suit que les espèces réellement en poche du
+                    // livreur (à déposer/justifier) — un encaissement Wave/Orange Money va
+                    // directement sur le compte de la ferme, pas dans la caisse physique.
+                    if (methode_paiement === 'ESPECES') {
+                        const aujourdhui = new Date().toISOString().slice(0, 10);
+                        await client.query(
+                            `UPDATE caisses_chauffeur SET montant_theorique = montant_theorique + $1
+                             WHERE livreur_id = $2 AND date_caisse = $3 AND statut = 'OUVERTE'`,
+                            [montant_encaisse, req.user.id, aujourdhui]
+                        );
+                    }
                 }
             }
 

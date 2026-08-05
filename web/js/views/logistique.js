@@ -132,9 +132,14 @@ async function renderLivreur(container) {
               : `<div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
             <input type="text" placeholder="Preuve de livraison (nom du réceptionnaire, signature...)" class="input-preuve" data-id="${t.livraison_id}" />
             <div style="display:flex;gap:8px">
-              <input type="number" placeholder="Espèces encaissées" class="input-encaissement" data-id="${t.livraison_id}" style="flex:1" />
-              <button class="btn-terminer" data-id="${t.livraison_id}">Livré</button>
+              <input type="number" placeholder="Montant encaissé" class="input-encaissement" data-id="${t.livraison_id}" style="flex:1" />
+              <select class="select-mode-paiement" data-id="${t.livraison_id}" style="flex:0 0 130px">
+                <option value="ESPECES">Espèces</option>
+                <option value="WAVE">Wave</option>
+                <option value="ORANGE_MONEY">Orange Money</option>
+              </select>
             </div>
+            <button class="btn-terminer" data-id="${t.livraison_id}">Livré</button>
           </div>`
           }
         </div>
@@ -165,14 +170,20 @@ async function renderLivreur(container) {
   container.querySelectorAll('.btn-terminer').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const input = container.querySelector(`.input-encaissement[data-id="${btn.dataset.id}"]`);
+      const modeSelect = container.querySelector(`.select-mode-paiement[data-id="${btn.dataset.id}"]`);
       const preuveInput = container.querySelector(`.input-preuve[data-id="${btn.dataset.id}"]`);
-      const encaissement_especes = input.value ? Number(input.value) : 0;
+      const montant_encaisse = input.value ? Number(input.value) : 0;
       if (!preuveInput.value.trim()) {
         showToast('Merci de renseigner une preuve de livraison (nom du réceptionnaire, signature...).', 'error');
         return;
       }
       const path = `/logistique/livraisons/${btn.dataset.id}/statut`;
-      const payload = { statut: 'TERMINEE', encaissement_especes, preuve_livraison: preuveInput.value.trim() };
+      const payload = {
+        statut: 'TERMINEE',
+        montant_encaisse,
+        methode_paiement: modeSelect.value,
+        preuve_livraison: preuveInput.value.trim(),
+      };
       try {
         await Api.put(path, payload);
         showToast('Livraison marquée terminée.', 'success');
