@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
 const { genererFacturePDF } = require('../facturePdf');
+const { creerFacture, confirmerFacture } = require('../paydunya');
 
 module.exports = function financeRoutes(pool) {
     const router = express.Router();
@@ -63,53 +64,95 @@ module.exports = function financeRoutes(pool) {
     });
 
     /**
-     * Initie un paiement Mobile Money en attente (simule l'appel Push USSD Wave/Orange Money).
-     * Le webhook ci-dessous simule la confirmation asynchrone du provider.
+     * Initie un paiement Mobile Money (Wave/Orange Money) ou carte via PayDunya : crée une
+     * facture PayDunya réelle et renvoie l'URL de paiement hébergée vers laquelle le frontend doit
+     * rediriger le client. Le paiement reste EN_ATTENTE tant que l'IPN de confirmation n'est pas
+     * arrivé (voir /paiements/ipn).
      */
     router.post('/paiements/initier', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
         const { commande_id, client_id, montant, provider } = req.body;
-        const reference = `${provider || 'WAVE'}-${Date.now()}`;
+
+        const commandeRes = await pool.query(`SELECT numero_commande FROM commandes WHERE id = $1`, [commande_id]);
+        if (commandeRes.rows.length === 0) return res.status(404).json({ erreur: 'Commande introuvable.' });
+
+        let facture;
+        try {
+            facture = await creerFacture({
+                montant,
+                description: `Commande ${commandeRes.rows[0].numero_commande} — Ferme Massla`,
+                referenceInterne: `${commande_id}-${Date.now()}`,
+            });
+        } catch (err) {
+            console.error('Échec de création de facture PayDunya:', err.message);
+            return res.status(502).json({ erreur: 'Impossible de contacter PayDunya pour initier le paiement.' });
+        }
+
         const result = await pool.query(
             `INSERT INTO paiements (commande_id, client_id, montant, methode_paiement, reference_transaction, statut)
              VALUES ($1, $2, $3, $4, $5, 'EN_ATTENTE') RETURNING *`,
-            [commande_id, client_id, montant, provider || 'WAVE', reference]
+            [commande_id, client_id, montant, provider || 'WAVE', facture.token]
         );
         await logAudit(pool, { table: 'paiements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, details: { commande_id, montant, provider } });
-        res.status(201).json(result.rows[0]);
+        res.status(201).json({ ...result.rows[0], checkout_url: facture.url });
     });
 
     /**
-     * Webhook appelé par les API de Wave ou Orange Money lors d'un paiement réussi.
-     * Pas de checkRole : appelée par un serveur externe (en production, vérifier la signature HMAC).
+     * IPN (Instant Payment Notification) appelée par PayDunya après une tentative de paiement.
+     * Pas de checkRole : appelée par un serveur externe. Sécurité : on ne fait JAMAIS confiance au
+     * contenu de cette requête pour créditer quoi que ce soit — on relit le token puis on interroge
+     * l'API PayDunya nous-mêmes (avec nos propres clés) pour connaître le statut réel de la facture.
      */
-    router.post('/paiements/webhook', async (req, res) => {
-        const { reference_transaction, statut_paiement, montant, provider } = req.body;
+    router.post('/paiements/ipn', async (req, res) => {
+        const body = req.body || {};
+        let token;
+        try {
+            // PayDunya envoie du x-www-form-urlencoded avec un champ "data" (JSON stringifié) ;
+            // on gère aussi un corps JSON direct par prudence face aux variations d'intégration.
+            const data = typeof body.data === 'string' ? JSON.parse(body.data) : body.data || body;
+            token = data?.invoice?.token || data?.token;
+        } catch (e) {
+            token = undefined;
+        }
+        if (!token) return res.status(400).json({ erreur: 'Token de facture manquant dans la notification.' });
 
-        if (!reference_transaction || statut_paiement !== 'SUCCESS') {
-            return res.status(400).json({ erreur: 'Données de webhook invalides ou paiement échoué.' });
+        let confirmation;
+        try {
+            confirmation = await confirmerFacture(token);
+        } catch (err) {
+            console.error('Échec de confirmation PayDunya (IPN):', err.message);
+            return res.status(502).json({ erreur: 'Impossible de vérifier le paiement auprès de PayDunya.' });
+        }
+
+        if (confirmation.status !== 'completed') {
+            // 200 volontaire : notification bien reçue et traitée (rien à créditer pour un statut
+            // pending/cancelled), pour éviter que PayDunya ne la retente indéfiniment.
+            return res.status(200).json({ message: `Statut ${confirmation.status} — aucune écriture.` });
         }
 
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
 
-            // FOR UPDATE : verrouille la ligne le temps de la transaction pour qu'un webhook dupliqué
-            // (retry légitime du provider) ne puisse pas valider et créditer deux fois le même paiement.
+            // FOR UPDATE : verrouille la ligne le temps de la transaction pour qu'une IPN dupliquée
+            // (retry légitime de PayDunya) ne puisse pas valider et créditer deux fois le même paiement.
             const paiementRes = await client.query(
                 `SELECT id, commande_id, client_id FROM paiements WHERE reference_transaction = $1 AND statut = 'EN_ATTENTE' FOR UPDATE`,
-                [reference_transaction]
+                [token]
             );
-            if (paiementRes.rows.length === 0) throw new Error('Paiement introuvable ou déjà traité.');
+            if (paiementRes.rows.length === 0) {
+                await client.query('ROLLBACK');
+                return res.status(200).json({ message: 'Paiement introuvable ou déjà traité (idempotence).' });
+            }
             const paiement = paiementRes.rows[0];
 
             await client.query(
-                `UPDATE paiements SET statut = 'VALIDE', methode_paiement = COALESCE($1, methode_paiement), date_paiement = CURRENT_TIMESTAMP WHERE id = $2`,
-                [provider, paiement.id]
+                `UPDATE paiements SET statut = 'VALIDE', date_paiement = CURRENT_TIMESTAMP WHERE id = $1`,
+                [paiement.id]
             );
 
             // Note : pg-mem (simulation) inverse le signe de "colonne - $param" ; on ajoute une valeur
             // négative pour rester compatible avec pg-mem ET PostgreSQL réel.
-            const moinsMontant = -Number(montant);
+            const moinsMontant = -Number(confirmation.montant);
             await client.query(
                 `UPDATE factures SET montant_restant = GREATEST(montant_restant + $1, 0),
                      statut = CASE WHEN montant_restant + $1 <= 0 THEN 'PAYEE' ELSE 'PAYEE_PARTIEL' END
@@ -123,11 +166,16 @@ module.exports = function financeRoutes(pool) {
             }
 
             await client.query('COMMIT');
-            await logAudit(pool, { table: 'paiements', rowId: paiement.id, action: 'UPDATE', details: { reference_transaction, montant } });
-            res.status(200).json({ message: 'Webhook traité avec succès. Caisse mise à jour.' });
+            await logAudit(pool, {
+                table: 'paiements',
+                rowId: paiement.id,
+                action: 'UPDATE',
+                details: { token, montant: confirmation.montant, provider_reference: confirmation.providerReference },
+            });
+            res.status(200).json({ message: 'Paiement PayDunya confirmé, caisse mise à jour.' });
         } catch (err) {
             await client.query('ROLLBACK');
-            console.error('Erreur de traitement du webhook:', err.message);
+            console.error('Erreur de traitement IPN PayDunya:', err.message);
             res.status(500).json({ erreur: 'Erreur interne lors du traitement du paiement.' });
         } finally {
             client.release();
