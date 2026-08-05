@@ -43,11 +43,11 @@ if ('serviceWorker' in navigator) {
 // Synchronisation de la file d'attente hors-ligne (preuves de livraison, encaissements saisis sans
 // réseau) : à la reconnexion, périodiquement, et une fois au démarrage — pas besoin d'action de
 // l'utilisateur. Le badge reste discret (masqué) tant qu'il n'y a rien en attente.
-function rafraichirBadgeSync() {
+async function rafraichirBadgeSync(queue) {
   const indicator = document.getElementById('sync-indicator');
   const count = document.getElementById('sync-count');
   if (!indicator || !count) return;
-  const n = OfflineQueue.taille();
+  const n = (queue || (await OfflineQueue.lire())).length;
   indicator.classList.toggle('pending', n > 0);
   indicator.title = n > 0 ? `${n} action(s) en attente d'envoi au serveur` : 'Toutes les actions sont synchronisées';
   count.classList.toggle('hidden', n === 0);

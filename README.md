@@ -77,7 +77,6 @@ d'une commande.
 ## Limites connues de cette simulation
 
 - Le webhook Mobile Money simule Wave/Orange Money (pas d'appel réel à leurs API — nécessiterait des clés fournisseur).
-- La saisie hors-ligne (chef de production) utilise une file `localStorage` (démonstration du principe offline-first) plutôt qu'IndexedDB.
 - Le service worker met en cache l'app shell (HTML/CSS/JS) en stratégie "cache puis réseau" : après une modification du code, un premier rechargement peut encore afficher l'ancienne version le temps que le cache se mette à jour en arrière-plan — recharger une seconde fois si besoin en développement.
 - La génération des commandes d'abonnement est déclenchée manuellement (bouton "Générer les commandes du jour") plutôt que par un job planifié (cron) côté serveur.
 - Le routage optimisé utilise une heuristique du plus proche voisin (distance à vol d'oiseau) depuis un dépôt fixe (Diamniadio), pas un vrai calcul d'itinéraire routier (temps de trajet réel, sens de circulation).

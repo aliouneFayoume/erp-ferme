@@ -1,14 +1,7 @@
 window.Views = window.Views || {};
 
-const OFFLINE_QUEUE_KEY = 'erp_offline_releves';
 const OFFLINE_MODE_KEY = 'erp_offline_mode';
 
-function getQueue() {
-  return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]');
-}
-function setQueue(q) {
-  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(q));
-}
 function isOfflineMode() {
   return localStorage.getItem(OFFLINE_MODE_KEY) === '1';
 }
@@ -119,7 +112,7 @@ window.Views.production = {
       }
     });
 
-    updateOfflineBanner(container);
+    await updateOfflineBanner(container);
   },
 };
 
@@ -344,11 +337,14 @@ async function openRelevePanel(container, lot) {
 
     const hors_ligne = isOfflineMode() || !navigator.onLine;
     if (hors_ligne) {
-      const q = getQueue();
-      q.push(releve);
-      setQueue(q);
-      showToast('Hors-ligne : relevé mis en file locale (IndexedDB/localStorage). Il sera synchronisé au retour du réseau.', 'warn');
-      updateOfflineBanner(container);
+      await OfflineQueue.ajouter({
+        method: 'POST',
+        path: '/production/sync',
+        body: { releves: [releve] },
+        label: `Relevé ${lot.code_lot} — ${releve.date_releve}`,
+      });
+      showToast('Hors-ligne : relevé mis en file (IndexedDB). Il sera synchronisé au retour du réseau.', 'warn');
+      await updateOfflineBanner(container);
       e.target.reset();
       return;
     }
@@ -367,30 +363,17 @@ function offlineBanner() {
   return `<div class="offline-banner" id="offline-banner"></div>`;
 }
 
-async function syncQueue(container) {
-  const q = getQueue();
-  if (q.length === 0) return;
-  try {
-    await Api.post('/production/sync', { releves: q });
-    setQueue([]);
-    showToast(`${q.length} relevé(s) hors-ligne synchronisé(s).`, 'success');
-  } catch (err) {
-    showToast('Échec de synchronisation : ' + err.message, 'error');
-  }
-  updateOfflineBanner(container);
-}
-
-function updateOfflineBanner(container) {
+async function updateOfflineBanner(container) {
   const banner = container.querySelector('#offline-banner');
   if (!banner) return;
-  const q = getQueue();
+  const q = await OfflineQueue.lire();
   const offline = isOfflineMode() || !navigator.onLine;
 
   banner.classList.remove('hidden');
   banner.innerHTML = `
     <span>
       ${offline ? '📴 Mode hors-ligne (PWA offline-first) — les relevés sont mis en file locale.' : '🟢 En ligne.'}
-      ${q.length ? ` ${q.length} relevé(s) en attente de synchronisation.` : ''}
+      ${q.length ? ` ${q.length} action(s) en attente de synchronisation.` : ''}
     </span>
     <span style="display:flex;gap:8px;align-items:center">
       <label style="flex-direction:row;align-items:center;gap:6px;font-size:11px">
@@ -399,15 +382,19 @@ function updateOfflineBanner(container) {
       ${q.length ? `<button id="btn-sync-now">Synchroniser maintenant</button>` : ''}
     </span>
   `;
-  banner.querySelector('#toggle-offline').addEventListener('change', (e) => {
+  banner.querySelector('#toggle-offline').addEventListener('change', async (e) => {
     localStorage.setItem(OFFLINE_MODE_KEY, e.target.checked ? '1' : '0');
-    updateOfflineBanner(container);
+    await updateOfflineBanner(container);
   });
   const syncBtn = banner.querySelector('#btn-sync-now');
-  if (syncBtn) syncBtn.addEventListener('click', () => syncQueue(container));
+  if (syncBtn) {
+    syncBtn.addEventListener('click', async () => {
+      const { reussies } = await OfflineQueue.synchroniser();
+      if (reussies > 0) showToast(`${reussies} action(s) hors-ligne synchronisée(s).`, 'success');
+      await updateOfflineBanner(container);
+    });
+  }
 }
 
-window.addEventListener('online', () => {
-  const view = document.getElementById('view');
-  if (view && view.querySelector('#offline-banner')) syncQueue(view);
-});
+// Pas de listener 'online' local ici : app.js synchronise déjà globalement la file partagée
+// (OfflineQueue) à la reconnexion et périodiquement, quelle que soit la vue affichée.

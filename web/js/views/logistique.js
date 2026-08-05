@@ -32,11 +32,10 @@ async function renderLivreur(container) {
   const distanceTotaleKm = tournees.reduce((s, t) => s + Number(t.distance_depuis_precedent_km || 0), 0);
   const aujourdhui = new Date().toISOString().slice(0, 10);
   const caisseDuJour = caisses.find((c) => String(c.date_caisse).slice(0, 10) === aujourdhui);
-  const caisseOuvertureEnAttente = OfflineQueue.lire().some((i) => i.path === '/logistique/caisse/ouvrir');
+  const fileHorsLigne = await OfflineQueue.lire();
+  const caisseOuvertureEnAttente = fileHorsLigne.some((i) => i.path === '/logistique/caisse/ouvrir');
   const livraisonsEnAttente = new Set(
-    OfflineQueue.lire()
-      .filter((i) => i.path.startsWith('/logistique/livraisons/'))
-      .map((i) => i.path.split('/')[3])
+    fileHorsLigne.filter((i) => i.path.startsWith('/logistique/livraisons/')).map((i) => i.path.split('/')[3])
   );
 
   let caisseHtml;
@@ -147,7 +146,7 @@ async function renderLivreur(container) {
         window.Views.logistique.render(container);
       } catch (err) {
         if (err.reseau) {
-          OfflineQueue.ajouter({ method: 'POST', path: '/logistique/caisse/ouvrir', body: {}, label: 'Ouverture de caisse' });
+          await OfflineQueue.ajouter({ method: 'POST', path: '/logistique/caisse/ouvrir', body: {}, label: 'Ouverture de caisse' });
           showToast("Hors ligne : ouverture de caisse enregistrée, sera envoyée à la reconnexion.", 'info');
           window.Views.logistique.render(container);
         } else {
@@ -174,7 +173,7 @@ async function renderLivreur(container) {
         window.Views.logistique.render(container);
       } catch (err) {
         if (err.reseau) {
-          OfflineQueue.ajouter({ method: 'PUT', path, body: payload, label: `Livraison ${btn.dataset.id}` });
+          await OfflineQueue.ajouter({ method: 'PUT', path, body: payload, label: `Livraison ${btn.dataset.id}` });
           showToast('Hors ligne : livraison enregistrée, sera envoyée à la reconnexion.', 'info');
           window.Views.logistique.render(container);
         } else {
