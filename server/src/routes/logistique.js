@@ -27,7 +27,7 @@ module.exports = function logistiqueRoutes(pool) {
                 ORDER BY l.statut DESC, l.id ASC
             `;
             const result = await pool.query(query, [livreurId || null, aujourdhui]);
-            const tournee = optimiserTournee(result.rows);
+            const tournee = await optimiserTournee(result.rows);
             res.json({ depot: FARM_DEPOT, arrets: tournee });
         } catch (err) {
             console.error(err);

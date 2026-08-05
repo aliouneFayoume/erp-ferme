@@ -30,6 +30,8 @@ async function renderLivreur(container) {
 
   const { depot, arrets: tournees } = tourneeRes;
   const distanceTotaleKm = tournees.reduce((s, t) => s + Number(t.distance_depuis_precedent_km || 0), 0);
+  const dureeTotaleConnue = tournees.every((t) => t.duree_depuis_precedent_min != null);
+  const dureeTotaleMin = tournees.reduce((s, t) => s + Number(t.duree_depuis_precedent_min || 0), 0);
   const aujourdhui = new Date().toISOString().slice(0, 10);
   const caisseDuJour = caisses.find((c) => String(c.date_caisse).slice(0, 10) === aujourdhui);
   const fileHorsLigne = await OfflineQueue.lire();
@@ -67,7 +69,11 @@ async function renderLivreur(container) {
           <h2>Ma tournée du jour</h2>
           <p class="desc" style="margin-bottom:0">Ordre de passage optimisé (TMS) depuis le dépôt de la ferme (Diamniadio). Les livraisons apparaissent ici une fois qu'un Administrateur ou le Comptable les assigne depuis l'onglet Logistique (côté gestion), pour une commande au statut PREPAREE.</p>
         </div>
-        ${tournees.length ? `<span class="badge info">${distanceTotaleKm.toFixed(1)} km estimés</span>` : ''}
+        ${
+          tournees.length
+            ? `<span class="badge info">${distanceTotaleKm.toFixed(1)} km${dureeTotaleConnue ? ` · ${Math.round(dureeTotaleMin)} min` : ' (estimation à vol d\'oiseau)'}</span>`
+            : ''
+        }
       </div>
       <div id="tournee-map" class="gps-map"></div>
       <div class="card-list" style="margin-top:14px" id="tournee-list"></div>
@@ -114,7 +120,7 @@ async function renderLivreur(container) {
         <div class="lot-card">
           <div class="panel-row" style="margin-bottom:0">
             <div class="code">Arrêt #${t.ordre} — ${esc(t.client_nom)}</div>
-            <span class="badge info">${t.distance_depuis_precedent_km} km</span>
+            <span class="badge info">${t.distance_depuis_precedent_km} km${t.duree_depuis_precedent_min != null ? ` · ${Math.round(t.duree_depuis_precedent_min)} min` : ''}</span>
           </div>
           <div class="meta">${esc(t.adresse) || ''} · GPS ${Number(t.gps_lat).toFixed(4)}, ${Number(t.gps_lng).toFixed(4)}</div>
           <div class="kpi"><span>Commande</span><b>${esc(t.numero_commande)}</b></div>

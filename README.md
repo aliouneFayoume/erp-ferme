@@ -31,6 +31,19 @@ Un projet Supabase PostgreSQL dédié est déjà configuré via `server/.env` (n
 ```
 DATABASE_URL=postgresql://postgres.<ref>:<mot-de-passe>@aws-0-us-east-2.pooler.supabase.com:5432/postgres
 JWT_SECRET=...
+
+# Paiements Mobile Money/carte via PayDunya (facultatif — sans ces clés, l'initiation de
+# paiement échoue proprement plutôt que de simuler un paiement).
+PAYDUNYA_MASTER_KEY=...
+PAYDUNYA_PRIVATE_KEY=...
+PAYDUNYA_PUBLIC_KEY=...
+PAYDUNYA_TOKEN=...
+PAYDUNYA_MODE=test   # "live" une fois prêt à accepter de vrais paiements
+PUBLIC_URL=https://massla.sn   # sert à construire les URLs de callback/retour PayDunya
+
+# Distances/durées routières réelles pour l'optimisation de tournées (facultatif — repli
+# automatique sur la distance à vol d'oiseau si absent).
+ORS_API_KEY=...
 ```
 
 ⚠️ Utiliser la chaîne de connexion **pooler** (`*.pooler.supabase.com`), pas la connexion directe
@@ -76,10 +89,9 @@ d'une commande.
 
 ## Limites connues de cette simulation
 
-- Le webhook Mobile Money simule Wave/Orange Money (pas d'appel réel à leurs API — nécessiterait des clés fournisseur).
 - Le service worker met en cache l'app shell (HTML/CSS/JS) en stratégie "cache puis réseau" : après une modification du code, un premier rechargement peut encore afficher l'ancienne version le temps que le cache se mette à jour en arrière-plan — recharger une seconde fois si besoin en développement.
 - La génération des commandes d'abonnement est déclenchée manuellement (bouton "Générer les commandes du jour") plutôt que par un job planifié (cron) côté serveur.
-- Le routage optimisé utilise une heuristique du plus proche voisin (distance à vol d'oiseau) depuis un dépôt fixe (Diamniadio), pas un vrai calcul d'itinéraire routier (temps de trajet réel, sens de circulation).
+- Le routage optimisé utilise l'heuristique du plus proche voisin, mais s'appuie sur les distances/durées routières réelles via l'API Matrix d'OpenRouteService (`ORS_API_KEY`) — avec repli automatique sur la distance à vol d'oiseau si l'API est indisponible ou non configurée.
 - Le rapprochement bancaire fonctionne par saisie manuelle des opérations (simulateur d'import de relevé), pas de connexion réelle à une API bancaire.
 - La preuve de livraison est un champ texte libre (nom du réceptionnaire, note) en simulation, pas une vraie capture de signature ou de photo.
 - En mode `pg-mem` (pas de `DATABASE_URL`), les données repartent à zéro à chaque redémarrage du serveur — ce n'est pas le cas avec la base Supabase configurée par défaut dans `server/.env`.
