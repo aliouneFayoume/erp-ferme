@@ -1,7 +1,7 @@
 const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
-const { FARM_DEPOT, optimiserTournee } = require('../routing');
+const { FARM_DEPOT, optimiserTournee, itineraireReel } = require('../routing');
 
 module.exports = function logistiqueRoutes(pool) {
     const router = express.Router();
@@ -28,7 +28,21 @@ module.exports = function logistiqueRoutes(pool) {
             `;
             const result = await pool.query(query, [livreurId || null, aujourdhui]);
             const tournee = await optimiserTournee(result.rows);
-            res.json({ depot: FARM_DEPOT, arrets: tournee });
+
+            // Tracé routier réel suivant l'ordre optimisé (dépôt puis arrêts) — distinct de la
+            // matrice de distances utilisée pour l'optimisation elle-même. Best-effort : une
+            // tournée doit toujours s'afficher même si ce tracé échoue.
+            let trace = null;
+            try {
+                trace = await itineraireReel([
+                    FARM_DEPOT,
+                    ...tournee.map((t) => ({ lat: Number(t.gps_lat), lng: Number(t.gps_lng) })),
+                ]);
+            } catch (err) {
+                console.error("OpenRouteService indisponible pour le tracé, repli sur la ligne droite :", err.message);
+            }
+
+            res.json({ depot: FARM_DEPOT, arrets: tournee, trace });
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: 'Erreur lors de la récupération des tournées.' });

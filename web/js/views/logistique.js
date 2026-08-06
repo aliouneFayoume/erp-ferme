@@ -28,7 +28,7 @@ async function renderLivreur(container) {
     horsLigne = parsed.ts;
   }
 
-  const { depot, arrets: tournees } = tourneeRes;
+  const { depot, arrets: tournees, trace: traceReelle } = tourneeRes;
   const distanceTotaleKm = tournees.reduce((s, t) => s + Number(t.distance_depuis_precedent_km || 0), 0);
   const dureeTotaleConnue = tournees.every((t) => t.duree_depuis_precedent_min != null);
   const dureeTotaleMin = tournees.reduce((s, t) => s + Number(t.duree_depuis_precedent_min || 0), 0);
@@ -92,7 +92,7 @@ async function renderLivreur(container) {
     });
     L.marker([depot.lat, depot.lng], { icon: depotIcon }).addTo(map).bindPopup('Dépôt — Ferme Massla (Diamniadio)');
 
-    const trace = [[depot.lat, depot.lng]];
+    const pointsOrdre = [[depot.lat, depot.lng]];
     tournees.forEach((t) => {
       const numeroIcon = L.divIcon({
         className: '',
@@ -103,11 +103,17 @@ async function renderLivreur(container) {
       L.marker([t.gps_lat, t.gps_lng], { icon: numeroIcon })
         .addTo(map)
         .bindPopup(`#${t.ordre} — ${esc(t.client_nom)}<br>${esc(t.numero_commande)}`);
-      trace.push([t.gps_lat, t.gps_lng]);
+      pointsOrdre.push([t.gps_lat, t.gps_lng]);
     });
-    if (trace.length > 1) {
-      L.polyline(trace, { color: '#4A7FA5', weight: 3, opacity: 0.6, dashArray: '6 6' }).addTo(map);
-      map.fitBounds(trace, { padding: [24, 24] });
+
+    // Tracé routier réel (OpenRouteService) quand disponible — sinon repli en ligne droite
+    // pointillée entre les arrêts, pour toujours afficher quelque chose.
+    if (traceReelle && traceReelle.length > 1) {
+      L.polyline(traceReelle, { color: '#4A7FA5', weight: 4, opacity: 0.75 }).addTo(map);
+      map.fitBounds(traceReelle, { padding: [24, 24] });
+    } else if (pointsOrdre.length > 1) {
+      L.polyline(pointsOrdre, { color: '#4A7FA5', weight: 3, opacity: 0.6, dashArray: '6 6' }).addTo(map);
+      map.fitBounds(pointsOrdre, { padding: [24, 24] });
     }
   }
 

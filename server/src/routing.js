@@ -101,4 +101,31 @@ async function optimiserTournee(stops, depot = FARM_DEPOT) {
     });
 }
 
-module.exports = { FARM_DEPOT, haversineKm, optimiserTournee };
+/**
+ * Récupère le tracé routier réel (géométrie GeoJSON) suivant l'ordre optimisé des arrêts, pour
+ * affichage sur la carte — distinct de matriceReelle() qui ne renvoie que des distances/durées,
+ * pas un tracé. `points` doit déjà être dans l'ordre de passage (dépôt en premier).
+ *
+ * Renvoie `null` si aucune clé n'est configurée, s'il y a moins de 2 points, ou si l'appel échoue —
+ * l'appelant se replie alors sur un tracé en ligne droite plutôt que d'échouer l'affichage.
+ */
+async function itineraireReel(points) {
+    const apiKey = process.env.ORS_API_KEY;
+    if (!apiKey || points.length < 2) return null;
+
+    const coordinates = points.map((p) => [p.lng, p.lat]);
+    const res = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
+        method: 'POST',
+        headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coordinates }),
+    });
+    if (!res.ok) {
+        throw new Error(`OpenRouteService (directions) a répondu ${res.status}`);
+    }
+    const data = await res.json();
+    const coords = data.features?.[0]?.geometry?.coordinates;
+    if (!Array.isArray(coords)) return null;
+    return coords.map(([lng, lat]) => [lat, lng]); // reconverti en [lat, lng] pour Leaflet
+}
+
+module.exports = { FARM_DEPOT, haversineKm, optimiserTournee, itineraireReel };
