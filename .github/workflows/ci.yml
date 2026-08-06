@@ -9,8 +9,14 @@ on:
 permissions:
   contents: read
 
+## Ce workflow est déclenché deux fois pour un même push sur main : une fois directement (push),
+## une fois via l'appel réutilisable depuis deploy.yml (workflow_call), pour faire de ce même
+## passage de tests la porte d'entrée du déploiement. `github.event_name` dans le groupe évite que
+## ces deux exécutions ne s'annulent l'une l'autre (elles partageraient sinon le même groupe
+## "ci-refs/heads/main" et cancel-in-progress ferait sauter le run de deploy.yml en silence,
+## empêchant le déploiement sans qu'aucune étape n'échoue explicitement).
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
