@@ -120,10 +120,39 @@ sudo systemctl enable --now erp-ferme-backup.timer
 systemctl list-timers erp-ferme-backup.timer   # vérifier la prochaine exécution
 ```
 
-`deploy/backup.sh` ne fait qu'un `pg_dump` **local** sur le VPS (`/home/ubuntu/erp-ferme/backups`
-pour ce déploiement) — lire les commentaires du script pour brancher une synchronisation vers un
-stockage externe (S3, rclone, etc.) une fois le prestataire de stockage choisi. C'est le point
-restant pour respecter pleinement l'exigence « backups externalisés » du cahier des charges.
+### Externalisation (Cloudflare R2)
+
+`deploy/backup.sh` fait un `pg_dump` local puis `rclone sync` vers un bucket Cloudflare R2 —
+sortant gratuit, adapté au volume d'une petite structure. Le remote `r2` est défini dans
+`~/.config/rclone/rclone.conf` sur le VPS, **jamais versionné dans le dépôt** (fichier créé/édité
+à la main sur le VPS, pas via un déploiement Git) :
+
+```bash
+# Sur le VPS, une fois pour toutes :
+curl https://rclone.org/install.sh | sudo bash
+
+mkdir -p ~/.config/rclone
+cat > ~/.config/rclone/rclone.conf <<'EOF'
+[r2]
+type = s3
+provider = Cloudflare
+access_key_id = <access_key_id du token R2, scopé au bucket>
+secret_access_key = <secret_access_key du token R2>
+endpoint = https://<account_id>.r2.cloudflarestorage.com
+acl = private
+no_check_bucket = true
+EOF
+chmod 600 ~/.config/rclone/rclone.conf
+```
+
+Créer le bucket (`erp-ferme-backups`) et le token d'API (permissions **Object Read & Write**,
+restreint à ce bucket) depuis le dashboard Cloudflare → R2 → Manage API Tokens. Vérifier ensuite
+avec `rclone ls r2:erp-ferme-backups`. `rclone sync` (et non `copy`) mirrore la rétention 14 jours
+déjà appliquée localement par `backup.sh` : un fichier supprimé localement disparaît du bucket au
+cycle suivant, sans configuration de lifecycle côté R2 à maintenir séparément.
+
+Une synchronisation qui échoue déclenche la même alerte ntfy qu'un `pg_dump` en échec (`trap ERR`
+dans `backup.sh`) — pas de mode dégradé silencieux.
 
 ## Surveillance de disponibilité (toutes les 2h)
 
@@ -155,4 +184,5 @@ Pour recevoir les alertes : installer l'app **ntfy** (iOS/Android) ou ouvrir
 - [x] Restreindre l'accès SSH (clé uniquement, `PasswordAuthentication no` — déjà actif par défaut
       sur cette image Ubuntu, vérifié dans `/etc/ssh/sshd_config.d/60-cloudimg-settings.conf`).
 - [x] Vérifier que `server/.env` n'est jamais commité (déjà exclu par `.gitignore`).
-- [ ] Externaliser les sauvegardes hors du VPS (S3, rclone...).
+- [x] Externaliser les sauvegardes hors du VPS (`rclone sync` vers Cloudflare R2, voir section
+      "Sauvegardes toutes les 6h" ci-dessus).
