@@ -49,14 +49,14 @@ function requireClientAuth(pool) {
             if (payload.scope !== 'portail_client') {
                 return res.status(401).json({ erreur: 'Session invalide.' });
             }
-            const result = await pool.query(`SELECT id, pin_version FROM clients WHERE id = $1 AND deleted_at IS NULL`, [
+            const result = await pool.query(`SELECT id, tenant_id, pin_version FROM clients WHERE id = $1 AND deleted_at IS NULL`, [
                 payload.clientId,
             ]);
             const client = result.rows[0];
             if (!client || client.pin_version !== payload.pinVersion) {
                 return res.status(401).json({ erreur: 'Session invalide ou expirée' });
             }
-            req.client = { id: client.id };
+            req.client = { id: client.id, tenant_id: client.tenant_id };
             next();
         } catch (err) {
             return res.status(401).json({ erreur: 'Session invalide ou expirée' });

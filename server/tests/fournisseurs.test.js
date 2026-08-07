@@ -1,5 +1,5 @@
 const request = require('supertest');
-const { createTestPool, buildApp, seedRolesEtSecteurs, creerProduitAvecStock, creerUtilisateurEtToken } = require('./helpers/testApp');
+const { createTestPool, buildApp, seedRolesEtSecteurs, creerOrganisation, creerProduitAvecStock, creerUtilisateurEtToken } = require('./helpers/testApp');
 
 async function creerFournisseur(app, token, overrides = {}) {
     const res = await request(app)
@@ -13,12 +13,14 @@ describe('fournisseurs — annuaire, commandes d\'achat, alertes de réappro', (
     let pool;
     let app;
     let token;
+    let tenantId;
 
     beforeEach(async () => {
         pool = createTestPool();
         await seedRolesEtSecteurs(pool);
+        tenantId = await creerOrganisation(pool);
         app = buildApp(pool, ['fournisseurs']);
-        token = await creerUtilisateurEtToken(pool, { role: 'comptable' });
+        token = await creerUtilisateurEtToken(pool, { role: 'comptable', tenant_id: tenantId });
     });
 
     afterEach(async () => {
@@ -102,7 +104,7 @@ describe('fournisseurs — annuaire, commandes d\'achat, alertes de réappro', (
 
     test('réceptionner une commande ne touche pas le stock/catalogue de vente, génère une dépense une seule fois', async () => {
         const fournisseur = await creerFournisseur(app, token, { categorie: 'Vétérinaire' });
-        const produit = await creerProduitAvecStock(pool, { quantite_disponible: 50 });
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId, quantite_disponible: 50 });
 
         const commande = (
             await request(app)
@@ -163,15 +165,15 @@ describe('fournisseurs — annuaire, commandes d\'achat, alertes de réappro', (
 
         // Commande livrée pile à la date prévue -> pas de retard.
         await pool.query(
-            `INSERT INTO commandes_fournisseurs (numero_commande, fournisseur_id, statut, date_commande, date_livraison_prevue, date_livraison_reelle, montant_total)
-             VALUES ('CMF-A', $1, 'RECUE', '2026-01-01', '2026-01-05', '2026-01-05', 1000)`,
-            [fournisseur.id]
+            `INSERT INTO commandes_fournisseurs (tenant_id, numero_commande, fournisseur_id, statut, date_commande, date_livraison_prevue, date_livraison_reelle, montant_total)
+             VALUES ($1, 'CMF-A', $2, 'RECUE', '2026-01-01', '2026-01-05', '2026-01-05', 1000)`,
+            [tenantId, fournisseur.id]
         );
         // Commande livrée en retard (2 jours après la date prévue).
         await pool.query(
-            `INSERT INTO commandes_fournisseurs (numero_commande, fournisseur_id, statut, date_commande, date_livraison_prevue, date_livraison_reelle, montant_total)
-             VALUES ('CMF-B', $1, 'RECUE', '2026-01-01', '2026-01-05', '2026-01-07', 1000)`,
-            [fournisseur.id]
+            `INSERT INTO commandes_fournisseurs (tenant_id, numero_commande, fournisseur_id, statut, date_commande, date_livraison_prevue, date_livraison_reelle, montant_total)
+             VALUES ($1, 'CMF-B', $2, 'RECUE', '2026-01-01', '2026-01-05', '2026-01-07', 1000)`,
+            [tenantId, fournisseur.id]
         );
 
         const res = await request(app).get('/api/fournisseurs').set('Authorization', `Bearer ${token}`);
@@ -182,8 +184,8 @@ describe('fournisseurs — annuaire, commandes d\'achat, alertes de réappro', (
     });
 
     test('signale les produits sous le seuil de réapprovisionnement (stocks.seuil_alerte)', async () => {
-        await creerProduitAvecStock(pool, { nom: 'Stock bas', quantite_disponible: 3 });
-        await creerProduitAvecStock(pool, { nom: 'Stock ok', quantite_disponible: 500 });
+        await creerProduitAvecStock(pool, { tenant_id: tenantId, nom: 'Stock bas', quantite_disponible: 3 });
+        await creerProduitAvecStock(pool, { tenant_id: tenantId, nom: 'Stock ok', quantite_disponible: 500 });
         // seuil_alerte par défaut du schéma = 10 : le premier est sous le seuil, pas le second.
 
         const res = await request(app).get('/api/fournisseurs/reappro-alertes').set('Authorization', `Bearer ${token}`);
@@ -193,8 +195,17 @@ describe('fournisseurs — annuaire, commandes d\'achat, alertes de réappro', (
     });
 
     test('un livreur ne peut pas accéder au module fournisseurs', async () => {
-        const tokenLivreur = await creerUtilisateurEtToken(pool, { role: 'livreur' });
+        const tokenLivreur = await creerUtilisateurEtToken(pool, { role: 'livreur', tenant_id: tenantId });
         const res = await request(app).get('/api/fournisseurs').set('Authorization', `Bearer ${tokenLivreur}`);
         expect(res.status).toBe(403);
+    });
+
+    test("un fournisseur d'une autre organisation n'apparaît jamais dans la liste (isolation)", async () => {
+        const autreTenantId = await creerOrganisation(pool, 'Autre Ferme');
+        const autreToken = await creerUtilisateurEtToken(pool, { role: 'comptable', tenant_id: autreTenantId });
+        await creerFournisseur(app, autreToken, { nom: 'Fournisseur Autre Ferme' });
+
+        const res = await request(app).get('/api/fournisseurs').set('Authorization', `Bearer ${token}`);
+        expect(res.body.find((f) => f.nom === 'Fournisseur Autre Ferme')).toBeUndefined();
     });
 });

@@ -1,13 +1,15 @@
 const request = require('supertest');
-const { createTestPool, buildApp, seedRolesEtSecteurs, creerClient, creerUtilisateurEtToken } = require('./helpers/testApp');
+const { createTestPool, buildApp, seedRolesEtSecteurs, creerOrganisation, creerClient, creerUtilisateurEtToken } = require('./helpers/testApp');
 
 describe('support client — tickets', () => {
     let pool;
     let app;
+    let tenantId;
 
     beforeEach(async () => {
         pool = createTestPool();
         await seedRolesEtSecteurs(pool);
+        tenantId = await creerOrganisation(pool);
         app = buildApp(pool, ['tickets']);
     });
 
@@ -16,8 +18,8 @@ describe('support client — tickets', () => {
     });
 
     test('crée un ticket puis le retrouve dans la liste', async () => {
-        const client = await creerClient(pool);
-        const token = await creerUtilisateurEtToken(pool, { role: 'comptable' });
+        const client = await creerClient(pool, { tenant_id: tenantId });
+        const token = await creerUtilisateurEtToken(pool, { role: 'comptable', tenant_id: tenantId });
 
         const creation = await request(app)
             .post('/api/tickets')
@@ -33,15 +35,15 @@ describe('support client — tickets', () => {
     });
 
     test('sans client_id ni sujet, renvoie 400', async () => {
-        const token = await creerUtilisateurEtToken(pool, { role: 'comptable' });
+        const token = await creerUtilisateurEtToken(pool, { role: 'comptable', tenant_id: tenantId });
         const res = await request(app).post('/api/tickets').set('Authorization', `Bearer ${token}`).send({});
         expect(res.status).toBe(400);
     });
 
     test('met à jour le statut et l\'assignation', async () => {
-        const client = await creerClient(pool);
-        const token = await creerUtilisateurEtToken(pool, { role: 'comptable' });
-        const agent = await creerUtilisateurEtToken(pool, { role: 'admin' });
+        const client = await creerClient(pool, { tenant_id: tenantId });
+        const token = await creerUtilisateurEtToken(pool, { role: 'comptable', tenant_id: tenantId });
+        const agent = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantId });
 
         const creation = await request(app)
             .post('/api/tickets')
@@ -59,8 +61,8 @@ describe('support client — tickets', () => {
     });
 
     test('ajoute un message au fil de discussion du ticket', async () => {
-        const client = await creerClient(pool);
-        const token = await creerUtilisateurEtToken(pool, { role: 'comptable' });
+        const client = await creerClient(pool, { tenant_id: tenantId });
+        const token = await creerUtilisateurEtToken(pool, { role: 'comptable', tenant_id: tenantId });
 
         const creation = await request(app)
             .post('/api/tickets')
@@ -81,8 +83,21 @@ describe('support client — tickets', () => {
     });
 
     test('un livreur ne peut pas accéder aux tickets', async () => {
-        const token = await creerUtilisateurEtToken(pool, { role: 'livreur' });
+        const token = await creerUtilisateurEtToken(pool, { role: 'livreur', tenant_id: tenantId });
         const res = await request(app).get('/api/tickets').set('Authorization', `Bearer ${token}`);
         expect(res.status).toBe(403);
+    });
+
+    test("un ticket d'une autre organisation n'apparaît jamais dans la liste (isolation)", async () => {
+        const autreTenantId = await creerOrganisation(pool, 'Autre Ferme');
+        const autreClient = await creerClient(pool, { tenant_id: autreTenantId });
+        await pool.query(
+            `INSERT INTO tickets (tenant_id, client_id, sujet) VALUES ($1, $2, 'Ticket autre ferme')`,
+            [autreTenantId, autreClient.id]
+        );
+
+        const token = await creerUtilisateurEtToken(pool, { role: 'comptable', tenant_id: tenantId });
+        const res = await request(app).get('/api/tickets').set('Authorization', `Bearer ${token}`);
+        expect(res.body.find((t) => t.sujet === 'Ticket autre ferme')).toBeUndefined();
     });
 });
