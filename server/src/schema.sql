@@ -239,10 +239,13 @@ CREATE TABLE releves_bancaires (
 -- --------------------------------------------------------
 -- 7bis. APPROVISIONNEMENT (fournisseurs & commandes d'achat)
 -- --------------------------------------------------------
--- Miroir côté achats du couple commandes/lignes_commande (côté ventes) : mêmes conventions
--- (numéro, statut, lignes détaillées, soft delete). Le seuil de réapprovisionnement réutilise
--- stocks.seuil_alerte (déjà utilisé pour le badge stock bas du Catalogue) plutôt qu'une nouvelle
--- colonne dédiée.
+-- Miroir côté achats du couple commandes/lignes_commande (côté ventes) pour le numéro/statut/soft
+-- delete, mais porte sur des intrants achetés (aliment bétail, vaccins, semences, matériel...), pas
+-- sur le catalogue `produits` (les produits VENDUS aux clients, avec tarifs B2B/B2C) : une commande
+-- fournisseur ne doit donc pas référencer `produits` ni créditer `stocks`, d'où la désignation en
+-- texte libre plutôt qu'une FK. Le seuil de réapprovisionnement réutilise stocks.seuil_alerte (déjà
+-- utilisé pour le badge stock bas du Catalogue) comme simple signal pour l'équipe, sans lien
+-- automatique avec les commandes fournisseurs.
 
 CREATE TABLE fournisseurs (
     id SERIAL PRIMARY KEY,
@@ -275,7 +278,8 @@ CREATE TABLE commandes_fournisseurs (
 CREATE TABLE lignes_commande_fournisseur (
     id SERIAL PRIMARY KEY,
     commande_fournisseur_id INT REFERENCES commandes_fournisseurs(id) ON DELETE CASCADE,
-    produit_id INT REFERENCES produits(id),
+    designation VARCHAR(150) NOT NULL, -- article acheté en texte libre (ex: "Aliment ponte 25kg"), pas un produit du catalogue de vente
+    unite VARCHAR(30),
     quantite NUMERIC NOT NULL,
     prix_unitaire NUMERIC NOT NULL,
     sous_total NUMERIC NOT NULL

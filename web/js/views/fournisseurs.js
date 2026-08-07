@@ -2,11 +2,10 @@ window.Views = window.Views || {};
 
 window.Views.fournisseurs = {
   async render(container) {
-    const [fournisseurs, commandes, alertes, produits] = await Promise.all([
+    const [fournisseurs, commandes, alertes] = await Promise.all([
       Api.get('/fournisseurs'),
       Api.get('/fournisseurs/commandes'),
       Api.get('/fournisseurs/reappro-alertes'),
-      Api.get('/catalogue/produits'),
     ]);
     const moi = Api.getUser();
 
@@ -75,12 +74,14 @@ window.Views.fournisseurs = {
           </select>
         </label>
         <label>Livraison prévue le<input type="date" id="date-livraison-prevue" /></label>
+        <p class="desc">Articles achetés (aliment, vaccins, semences, matériel...) — distincts du catalogue des produits vendus aux clients.</p>
         <div class="lignes-builder" id="lignes-builder" style="margin-top:14px"></div>
-        <button type="button" class="secondary" id="btn-add-ligne">+ Ajouter un produit</button>
+        <button type="button" class="secondary" id="btn-add-ligne">+ Ajouter un article</button>
         <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center">
           <div>Total : <b id="total-estime">0 FCFA</b></div>
           <button type="button" id="btn-create-commande" ${fournisseurs.length === 0 ? 'disabled' : ''}>Créer la commande</button>
         </div>
+        ${fournisseurs.length === 0 ? '<p class="empty">Créez d\'abord un fournisseur ci-dessus.</p>' : ''}
       </div>
 
       <div class="panel">
@@ -148,12 +149,12 @@ window.Views.fournisseurs = {
     // -------------------- Builder de commande fournisseur --------------------
 
     const builder = container.querySelector('#lignes-builder');
-    const produitOptions = produits.map((p) => `<option value="${p.id}">${esc(p.nom)}</option>`).join('');
 
     function addLigneRow() {
       const row = el(`
         <div class="ligne-row">
-          <select class="ligne-produit">${produitOptions}</select>
+          <input type="text" class="ligne-designation" placeholder="Article (ex: Aliment ponte 25kg)" />
+          <input type="text" class="ligne-unite" placeholder="Unité (sac, L...)" style="max-width:100px" />
           <input type="number" class="ligne-qte" min="1" value="1" placeholder="Qté" />
           <input type="number" class="ligne-prix" min="0" step="0.01" placeholder="Prix unitaire" />
           <button type="button" class="secondary btn-remove-ligne">✕</button>
@@ -179,14 +180,15 @@ window.Views.fournisseurs = {
       container.querySelector('#total-estime').textContent = `${fmt(total)} FCFA`;
     }
 
-    if (produits.length > 0) addLigneRow();
+    addLigneRow();
     container.querySelector('#btn-add-ligne').addEventListener('click', addLigneRow);
 
     container.querySelector('#btn-create-commande').addEventListener('click', async () => {
       const fournisseur_id = Number(container.querySelector('#select-fournisseur').value);
       const date_livraison_prevue = container.querySelector('#date-livraison-prevue').value || null;
       const lignes = [...builder.querySelectorAll('.ligne-row')].map((row) => ({
-        produit_id: Number(row.querySelector('.ligne-produit').value),
+        designation: row.querySelector('.ligne-designation').value.trim(),
+        unite: row.querySelector('.ligne-unite').value.trim() || null,
         quantite: Number(row.querySelector('.ligne-qte').value),
         prix_unitaire: Number(row.querySelector('.ligne-prix').value),
       }));
@@ -203,7 +205,7 @@ window.Views.fournisseurs = {
       btn.addEventListener('click', async () => {
         try {
           await Api.put(`/fournisseurs/commandes/${btn.dataset.recevoir}/recevoir`, {});
-          showToast('Commande réceptionnée : stock crédité, dépense enregistrée.', 'success');
+          showToast('Commande réceptionnée : dépense enregistrée.', 'success');
           window.Views.fournisseurs.render(container);
         } catch (err) {
           showToast(err.message, 'error');

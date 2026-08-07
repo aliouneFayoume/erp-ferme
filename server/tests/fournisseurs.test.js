@@ -36,10 +36,8 @@ describe('fournisseurs — annuaire, commandes d\'achat, alertes de réappro', (
         expect(res.body[0].delai_moyen_jours).toBeNull();
     });
 
-    test('crée une commande fournisseur avec plusieurs lignes et calcule le montant total', async () => {
+    test('crée une commande fournisseur avec plusieurs lignes (intrants en texte libre) et calcule le montant total', async () => {
         const fournisseur = await creerFournisseur(app, token);
-        const p1 = await creerProduitAvecStock(pool, { nom: 'Aliment volaille' });
-        const p2 = await creerProduitAvecStock(pool, { nom: 'Vaccin' });
 
         const res = await request(app)
             .post('/api/fournisseurs/commandes')
@@ -48,8 +46,8 @@ describe('fournisseurs — annuaire, commandes d\'achat, alertes de réappro', (
                 fournisseur_id: fournisseur.id,
                 date_livraison_prevue: '2026-09-01',
                 lignes: [
-                    { produit_id: p1.id, quantite: 10, prix_unitaire: 500 },
-                    { produit_id: p2.id, quantite: 2, prix_unitaire: 3000 },
+                    { designation: 'Aliment ponte 25kg', unite: 'sac', quantite: 10, prix_unitaire: 500 },
+                    { designation: 'Vaccin Newcastle', quantite: 2, prix_unitaire: 3000 },
                 ],
             });
 
@@ -57,11 +55,52 @@ describe('fournisseurs — annuaire, commandes d\'achat, alertes de réappro', (
         expect(Number(res.body.montant_total)).toBe(11000);
         expect(res.body.statut).toBe('COMMANDEE');
 
-        const lignes = await pool.query(`SELECT * FROM lignes_commande_fournisseur WHERE commande_fournisseur_id = $1`, [res.body.id]);
+        const lignes = await pool.query(`SELECT * FROM lignes_commande_fournisseur WHERE commande_fournisseur_id = $1 ORDER BY id`, [res.body.id]);
         expect(lignes.rows).toHaveLength(2);
+        expect(lignes.rows[0].designation).toBe('Aliment ponte 25kg');
+        expect(lignes.rows[0].unite).toBe('sac');
     });
 
-    test('réceptionner une commande crédite le stock et génère une dépense, une seule fois', async () => {
+    test('liste les commandes fournisseurs avec le nom du fournisseur', async () => {
+        const fournisseur = await creerFournisseur(app, token, { nom: 'Semencerie du Fleuve' });
+        await request(app)
+            .post('/api/fournisseurs/commandes')
+            .set('Authorization', `Bearer ${token}`)
+            .send({ fournisseur_id: fournisseur.id, lignes: [{ designation: 'Semences maïs', quantite: 3, prix_unitaire: 2000 }] });
+
+        const res = await request(app).get('/api/fournisseurs/commandes').set('Authorization', `Bearer ${token}`);
+        expect(res.status).toBe(200);
+        expect(res.body).toHaveLength(1);
+        expect(res.body[0].fournisseur_nom).toBe('Semencerie du Fleuve');
+        expect(Number(res.body[0].montant_total)).toBe(6000);
+    });
+
+    test('réceptionner une commande le jour même donne un délai de 0 jour, jamais négatif', async () => {
+        const fournisseur = await creerFournisseur(app, token);
+        const commande = (
+            await request(app)
+                .post('/api/fournisseurs/commandes')
+                .set('Authorization', `Bearer ${token}`)
+                .send({ fournisseur_id: fournisseur.id, lignes: [{ designation: 'Aliment', quantite: 1, prix_unitaire: 1000 }] })
+        ).body;
+
+        await request(app).put(`/api/fournisseurs/commandes/${commande.id}/recevoir`).set('Authorization', `Bearer ${token}`).send({});
+
+        const res = await request(app).get('/api/fournisseurs').set('Authorization', `Bearer ${token}`);
+        const f = res.body.find((x) => x.id === fournisseur.id);
+        expect(f.delai_moyen_jours).toBe(0);
+    });
+
+    test('rejette une ligne sans désignation', async () => {
+        const fournisseur = await creerFournisseur(app, token);
+        const res = await request(app)
+            .post('/api/fournisseurs/commandes')
+            .set('Authorization', `Bearer ${token}`)
+            .send({ fournisseur_id: fournisseur.id, lignes: [{ designation: '  ', quantite: 1, prix_unitaire: 100 }] });
+        expect(res.status).toBe(400);
+    });
+
+    test('réceptionner une commande ne touche pas le stock/catalogue de vente, génère une dépense une seule fois', async () => {
         const fournisseur = await creerFournisseur(app, token, { categorie: 'Vétérinaire' });
         const produit = await creerProduitAvecStock(pool, { quantite_disponible: 50 });
 
@@ -69,7 +108,7 @@ describe('fournisseurs — annuaire, commandes d\'achat, alertes de réappro', (
             await request(app)
                 .post('/api/fournisseurs/commandes')
                 .set('Authorization', `Bearer ${token}`)
-                .send({ fournisseur_id: fournisseur.id, lignes: [{ produit_id: produit.id, quantite: 20, prix_unitaire: 750 }] })
+                .send({ fournisseur_id: fournisseur.id, lignes: [{ designation: 'Vaccin', quantite: 20, prix_unitaire: 750 }] })
         ).body;
 
         const res = await request(app)
@@ -81,45 +120,39 @@ describe('fournisseurs — annuaire, commandes d\'achat, alertes de réappro', (
         expect(res.body.statut).toBe('RECUE');
         expect(res.body.date_livraison_reelle).not.toBeNull();
 
+        // Le catalogue de vente (produits/stocks) n'a aucun rapport avec les intrants achetés.
         const stock = await pool.query(`SELECT * FROM stocks WHERE produit_id = $1`, [produit.id]);
-        expect(Number(stock.rows[0].quantite_disponible)).toBe(70);
+        expect(Number(stock.rows[0].quantite_disponible)).toBe(50);
 
         const depenses = await pool.query(`SELECT * FROM depenses WHERE deleted_at IS NULL`);
         expect(depenses.rows).toHaveLength(1);
         expect(Number(depenses.rows[0].montant)).toBe(15000);
         expect(depenses.rows[0].categorie).toBe('Vétérinaire');
 
-        // Une commande déjà reçue ne peut pas être réceptionnée une seconde fois (pas de double
-        // crédit de stock ni de double dépense).
+        // Une commande déjà reçue ne peut pas être réceptionnée une seconde fois (pas de double dépense).
         const res2 = await request(app)
             .put(`/api/fournisseurs/commandes/${commande.id}/recevoir`)
             .set('Authorization', `Bearer ${token}`)
             .send({});
         expect(res2.status).toBe(400);
 
-        const stockApres = await pool.query(`SELECT * FROM stocks WHERE produit_id = $1`, [produit.id]);
-        expect(Number(stockApres.rows[0].quantite_disponible)).toBe(70);
         const depensesApres = await pool.query(`SELECT * FROM depenses WHERE deleted_at IS NULL`);
         expect(depensesApres.rows).toHaveLength(1);
     });
 
-    test('annuler une commande ne touche pas le stock et ne peut plus être réceptionnée', async () => {
+    test('annuler une commande ne peut plus être réceptionnée', async () => {
         const fournisseur = await creerFournisseur(app, token);
-        const produit = await creerProduitAvecStock(pool, { quantite_disponible: 30 });
 
         const commande = (
             await request(app)
                 .post('/api/fournisseurs/commandes')
                 .set('Authorization', `Bearer ${token}`)
-                .send({ fournisseur_id: fournisseur.id, lignes: [{ produit_id: produit.id, quantite: 5, prix_unitaire: 100 }] })
+                .send({ fournisseur_id: fournisseur.id, lignes: [{ designation: 'Semences maïs', quantite: 5, prix_unitaire: 100 }] })
         ).body;
 
         const res = await request(app).put(`/api/fournisseurs/commandes/${commande.id}/annuler`).set('Authorization', `Bearer ${token}`);
         expect(res.status).toBe(200);
         expect(res.body.statut).toBe('ANNULEE');
-
-        const stock = await pool.query(`SELECT * FROM stocks WHERE produit_id = $1`, [produit.id]);
-        expect(Number(stock.rows[0].quantite_disponible)).toBe(30);
 
         const recevoir = await request(app).put(`/api/fournisseurs/commandes/${commande.id}/recevoir`).set('Authorization', `Bearer ${token}`).send({});
         expect(recevoir.status).toBe(400);
@@ -127,7 +160,6 @@ describe('fournisseurs — annuaire, commandes d\'achat, alertes de réappro', (
 
     test('calcule le délai moyen et le taux de retard après réception', async () => {
         const fournisseur = await creerFournisseur(app, token);
-        const produit = await creerProduitAvecStock(pool);
 
         // Commande livrée pile à la date prévue -> pas de retard.
         await pool.query(

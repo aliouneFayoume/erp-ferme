@@ -117,8 +117,7 @@ module.exports = function fournisseursRoutes(pool) {
 
     router.get('/commandes', requireAuth, checkRole(ROLES_APPRO), async (req, res) => {
         const result = await pool.query(
-            `SELECT cf.*, f.nom as fournisseur_nom,
-                    (SELECT COUNT(*) FROM lignes_commande_fournisseur WHERE commande_fournisseur_id = cf.id) as nb_lignes
+            `SELECT cf.*, f.nom as fournisseur_nom
              FROM commandes_fournisseurs cf
              JOIN fournisseurs f ON f.id = cf.fournisseur_id
              WHERE cf.deleted_at IS NULL ORDER BY cf.cree_le DESC LIMIT 200`
@@ -134,8 +133,7 @@ module.exports = function fournisseursRoutes(pool) {
         );
         if (commande.rows.length === 0) return res.status(404).json({ erreur: 'Commande fournisseur introuvable.' });
         const lignes = await pool.query(
-            `SELECT lcf.*, p.nom as produit_nom FROM lignes_commande_fournisseur lcf
-             JOIN produits p ON lcf.produit_id = p.id WHERE lcf.commande_fournisseur_id = $1`,
+            `SELECT * FROM lignes_commande_fournisseur WHERE commande_fournisseur_id = $1`,
             [req.params.id]
         );
         res.json({ ...commande.rows[0], lignes: lignes.rows });
@@ -157,31 +155,37 @@ module.exports = function fournisseursRoutes(pool) {
             let montantTotal = 0;
             const lignesPreparees = [];
             for (const ligne of lignes) {
-                const produitRes = await client.query(`SELECT * FROM produits WHERE id = $1 AND deleted_at IS NULL`, [ligne.produit_id]);
-                if (produitRes.rows.length === 0) throw { statut: 404, message: `Produit ${ligne.produit_id} introuvable.` };
+                const designation = String(ligne.designation || '').trim();
                 const quantite = Number(ligne.quantite);
                 const prixUnitaire = Number(ligne.prix_unitaire);
+                if (!designation) throw { statut: 400, message: 'La désignation de chaque article est requise.' };
                 if (!(quantite > 0) || !(prixUnitaire >= 0)) {
                     throw { statut: 400, message: 'Quantité et prix unitaire doivent être positifs.' };
                 }
                 const sousTotal = quantite * prixUnitaire;
                 montantTotal += sousTotal;
-                lignesPreparees.push({ produit_id: produitRes.rows[0].id, quantite, prixUnitaire, sousTotal });
+                lignesPreparees.push({ designation, unite: ligne.unite || null, quantite, prixUnitaire, sousTotal });
             }
 
             const numero = `CMF-${Date.now().toString().slice(-6)}`;
+            // date_commande fixée explicitement en JS (plutôt que de laisser le DEFAULT CURRENT_DATE
+            // de la colonne s'appliquer) : le calcul du délai de livraison compare cette date à
+            // date_livraison_reelle, elle aussi calculée en JS (voir /recevoir plus bas) — mélanger une
+            // date par défaut évaluée côté SQL avec une date calculée côté JS peut introduire un écart
+            // artificiel selon le fuseau horaire du moteur SQL (déjà rencontré avec CURRENT_DATE en pg-mem).
+            const aujourdhui = new Date().toISOString().slice(0, 10);
             const commandeRes = await client.query(
-                `INSERT INTO commandes_fournisseurs (numero_commande, fournisseur_id, date_livraison_prevue, montant_total, notes, cree_par)
-                 VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-                [numero, fournisseur_id, date_livraison_prevue || null, montantTotal, notes || null, req.user.id]
+                `INSERT INTO commandes_fournisseurs (numero_commande, fournisseur_id, date_commande, date_livraison_prevue, montant_total, notes, cree_par)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+                [numero, fournisseur_id, aujourdhui, date_livraison_prevue || null, montantTotal, notes || null, req.user.id]
             );
             const commande = commandeRes.rows[0];
 
             for (const l of lignesPreparees) {
                 await client.query(
-                    `INSERT INTO lignes_commande_fournisseur (commande_fournisseur_id, produit_id, quantite, prix_unitaire, sous_total)
-                     VALUES ($1, $2, $3, $4, $5)`,
-                    [commande.id, l.produit_id, l.quantite, l.prixUnitaire, l.sousTotal]
+                    `INSERT INTO lignes_commande_fournisseur (commande_fournisseur_id, designation, unite, quantite, prix_unitaire, sous_total)
+                     VALUES ($1, $2, $3, $4, $5, $6)`,
+                    [commande.id, l.designation, l.unite, l.quantite, l.prixUnitaire, l.sousTotal]
                 );
             }
 
@@ -202,9 +206,10 @@ module.exports = function fournisseursRoutes(pool) {
     });
 
     /**
-     * Réception d'une commande fournisseur : crédite le stock des produits reçus et génère
-     * automatiquement la dépense correspondante — miroir du débit de stock + facture générés à la
-     * création d'une commande client (routes/commandes.js).
+     * Réception d'une commande fournisseur : génère automatiquement la dépense correspondante —
+     * miroir de la facture générée à la création d'une commande client (routes/commandes.js).
+     * Ne touche pas `stocks`/`produits` : les lignes portent sur des intrants achetés (aliment,
+     * vaccins, semences...), sans rapport avec le catalogue des produits vendus aux clients.
      */
     router.put('/commandes/:id/recevoir', requireAuth, checkRole(ROLES_APPRO), async (req, res) => {
         const client = await pool.connect();
@@ -223,15 +228,6 @@ module.exports = function fournisseursRoutes(pool) {
 
             const fournisseurRes = await client.query(`SELECT * FROM fournisseurs WHERE id = $1`, [commande.fournisseur_id]);
             const fournisseur = fournisseurRes.rows[0];
-
-            const lignes = await client.query(`SELECT * FROM lignes_commande_fournisseur WHERE commande_fournisseur_id = $1`, [commande.id]);
-            for (const ligne of lignes.rows) {
-                await client.query(
-                    `UPDATE stocks SET quantite_disponible = quantite_disponible + $1, derniere_mise_a_jour = CURRENT_TIMESTAMP
-                     WHERE produit_id = $2`,
-                    [ligne.quantite, ligne.produit_id]
-                );
-            }
 
             const aujourdhui = new Date().toISOString().slice(0, 10);
             const updated = await client.query(
