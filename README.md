@@ -8,7 +8,8 @@ webhook Mobile Money, journal d'audit, soft delete, abonnements B2C avec génér
 récurrentes, PWA installable avec app shell en cache, courbe de croissance, planification des cultures
 (Maraîcher) avec date de récolte prévue, TMS/routage optimisé des tournées, comptabilité analytique
 par pôle, rapprochement bancaire, preuve de livraison, biométrie piscicole (poids et taille),
-clôture de lot (récolte/abattage/perte), saisie terrain offline-first).
+clôture de lot (récolte/abattage/perte), saisie terrain offline-first, gestion des fournisseurs et
+des commandes d'achat avec alertes de réapprovisionnement et suivi des délais de livraison).
 
 ## Lancer la simulation
 
@@ -61,6 +62,16 @@ Contrairement au mode `pg-mem`, les données persistent réellement entre les re
 serveur — `npm start` se contente ensuite de s'y connecter, sans rien recharger. Le serveur refuse
 de démarrer avec `DATABASE_URL` défini mais sans `JWT_SECRET` explicite, pour éviter d'utiliser en
 production le secret de démonstration connu de tous.
+
+#### Évolutions de schéma après la mise en production
+
+`npm run migrate` rejoue tout `schema.sql` — à réserver à l'installation initiale d'une base vide
+(`CREATE TABLE` échoue sur une base qui a déjà ces tables). Toute évolution ultérieure du schéma
+contre une base de production déjà peuplée passe par un fichier de migration incrémentale dédié
+(`server/src/migration-NN-nom.sql`, écrit avec `IF NOT EXISTS` pour rester rejouable sans risque),
+à exécuter une fois via le SQL Editor du projet Supabase ou `psql "$DATABASE_URL" -f <fichier>` —
+avant de déployer le code qui dépend de ce nouveau schéma. Voir `server/src/migration-01-fournisseurs.sql`
+pour un exemple.
 
 ## Sécurité
 

@@ -24,6 +24,12 @@ réelle du run sur `github.com/aliouneFayoume/erp-ferme/actions` plutôt que de 
 Ce qui suit reste utile comme référence/point de départ pour un nouveau déploiement ou une
 migration de VPS.
 
+⚠️ **Avant de déployer le module Fournisseurs (approvisionnement)** : exécuter une fois
+`server/src/migration-01-fournisseurs.sql` contre la base de production (SQL Editor du projet
+Supabase, ou `psql "$DATABASE_URL" -f server/src/migration-01-fournisseurs.sql`) — cette base est
+déjà peuplée, donc `npm run migrate` (qui rejoue tout `schema.sql`) ne doit pas être relancé dessus.
+Voir la section "Évolutions de schéma après la mise en production" du README racine.
+
 ## Prérequis
 
 - Un VPS avec accès SSH root ou sudo, Docker + docker compose plugin installés.

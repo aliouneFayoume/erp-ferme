@@ -16,7 +16,7 @@ module.exports = function dashboardRoutes(pool) {
         try {
             const [debutJour, finJour] = todayBounds();
 
-            const [caJour, commandesB2C, stockAvicole, encoursB2B, caissesOuvertes, lotsActifs, lotsMaraicher, caParJour] = await Promise.all([
+            const [caJour, commandesB2C, stockAvicole, encoursB2B, caissesOuvertes, lotsActifs, lotsMaraicher, caParJour, produitsSousSeuil] = await Promise.all([
                 pool.query(
                     `SELECT COALESCE(SUM(montant_total), 0) as total FROM commandes WHERE cree_le >= $1 AND cree_le < $2 AND statut != 'ANNULEE' AND deleted_at IS NULL`,
                     [debutJour, finJour]
@@ -44,6 +44,10 @@ module.exports = function dashboardRoutes(pool) {
                      GROUP BY jour ORDER BY jour`,
                     [new Date(Date.now() - 13 * 86400000).toISOString()]
                 ),
+                pool.query(
+                    `SELECT COUNT(*) as count FROM stocks st JOIN produits p ON p.id = st.produit_id
+                     WHERE p.deleted_at IS NULL AND p.actif = TRUE AND st.quantite_disponible <= st.seuil_alerte`
+                ),
             ]);
 
             // Calculé en JS plutôt qu'en SQL (arithmétique de dates) pour rester portable pg-mem/PostgreSQL.
@@ -70,6 +74,7 @@ module.exports = function dashboardRoutes(pool) {
                 caissesOuvertes: Number(caissesOuvertes.rows[0].count),
                 lotsActifs: Number(lotsActifs.rows[0].count),
                 recoltesProches,
+                produitsSousSeuil: Number(produitsSousSeuil.rows[0].count),
                 chiffreAffairesParJour,
             });
         } catch (err) {

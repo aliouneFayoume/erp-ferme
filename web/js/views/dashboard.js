@@ -8,6 +8,9 @@ window.Views.dashboard = {
     if (stats.recoltesProches > 0) {
       alertes.push(`${stats.recoltesProches} récolte(s) maraîchère(s) prévue(s) sous 7 jours.`);
     }
+    if (stats.produitsSousSeuil > 0) {
+      alertes.push(`${stats.produitsSousSeuil} produit(s) sous le seuil de réapprovisionnement — voir Fournisseurs.`);
+    }
 
     container.innerHTML = `
       ${

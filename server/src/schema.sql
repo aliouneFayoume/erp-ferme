@@ -237,6 +237,53 @@ CREATE TABLE releves_bancaires (
 );
 
 -- --------------------------------------------------------
+-- 7bis. APPROVISIONNEMENT (fournisseurs & commandes d'achat)
+-- --------------------------------------------------------
+-- Miroir côté achats du couple commandes/lignes_commande (côté ventes) : mêmes conventions
+-- (numéro, statut, lignes détaillées, soft delete). Le seuil de réapprovisionnement réutilise
+-- stocks.seuil_alerte (déjà utilisé pour le badge stock bas du Catalogue) plutôt qu'une nouvelle
+-- colonne dédiée.
+
+CREATE TABLE fournisseurs (
+    id SERIAL PRIMARY KEY,
+    nom VARCHAR(150) NOT NULL,
+    categorie VARCHAR(50), -- 'Aliment', 'Intrants', 'Vétérinaire', 'Matériel', 'Autre'
+    telephone VARCHAR(30),
+    email VARCHAR(150),
+    adresse TEXT,
+    notes TEXT,
+    deleted_at TIMESTAMP,
+    cree_par INT REFERENCES utilisateurs(id),
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE commandes_fournisseurs (
+    id SERIAL PRIMARY KEY,
+    numero_commande VARCHAR(20) UNIQUE NOT NULL, -- ex: 'CMF-8492'
+    fournisseur_id INT REFERENCES fournisseurs(id),
+    statut VARCHAR(20) CHECK (statut IN ('COMMANDEE', 'RECUE', 'ANNULEE')) DEFAULT 'COMMANDEE',
+    date_commande DATE NOT NULL DEFAULT CURRENT_DATE,
+    date_livraison_prevue DATE,
+    date_livraison_reelle DATE, -- renseignée à la réception : base du suivi des délais fournisseur
+    montant_total NUMERIC NOT NULL DEFAULT 0,
+    notes TEXT,
+    cree_par INT REFERENCES utilisateurs(id),
+    deleted_at TIMESTAMP,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE lignes_commande_fournisseur (
+    id SERIAL PRIMARY KEY,
+    commande_fournisseur_id INT REFERENCES commandes_fournisseurs(id) ON DELETE CASCADE,
+    produit_id INT REFERENCES produits(id),
+    quantite NUMERIC NOT NULL,
+    prix_unitaire NUMERIC NOT NULL,
+    sous_total NUMERIC NOT NULL
+);
+
+CREATE INDEX idx_commandes_fournisseurs_statut ON commandes_fournisseurs(statut);
+
+-- --------------------------------------------------------
 -- 8. SUPPORT CLIENT (SAV)
 -- --------------------------------------------------------
 
