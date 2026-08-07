@@ -30,6 +30,90 @@ Supabase, ou `psql "$DATABASE_URL" -f server/src/migration-01-fournisseurs.sql`)
 déjà peuplée, donc `npm run migrate` (qui rejoue tout `schema.sql`) ne doit pas être relancé dessus.
 Voir la section "Évolutions de schéma après la mise en production" du README racine.
 
+## Passage multi-tenant (Massla = tenant #1) — runbook, PAS ENCORE EXÉCUTÉ
+
+La branche `feature/multi-tenant-saas` fait passer l'application d'un modèle mono-tenant à un
+modèle où chaque ferme cliente (organisation) est isolée par `tenant_id`, avec son propre
+agrégateur de paiement PayDunya. C'est un changement de fond, pas une fonctionnalité de plus —
+séquence à respecter strictement, chaque étape confirmée séparément avant de passer à la suivante.
+
+**Phase A — Schéma (additif, zéro risque, exécutable à tout moment)**
+
+L'ancien code ignore complètement les nouvelles tables/colonnes : cette phase ne change AUCUN
+comportement observable de l'application actuellement en ligne.
+
+```bash
+# Sauvegarde de précaution immédiate (au lieu d'attendre le prochain cycle de 6h) :
+ssh -i ~/.ssh/erp_ferme_vps ubuntu@40.233.98.20 \
+  "set -a; source /home/ubuntu/erp-ferme/server/.env; set +a; /home/ubuntu/erp-ferme/deploy/backup.sh"
+
+# Puis, contre la base de production (SQL Editor Supabase, ou) :
+psql "$DATABASE_URL" -f server/src/migration-03-multi-tenant.sql
+```
+
+Vérifier ensuite (chaque décompte doit valoir 0) :
+```sql
+SELECT 'utilisateurs', COUNT(*) FILTER (WHERE tenant_id IS NULL) FROM utilisateurs
+UNION ALL SELECT 'clients', COUNT(*) FILTER (WHERE tenant_id IS NULL) FROM clients
+UNION ALL SELECT 'commandes', COUNT(*) FILTER (WHERE tenant_id IS NULL) FROM commandes;
+-- (et ainsi de suite pour chaque table listée en tête de migration-03-multi-tenant.sql)
+```
+
+**Phase B — Migrer les identifiants PayDunya actuels vers la table chiffrée**
+
+Toujours avant de déployer le nouveau code — les clés actuelles vivent dans `server/.env`
+(`PAYDUNYA_MASTER_KEY`, `PAYDUNYA_PRIVATE_KEY`, `PAYDUNYA_PUBLIC_KEY`, `PAYDUNYA_TOKEN`,
+`PAYDUNYA_MODE`), à recopier dans `organisation_paydunya_config` pour le tenant Massla via
+`paymentConfig.js` (chiffrement fait en JS, pas en SQL) :
+
+```js
+// one-off, à exécuter localement avec le DATABASE_URL de prod chargé, jamais committé
+require('dotenv').config();
+const { Pool } = require('pg');
+const { setPaydunyaConfig } = require('./server/src/paymentConfig');
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+(async () => {
+  const { rows } = await pool.query(`SELECT id FROM organisations WHERE nom = 'Ferme Massla'`);
+  await setPaydunyaConfig(pool, rows[0].id, {
+    mode: process.env.PAYDUNYA_MODE || 'test',
+    masterKey: process.env.PAYDUNYA_MASTER_KEY,
+    privateKey: process.env.PAYDUNYA_PRIVATE_KEY,
+    publicKey: process.env.PAYDUNYA_PUBLIC_KEY,
+    token: process.env.PAYDUNYA_TOKEN,
+  }, rows[0].id); // mis_a_jour_par : pas d'utilisateur précis pour une migration, id de l'org en repli
+  await pool.end();
+})();
+```
+
+**Phase C — Ajouter `CREDENTIALS_ENCRYPTION_KEY` au `.env` du VPS**
+
+Nouvelle variable obligatoire dès que `DATABASE_URL` est défini (même garde-fou que `JWT_SECRET`,
+le serveur refuse de démarrer sans) :
+```bash
+openssl rand -hex 32   # à coller comme valeur de CREDENTIALS_ENCRYPTION_KEY dans server/.env sur le VPS
+```
+
+**Phase D — Déployer le nouveau code**
+
+Fusionner `feature/multi-tenant-saas` dans `main` (côté monorepo, sur une branche dédiée d'abord
+pour revue) puis déployer via le pipeline habituel (subtree split + push + vérification via l'API
+GitHub Actions, jamais se fier au seul health check — voir plus haut).
+
+**À anticiper juste après le déploiement :**
+- Les tokens JWT du staff déjà connecté avant le déploiement n'ont pas de `tenant_id` (ancien
+  format) : leurs écrans afficheront des listes vides jusqu'à reconnexion. Se résorbe seul en 12h
+  maximum (durée de vie d'un token staff), ou prévenir l'équipe de se reconnecter juste après.
+- Le portail client n'est PAS affecté : `requireClientAuth` relit le client (et son `tenant_id`)
+  en base à chaque requête plutôt que de le porter dans le token, donc aucune session client
+  existante ne casse.
+- Vérifier immédiatement après déploiement : connexion admin, tableau de bord, et que l'écran
+  "Paiements (réglages)" affiche bien "Configuré" pour Massla sans ressaisie.
+
+**Rollback** : le schéma étant 100% additif, un rollback du CODE seul (`git reset --hard
+<commit-precedent> && docker compose up -d --build` sur le VPS) suffit à annuler la Phase D sans
+toucher aux Phases A/B/C — l'ancien code continue de fonctionner normalement avec les colonnes
+`tenant_id` en place mais ignorées.
+
 ## Prérequis
 
 - Un VPS avec accès SSH root ou sudo, Docker + docker compose plugin installés.
