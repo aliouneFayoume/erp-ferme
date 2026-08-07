@@ -12,6 +12,7 @@ const TAB_DEFS = [
   { key: 'finance', label: 'Finance', roles: ['admin', 'comptable'] },
   { key: 'comptabilite', label: 'Comptabilité', roles: ['admin', 'comptable'] },
   { key: 'tickets', label: 'Support client', roles: ['admin', 'comptable'] },
+  { key: 'parametres-paiement', label: 'Paiements (réglages)', roles: ['admin'] },
   { key: 'utilisateurs', label: 'Utilisateurs', roles: ['admin'] },
   { key: 'audit', label: "Journal d'audit", roles: ['admin'] },
 ];
@@ -29,6 +30,7 @@ const TAB_ICONS = {
   finance: '<rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><path d="M6 6V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/>',
   comptabilite: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 7h8M8 12h8M8 17h4"/>',
   tickets: '<path d="M4 4h16v12H8l-4 4V4Z"/>',
+  'parametres-paiement': '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20"/><path d="M6 14h4"/>',
   utilisateurs: '<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="18" cy="9" r="2.6"/><path d="M15.5 14a5.5 5.5 0 0 1 6.5 5.4"/>',
   audit: '<path d="M9 3h6a1 1 0 0 1 1 1v1h1a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h1V4a1 1 0 0 1 1-1Z"/><path d="M9 11h6M9 15h6"/>',
 };
