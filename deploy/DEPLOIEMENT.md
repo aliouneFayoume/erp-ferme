@@ -12,6 +12,15 @@
 - CI/CD : GitHub Actions (`aliouneFayoume/erp-ferme`) — tests à chaque push, déploiement
   automatique sur le VPS (`git pull` + rebuild Docker) sur push vers `main`.
 
+⚠️ **Le déploiement peut échouer silencieusement.** `ci.yml` est déclenché deux fois par push sur
+`main` (directement, et via l'appel réutilisable depuis `deploy.yml`) ; avant correction, ces deux
+exécutions partageaient le même groupe de concurrence et s'annulaient parfois l'une l'autre —
+`deploy` passait alors en `skipped` sans qu'aucune étape n'échoue, et le health check du VPS
+continuait de répondre (avec l'ancien code) comme si tout allait bien. Corrigé le 2026-08-06 en
+scopant le groupe de concurrence par `github.event_name`. Après un push, vérifier la conclusion
+réelle du run sur `github.com/aliouneFayoume/erp-ferme/actions` plutôt que de se fier uniquement à
+`/api/health`.
+
 Ce qui suit reste utile comme référence/point de départ pour un nouveau déploiement ou une
 migration de VPS.
 
