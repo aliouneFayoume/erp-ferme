@@ -12,6 +12,8 @@ const PORT = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json());
+// PayDunya envoie ses notifications IPN en application/x-www-form-urlencoded, pas en JSON.
+app.use(express.urlencoded({ extended: true }));
 
 // CSP alignée sur les ressources externes réellement utilisées par le frontend (Leaflet via unpkg,
 // tuiles OpenStreetMap) : aucune autre origine externe n'est chargée, donc pas de relâchement au-delà.
@@ -52,6 +54,9 @@ async function main() {
     app.use('/api/utilisateurs', require('./routes/utilisateurs')(pool));
     app.use('/api/abonnements', require('./routes/abonnements')(pool));
     app.use('/api/comptabilite', require('./routes/comptabilite')(pool));
+    app.use('/api/tickets', require('./routes/tickets')(pool));
+    app.use('/api/portail', require('./routes/portail')(pool));
+    app.use('/api/fournisseurs', require('./routes/fournisseurs')(pool));
 
     app.get('/api/health', (req, res) => {
         res.json({ statut: 'En ligne', version: '1.0.0', mode, environnement: process.env.NODE_ENV || 'development' });

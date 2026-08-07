@@ -1,14 +1,7 @@
 window.Views = window.Views || {};
 
-const OFFLINE_QUEUE_KEY = 'erp_offline_releves';
 const OFFLINE_MODE_KEY = 'erp_offline_mode';
 
-function getQueue() {
-  return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]');
-}
-function setQueue(q) {
-  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(q));
-}
 function isOfflineMode() {
   return localStorage.getItem(OFFLINE_MODE_KEY) === '1';
 }
@@ -119,7 +112,7 @@ window.Views.production = {
       }
     });
 
-    updateOfflineBanner(container);
+    await updateOfflineBanner(container);
   },
 };
 
@@ -238,14 +231,14 @@ async function openRelevePanel(container, lot) {
   const champsSecteur =
     lot.secteur_nom === 'Piscicole'
       ? `
-        <label>Taille moyenne (cm)<input type="number" step="0.1" name="taille_moyenne_cm" /></label>
+        ${numberStepperHTML('Taille moyenne (cm)', 'taille_moyenne_cm', { step: 0.5, min: 0 })}
         <label>Température eau (°C)<input type="number" step="0.1" name="temperature_eau" /></label>
         <label>pH eau<input type="number" step="0.1" name="ph_eau" /></label>
       `
       : lot.secteur_nom === 'Maraîcher'
       ? `
         <label>Intrants utilisés<input type="text" name="intrants_utilises" placeholder="ex: NPK 20kg" /></label>
-        <label>Récolte du jour (kg)<input type="number" step="0.1" name="quantite_recoltee_kg" /></label>
+        ${numberStepperHTML('Récolte du jour (kg)', 'quantite_recoltee_kg', { step: 0.5, min: 0 })}
       `
       : '';
 
@@ -269,7 +262,7 @@ async function openRelevePanel(container, lot) {
       lot.secteur_nom !== 'Maraîcher' && courbePoints.length >= 2
         ? `<div style="margin-top:14px">
             <div class="desc" style="margin-bottom:4px">Courbe de croissance (poids moyen, g)</div>
-            ${lineChartSvg(courbePoints, { color: SECTEUR_ACCENT[lot.secteur_nom] || '#6FA834', unit: 'g' })}
+            ${lineChartSvg(courbePoints, { color: SECTEUR_ACCENT[lot.secteur_nom] || '#5B8C3A', unit: 'g' })}
           </div>`
         : ''
     }
@@ -278,7 +271,7 @@ async function openRelevePanel(container, lot) {
       lot.secteur_nom === 'Piscicole' && courbeTaille.length >= 2
         ? `<div style="margin-top:14px">
             <div class="desc" style="margin-bottom:4px">Courbe de croissance (taille moyenne, cm)</div>
-            ${lineChartSvg(courbeTaille, { color: '#3B9C9C', unit: 'cm' })}
+            ${lineChartSvg(courbeTaille, { color: '#3B7D7D', unit: 'cm' })}
           </div>`
         : ''
     }
@@ -288,9 +281,9 @@ async function openRelevePanel(container, lot) {
         ? `<p class="desc" style="margin-top:16px">Ce lot est clôturé (${esc(LOT_STATUT_LABEL[lot.statut] || lot.statut)}) : aucun nouveau relevé ne peut être ajouté.</p>`
         : `<form id="form-releve" class="form-grid" style="margin-top:16px">
       <label>Date<input type="date" name="date_releve" required value="${new Date().toISOString().slice(0, 10)}" /></label>
-      <label>Mortalité<input type="number" name="mortalite" min="0" value="0" /></label>
-      <label>Conso. aliment (kg)<input type="number" step="0.1" name="conso_aliment_kg" value="0" /></label>
-      <label>Poids moyen (g)<input type="number" step="0.1" name="poids_moyen_g" value="0" /></label>
+      ${numberStepperHTML('Mortalité', 'mortalite', { step: 1, min: 0 })}
+      ${numberStepperHTML('Conso. aliment (kg)', 'conso_aliment_kg', { step: 0.5, min: 0 })}
+      ${numberStepperHTML('Poids moyen (g)', 'poids_moyen_g', { step: 10, min: 0 })}
       ${champsSecteur}
       <label>Notes<input type="text" name="notes" /></label>
       <button type="submit">Enregistrer le relevé</button>
@@ -344,11 +337,14 @@ async function openRelevePanel(container, lot) {
 
     const hors_ligne = isOfflineMode() || !navigator.onLine;
     if (hors_ligne) {
-      const q = getQueue();
-      q.push(releve);
-      setQueue(q);
-      showToast('Hors-ligne : relevé mis en file locale (IndexedDB/localStorage). Il sera synchronisé au retour du réseau.', 'warn');
-      updateOfflineBanner(container);
+      await OfflineQueue.ajouter({
+        method: 'POST',
+        path: '/production/sync',
+        body: { releves: [releve] },
+        label: `Relevé ${lot.code_lot} — ${releve.date_releve}`,
+      });
+      showToast('Hors-ligne : relevé mis en file (IndexedDB). Il sera synchronisé au retour du réseau.', 'warn');
+      await updateOfflineBanner(container);
       e.target.reset();
       return;
     }
@@ -367,30 +363,17 @@ function offlineBanner() {
   return `<div class="offline-banner" id="offline-banner"></div>`;
 }
 
-async function syncQueue(container) {
-  const q = getQueue();
-  if (q.length === 0) return;
-  try {
-    await Api.post('/production/sync', { releves: q });
-    setQueue([]);
-    showToast(`${q.length} relevé(s) hors-ligne synchronisé(s).`, 'success');
-  } catch (err) {
-    showToast('Échec de synchronisation : ' + err.message, 'error');
-  }
-  updateOfflineBanner(container);
-}
-
-function updateOfflineBanner(container) {
+async function updateOfflineBanner(container) {
   const banner = container.querySelector('#offline-banner');
   if (!banner) return;
-  const q = getQueue();
+  const q = await OfflineQueue.lire();
   const offline = isOfflineMode() || !navigator.onLine;
 
   banner.classList.remove('hidden');
   banner.innerHTML = `
     <span>
       ${offline ? '📴 Mode hors-ligne (PWA offline-first) — les relevés sont mis en file locale.' : '🟢 En ligne.'}
-      ${q.length ? ` ${q.length} relevé(s) en attente de synchronisation.` : ''}
+      ${q.length ? ` ${q.length} action(s) en attente de synchronisation.` : ''}
     </span>
     <span style="display:flex;gap:8px;align-items:center">
       <label style="flex-direction:row;align-items:center;gap:6px;font-size:11px">
@@ -399,15 +382,19 @@ function updateOfflineBanner(container) {
       ${q.length ? `<button id="btn-sync-now">Synchroniser maintenant</button>` : ''}
     </span>
   `;
-  banner.querySelector('#toggle-offline').addEventListener('change', (e) => {
+  banner.querySelector('#toggle-offline').addEventListener('change', async (e) => {
     localStorage.setItem(OFFLINE_MODE_KEY, e.target.checked ? '1' : '0');
-    updateOfflineBanner(container);
+    await updateOfflineBanner(container);
   });
   const syncBtn = banner.querySelector('#btn-sync-now');
-  if (syncBtn) syncBtn.addEventListener('click', () => syncQueue(container));
+  if (syncBtn) {
+    syncBtn.addEventListener('click', async () => {
+      const { reussies } = await OfflineQueue.synchroniser();
+      if (reussies > 0) showToast(`${reussies} action(s) hors-ligne synchronisée(s).`, 'success');
+      await updateOfflineBanner(container);
+    });
+  }
 }
 
-window.addEventListener('online', () => {
-  const view = document.getElementById('view');
-  if (view && view.querySelector('#offline-banner')) syncQueue(view);
-});
+// Pas de listener 'online' local ici : app.js synchronise déjà globalement la file partagée
+// (OfflineQueue) à la reconnexion et périodiquement, quelle que soit la vue affichée.

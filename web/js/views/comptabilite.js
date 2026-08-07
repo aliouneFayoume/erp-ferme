@@ -2,6 +2,92 @@ window.Views = window.Views || {};
 
 const CATEGORIES_DEPENSE = ['Aliment', 'Intrants', "Main d'œuvre", 'Vétérinaire', 'Logistique', 'Autre'];
 
+// -------------------- Import de relevé bancaire (CSV) --------------------
+// Parseur CSV générique (guillemets, séparateur virgule ou point-virgule) : les exports bancaires
+// utilisent l'un ou l'autre selon la banque, et peuvent quoter les libellés contenant des virgules.
+function parseCsv(texte) {
+  const s = texte.replace(/\r\n/g, '\n').replace(/^﻿/, ''); // retire un éventuel BOM UTF-8
+  const premiereLigne = s.split('\n', 1)[0] || '';
+  const delimiteur = (premiereLigne.match(/;/g) || []).length > (premiereLigne.match(/,/g) || []).length ? ';' : ',';
+
+  const lignes = [];
+  let ligne = [];
+  let champ = '';
+  let dansGuillemets = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (dansGuillemets) {
+      if (c === '"') {
+        if (s[i + 1] === '"') {
+          champ += '"';
+          i++;
+        } else {
+          dansGuillemets = false;
+        }
+      } else {
+        champ += c;
+      }
+    } else if (c === '"') {
+      dansGuillemets = true;
+    } else if (c === delimiteur) {
+      ligne.push(champ);
+      champ = '';
+    } else if (c === '\n') {
+      ligne.push(champ);
+      lignes.push(ligne);
+      ligne = [];
+      champ = '';
+    } else {
+      champ += c;
+    }
+  }
+  if (champ !== '' || ligne.length) {
+    ligne.push(champ);
+    lignes.push(ligne);
+  }
+  return lignes.filter((l) => l.some((c) => c.trim() !== ''));
+}
+
+function normaliserDateCsv(valeur) {
+  const v = (valeur || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+  const m = v.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return null;
+}
+
+function normaliserMontantCsv(valeur) {
+  if (valeur === undefined || valeur === null || valeur === '') return null;
+  const v = String(valeur)
+    .trim()
+    .replace(/\s| /g, '')
+    .replace(/,/g, '.');
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+const ROLES_COLONNE = {
+  ignorer: 'Ignorer',
+  date: 'Date',
+  libelle: 'Libellé',
+  debit: 'Débit',
+  credit: 'Crédit',
+  montant: 'Montant',
+  sens: 'Sens (crédit/débit)',
+};
+
+/** Devine un rôle plausible pour chaque colonne à partir de son en-tête, pour préremplir le mapping. */
+function deviner(entete) {
+  const e = (entete || '').toLowerCase();
+  if (/date/.test(e)) return 'date';
+  if (/libell|intitul|description|objet/.test(e)) return 'libelle';
+  if (/d[ée]bit/.test(e)) return 'debit';
+  if (/cr[ée]dit/.test(e)) return 'credit';
+  if (/montant|amount/.test(e)) return 'montant';
+  if (/sens|type/.test(e)) return 'sens';
+  return 'ignorer';
+}
+
 window.Views.comptabilite = {
   async render(container) {
     const [analytique, depenses, secteurs, releves, paiements] = await Promise.all([
@@ -81,8 +167,14 @@ window.Views.comptabilite = {
 
       <div class="panel">
         <h2>Rapprochement bancaire</h2>
-        <p class="desc">Saisie manuelle des opérations du relevé bancaire (simulateur d'import), à rapprocher des paiements enregistrés.</p>
-        <form id="form-releve" class="form-grid">
+        <p class="desc">Importez un relevé exporté de votre banque (CSV), ou ajoutez une opération manuellement.</p>
+        <div class="panel-row">
+          <input type="file" id="input-import-releve" accept=".csv,text/csv" style="display:none" />
+          <button id="btn-choisir-fichier">Importer un relevé (CSV)</button>
+        </div>
+        <div class="panel hidden" id="import-preview-panel" style="margin-top:14px"></div>
+
+        <form id="form-releve" class="form-grid" style="margin-top:16px">
           <label>Date<input type="date" name="date_operation" required value="${new Date().toISOString().slice(0, 10)}" /></label>
           <label>Libellé<input type="text" name="libelle" required placeholder="ex: VIR WAVE CLIENT X" /></label>
           <label>Montant (FCFA)<input type="number" name="montant" required /></label>
@@ -146,8 +238,152 @@ window.Views.comptabilite = {
         showToast(err.message, 'error');
       }
     });
+
+    container.querySelector('#btn-choisir-fichier').addEventListener('click', () => {
+      container.querySelector('#input-import-releve').click();
+    });
+    container.querySelector('#input-import-releve').addEventListener('change', async (e) => {
+      const fichier = e.target.files && e.target.files[0];
+      if (!fichier) return;
+      const texte = await fichier.text();
+      const lignes = parseCsv(texte);
+      e.target.value = '';
+      if (lignes.length < 2) {
+        showToast('Fichier vide ou illisible.', 'error');
+        return;
+      }
+      afficherApercuImport(container, lignes);
+    });
   },
 };
+
+/** Affiche l'aperçu + le mapping de colonnes pour un CSV chargé, avant import effectif. */
+function afficherApercuImport(container, lignes) {
+  const [entetes, ...donnees] = lignes;
+  const roles = entetes.map((e) => deviner(e));
+  const panel = container.querySelector('#import-preview-panel');
+  panel.classList.remove('hidden');
+
+  const rendreTable = () => `
+    <p class="desc">Indiquez à quoi correspond chaque colonne, puis vérifiez l'aperçu avant d'importer.</p>
+    <table>
+      <thead><tr>${entetes
+        .map(
+          (e, i) => `<th>
+            ${esc(e) || `Colonne ${i + 1}`}<br/>
+            <select class="select-role-colonne" data-col="${i}" style="margin-top:4px;font-weight:400">
+              ${Object.entries(ROLES_COLONNE)
+                .map(([val, label]) => `<option value="${val}" ${roles[i] === val ? 'selected' : ''}>${label}</option>`)
+                .join('')}
+            </select>
+          </th>`
+        )
+        .join('')}</tr></thead>
+      <tbody>
+        ${donnees
+          .slice(0, 5)
+          .map((l) => `<tr>${entetes.map((_, i) => `<td>${esc(l[i] ?? '')}</td>`).join('')}</tr>`)
+          .join('')}
+      </tbody>
+    </table>
+    <p class="desc">${donnees.length} ligne(s) au total dans le fichier.</p>
+    <div class="panel-row">
+      <button class="secondary" id="btn-annuler-import">Annuler</button>
+      <button id="btn-confirmer-import">Importer</button>
+    </div>
+    <div id="import-erreurs"></div>
+  `;
+
+  panel.innerHTML = rendreTable();
+
+  panel.querySelectorAll('.select-role-colonne').forEach((sel) => {
+    sel.addEventListener('change', (e) => {
+      roles[Number(e.target.dataset.col)] = e.target.value;
+    });
+  });
+
+  panel.querySelector('#btn-annuler-import').addEventListener('click', () => {
+    panel.classList.add('hidden');
+    panel.innerHTML = '';
+  });
+
+  panel.querySelector('#btn-confirmer-import').addEventListener('click', async () => {
+    const erreursDiv = panel.querySelector('#import-erreurs');
+    erreursDiv.innerHTML = '';
+
+    const iDate = roles.indexOf('date');
+    const iLibelle = roles.indexOf('libelle');
+    const iDebit = roles.indexOf('debit');
+    const iCredit = roles.indexOf('credit');
+    const iMontant = roles.indexOf('montant');
+    const iSens = roles.indexOf('sens');
+
+    if (iDate === -1 || iLibelle === -1) {
+      erreursDiv.innerHTML = '<p class="login-error">Il faut au moins une colonne Date et une colonne Libellé.</p>';
+      return;
+    }
+    const modeDebitCredit = iDebit !== -1 || iCredit !== -1;
+    const modeMontantSens = iMontant !== -1 && iSens !== -1;
+    if (!modeDebitCredit && !modeMontantSens) {
+      erreursDiv.innerHTML =
+        '<p class="login-error">Indiquez soit des colonnes Débit/Crédit, soit des colonnes Montant + Sens.</p>';
+      return;
+    }
+
+    const lignesNormalisees = [];
+    const erreursParsing = [];
+    donnees.forEach((l, idx) => {
+      const date_operation = normaliserDateCsv(l[iDate]);
+      const libelle = (l[iLibelle] || '').trim();
+      let montant = null;
+      let type_operation = null;
+
+      if (modeDebitCredit) {
+        const debit = iDebit !== -1 ? normaliserMontantCsv(l[iDebit]) : null;
+        const credit = iCredit !== -1 ? normaliserMontantCsv(l[iCredit]) : null;
+        if (credit && credit > 0) {
+          montant = credit;
+          type_operation = 'CREDIT';
+        } else if (debit && debit > 0) {
+          montant = Math.abs(debit);
+          type_operation = 'DEBIT';
+        }
+      } else {
+        const m = normaliserMontantCsv(l[iMontant]);
+        const sens = (l[iSens] || '').trim().toLowerCase();
+        if (m !== null) {
+          montant = Math.abs(m);
+          type_operation = m < 0 || sens.startsWith('d') ? 'DEBIT' : 'CREDIT';
+        }
+      }
+
+      if (!date_operation || !libelle || montant === null || !type_operation) {
+        erreursParsing.push(idx + 2); // +2 : ligne 1 = en-têtes, index 0-based
+        return;
+      }
+      lignesNormalisees.push({ date_operation, libelle, montant, type_operation });
+    });
+
+    if (lignesNormalisees.length === 0) {
+      erreursDiv.innerHTML = '<p class="login-error">Aucune ligne exploitable avec ce mapping — vérifiez les colonnes choisies.</p>';
+      return;
+    }
+
+    try {
+      const resultat = await Api.post('/comptabilite/releves-bancaires/import', { lignes: lignesNormalisees });
+      const totalIgnorees = erreursParsing.length + resultat.rejetees.length;
+      showToast(
+        `${resultat.inserees} opération(s) importée(s).${totalIgnorees ? ` ${totalIgnorees} ligne(s) ignorée(s) (format illisible).` : ''}`,
+        'success'
+      );
+      panel.classList.add('hidden');
+      panel.innerHTML = '';
+      window.Views.comptabilite.render(container);
+    } catch (err) {
+      erreursDiv.innerHTML = `<p class="login-error">${esc(err.message)}</p>`;
+    }
+  });
+}
 
 function renderReleves(container, releves, paiements) {
   const body = container.querySelector('#releves-body');
@@ -165,6 +401,8 @@ function renderReleves(container, releves, paiements) {
             <td>${
               r.rapproche
                 ? `<span class="badge ok">Rapproché${r.client_nom ? ` — ${esc(r.client_nom)}` : ''}</span>`
+                : r.suggestion
+                ? `<span class="badge info">Suggéré : ${esc(r.suggestion.client_nom) || 'paiement'} (${esc(r.suggestion.methode_paiement)})</span>`
                 : `<span class="badge warn">En attente</span>`
             }</td>
             <td>
@@ -173,7 +411,12 @@ function renderReleves(container, releves, paiements) {
                   ? `<button class="secondary" data-annuler="${r.id}">Annuler</button>`
                   : `<select class="select-paiement" data-releve="${r.id}">
                       <option value="">— choisir un paiement —</option>
-                      ${paiementsDisponibles.map((p) => `<option value="${p.id}" ${Number(p.montant) === Number(r.montant) ? 'selected' : ''}>${esc(p.client_nom)} — ${fmt(p.montant)} FCFA (${esc(p.methode_paiement)})</option>`).join('')}
+                      ${paiementsDisponibles
+                        .map(
+                          (p) =>
+                            `<option value="${p.id}" ${r.suggestion && r.suggestion.id === p.id ? 'selected' : ''}>${esc(p.client_nom)} — ${fmt(p.montant)} FCFA (${esc(p.methode_paiement)})</option>`
+                        )
+                        .join('')}
                     </select>
                     <button class="secondary" data-rapprocher="${r.id}">Rapprocher</button>`
               }

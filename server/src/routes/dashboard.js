@@ -17,7 +17,7 @@ module.exports = function dashboardRoutes(pool) {
             const [debutJour, finJour] = todayBounds();
             const tenantId = req.user.tenant_id;
 
-            const [caJour, commandesB2C, stockTotal, encoursB2B, caissesOuvertes, lotsActifs, lotsRecolte] = await Promise.all([
+            const [caJour, commandesB2C, stockTotal, encoursB2B, caissesOuvertes, lotsActifs, lotsRecolte, caParJour, produitsSousSeuil] = await Promise.all([
                 pool.query(
                     `SELECT COALESCE(SUM(montant_total), 0) as total FROM commandes WHERE tenant_id = $1 AND cree_le >= $2 AND cree_le < $3 AND statut != 'ANNULEE' AND deleted_at IS NULL`,
                     [tenantId, debutJour, finJour]
@@ -41,6 +41,20 @@ module.exports = function dashboardRoutes(pool) {
                      WHERE l.tenant_id = $1 AND s.suivi_recolte = TRUE AND l.statut = 'EN_COURS' AND l.deleted_at IS NULL AND l.duree_maturite_jours IS NOT NULL`,
                     [tenantId]
                 ),
+                // Courbe d'évolution du CA (14 derniers jours) pour le graphique du dashboard : lignes
+                // brutes, groupées par jour en JS plus bas (date_trunc n'est pas supporté par pg-mem,
+                // même contrainte que recoltesProches ci-dessous).
+                pool.query(
+                    `SELECT cree_le, montant_total
+                     FROM commandes
+                     WHERE tenant_id = $1 AND cree_le >= $2 AND statut != 'ANNULEE' AND deleted_at IS NULL`,
+                    [tenantId, new Date(Date.now() - 13 * 86400000).toISOString()]
+                ),
+                pool.query(
+                    `SELECT COUNT(*) as count FROM stocks st JOIN produits p ON p.id = st.produit_id
+                     WHERE p.tenant_id = $1 AND p.deleted_at IS NULL AND p.actif = TRUE AND st.quantite_disponible <= st.seuil_alerte`,
+                    [tenantId]
+                ),
             ]);
 
             // Calculé en JS plutôt qu'en SQL (arithmétique de dates) pour rester portable pg-mem/PostgreSQL.
@@ -51,6 +65,19 @@ module.exports = function dashboardRoutes(pool) {
                 return joursRestants <= 7;
             }).length;
 
+            // Regroupe par jour (clé YYYY-MM-DD) puis complète les jours sans commande à 0 pour une
+            // courbe continue sur 14 jours.
+            const parJourMap = new Map();
+            for (const r of caParJour.rows) {
+                const jour = new Date(r.cree_le).toISOString().slice(0, 10);
+                parJourMap.set(jour, (parJourMap.get(jour) || 0) + Number(r.montant_total));
+            }
+            const chiffreAffairesParJour = [];
+            for (let i = 13; i >= 0; i--) {
+                const jour = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+                chiffreAffairesParJour.push({ date: jour, value: parJourMap.get(jour) || 0 });
+            }
+
             res.json({
                 chiffreAffairesJour: Number(caJour.rows[0].total),
                 commandesB2C: Number(commandesB2C.rows[0].count),
@@ -59,6 +86,8 @@ module.exports = function dashboardRoutes(pool) {
                 caissesOuvertes: Number(caissesOuvertes.rows[0].count),
                 lotsActifs: Number(lotsActifs.rows[0].count),
                 recoltesProches,
+                produitsSousSeuil: Number(produitsSousSeuil.rows[0].count),
+                chiffreAffairesParJour,
             });
         } catch (err) {
             console.error(err);

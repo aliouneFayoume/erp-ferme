@@ -48,7 +48,10 @@ window.Views.clients = {
                   <td>${esc(c.telephone)}</td>
                   <td class="num">${c.type_client === 'B2B' ? `${fmt(c.solde_encours)} / ${fmt(c.limite_credit)}` : '-'}</td>
                   <td class="num">${Number(c.gps_lat).toFixed(4)}, ${Number(c.gps_lng).toFixed(4)}</td>
-                  <td>${moi.role === 'admin' ? `<button class="danger" data-supprimer="${c.id}">Supprimer</button>` : ''}</td>
+                  <td>
+                    <button class="secondary" data-generer-pin="${c.id}">Code portail</button>
+                    ${moi.role === 'admin' ? `<button class="danger" data-supprimer="${c.id}">Supprimer</button>` : ''}
+                  </td>
                 </tr>`
               )
               .join('')}
@@ -95,6 +98,19 @@ window.Views.clients = {
       } catch (err) {
         showToast(err.message, 'error');
       }
+    });
+
+    container.querySelectorAll('button[data-generer-pin]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          const { pin, client } = await Api.post(`/clients/${btn.dataset.genererPin}/pin`, {});
+          await Modal.open(`Code portail pour ${client.nom}`, [
+            { name: 'pin', label: `Code à transmettre au client (${client.telephone}) — ne sera plus jamais affiché`, type: 'text', value: pin },
+          ]);
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
     });
 
     container.querySelectorAll('button[data-supprimer]').forEach((btn) => {

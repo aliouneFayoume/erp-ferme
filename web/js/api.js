@@ -1,4 +1,29 @@
 const Api = (() => {
+  // Cache de lecture hors-ligne : la dernière réponse réussie de chaque GET est gardée en
+  // localStorage pour rester consultable sans réseau (terrain). Les écritures (POST/PUT/DELETE)
+  // ne sont jamais servies depuis ce cache — seules les lectures peuvent être "un peu périmées".
+  const READ_CACHE_PREFIX = 'erp_api_cache:';
+  function cacheGet(path) {
+    try {
+      const raw = localStorage.getItem(READ_CACHE_PREFIX + path);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function cacheSet(path, data) {
+    try {
+      localStorage.setItem(READ_CACHE_PREFIX + path, JSON.stringify(data));
+    } catch (e) {
+      // quota localStorage dépassé ou navigation privée : on continue sans cache, non bloquant
+    }
+  }
+  function clearReadCache() {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith(READ_CACHE_PREFIX))
+      .forEach((k) => localStorage.removeItem(k));
+  }
+
   function getToken() {
     return localStorage.getItem('erp_token');
   }
@@ -13,6 +38,9 @@ const Api = (() => {
   function clearSession() {
     localStorage.removeItem('erp_token');
     localStorage.removeItem('erp_user');
+    // Évite qu'un autre utilisateur du même appareil consulte hors-ligne les données du compte
+    // précédent une fois déconnecté.
+    clearReadCache();
   }
 
   async function request(path, { method = 'GET', body } = {}) {
@@ -28,8 +56,17 @@ const Api = (() => {
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch (err) {
-      // fetch() rejette (pas de réseau) — distinct d'une réponse HTTP d'erreur : le formulaire
-      // appelant peut choisir de mettre l'action en file d'attente hors-ligne plutôt que l'échouer.
+      // fetch() rejette (pas de réseau) — distinct d'une réponse HTTP d'erreur. Pour une lecture,
+      // on retombe sur la dernière réponse connue plutôt que de bloquer toute consultation
+      // terrain sans signal. Pour une écriture, l'appelant peut choisir de la mettre en file
+      // d'attente hors-ligne plutôt que de l'échouer (déjà géré dans certains formulaires).
+      if (method === 'GET') {
+        const cached = cacheGet(path);
+        if (cached) {
+          window.dispatchEvent(new CustomEvent('erp:offline-read'));
+          return cached;
+        }
+      }
       const erreurReseau = new Error('Pas de connexion réseau.');
       erreurReseau.reseau = true;
       throw erreurReseau;
@@ -46,7 +83,36 @@ const Api = (() => {
       const message = (data && data.erreur) || `Erreur ${res.status}`;
       throw new Error(message);
     }
+
+    if (method === 'GET') cacheSet(path, data);
     return data;
+  }
+
+  // Téléchargement d'un fichier protégé (ex. PDF de facture) : un <a href> normal ne peut pas
+  // porter l'en-tête Authorization, donc on récupère le fichier en mémoire (Blob) via fetch
+  // authentifié, et c'est l'appelant qui déclenche le téléchargement avec un lien blob: temporaire.
+  async function getBlob(path) {
+    const headers = {};
+    const token = getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    let res;
+    try {
+      res = await fetch(`/api${path}`, { headers });
+    } catch (err) {
+      throw new Error('Pas de connexion réseau.');
+    }
+    if (!res.ok) {
+      let message = `Erreur ${res.status}`;
+      try {
+        const data = await res.json();
+        if (data && data.erreur) message = data.erreur;
+      } catch (e) {
+        // réponse non-JSON (ex. page d'erreur HTML) : on garde le message par défaut
+      }
+      throw new Error(message);
+    }
+    return res.blob();
   }
 
   return {
@@ -58,5 +124,6 @@ const Api = (() => {
     post: (path, body) => request(path, { method: 'POST', body }),
     put: (path, body) => request(path, { method: 'PUT', body }),
     del: (path) => request(path, { method: 'DELETE' }),
+    getBlob,
   };
 })();

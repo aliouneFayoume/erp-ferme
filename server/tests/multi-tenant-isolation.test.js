@@ -1,6 +1,14 @@
 const request = require('supertest');
 const { createTestPool, buildApp, seedRolesEtSecteurs, tokenPour, creerUtilisateurEtToken, creerOrganisation } = require('./helpers/testApp');
 
+// finance.js appelle désormais le vrai PayDunya (pas le webhook simulé du prototype d'origine) avec
+// les identifiants propres à l'organisation — mocké ici pour tester l'isolation multi-tenant de la
+// résolution d'identifiants sans dépendre du réseau.
+jest.mock('../src/paydunya');
+jest.mock('../src/paymentConfig');
+const { creerFacture, confirmerFacture } = require('../src/paydunya');
+const { getPaydunyaConfig } = require('../src/paymentConfig');
+
 // Prototype multi-tenant : ces tests prouvent qu'aucune requête de clients.js / dashboard.js ne
 // renvoie ou n'altère les données d'une autre organisation. Fixtures volontairement minimales et
 // indépendantes de seed.js (qui provisionne le jeu de données de démo complet, pas adapté à un test
@@ -497,6 +505,9 @@ describe('isolation multi-tenant — finance.js', () => {
         tenantB = await creerOrganisation(pool, 'Ferme B');
         tokenA = await creerUtilisateurEtToken(pool, { role: 'comptable', tenant_id: tenantA });
         app = buildApp(pool, ['finance']);
+        creerFacture.mockReset();
+        confirmerFacture.mockReset();
+        getPaydunyaConfig.mockReset();
     });
 
     afterEach(async () => {
@@ -523,26 +534,50 @@ describe('isolation multi-tenant — finance.js', () => {
         expect(Number(resA.body[0].montant)).toBe(1000);
     });
 
-    test('le webhook Mobile Money crédite le paiement de la bonne organisation sans jamais toucher aux autres', async () => {
+    test("l'IPN PayDunya crédite le paiement de la bonne organisation en utilisant SES identifiants, sans jamais toucher à l'autre", async () => {
+        const credentialsA = { mode: 'test', masterKey: 'mkA', privateKey: 'pkA', publicKey: 'pubA', token: 'tkA' };
+        const credentialsB = { mode: 'test', masterKey: 'mkB', privateKey: 'pkB', publicKey: 'pubB', token: 'tkB' };
+        // getPaydunyaConfig doit renvoyer les identifiants DE L'ORGANISATION DEMANDÉE, jamais ceux
+        // d'une autre — c'est exactement le point que ce test vérifie.
+        getPaydunyaConfig.mockImplementation(async (_pool, tenantId) => (tenantId === tenantA ? credentialsA : credentialsB));
+
         const clientA = await creerClientPourTenant(pool, tenantA, { telephone: '+221770000062' });
         const commandeA = await creerCommandePourTenant(pool, tenantA, clientA.id, 5000, 'CMD-A-4');
         await pool.query(
             `INSERT INTO factures (tenant_id, commande_id, date_echeance, statut, montant_restant) VALUES ($1, $2, '2026-08-01', 'A_PAYER', 5000)`,
             [tenantA, commandeA.id]
         );
+
+        creerFacture.mockResolvedValue({ token: 'paydunya-token-A', url: 'https://paydunya.test/checkout/A' });
         const initier = await request(app).post('/api/finance/paiements/initier').set('Authorization', `Bearer ${tokenA}`).send({
             commande_id: commandeA.id, client_id: clientA.id, montant: 5000, provider: 'WAVE',
         });
-        const reference = initier.body.reference_transaction;
-        expect(reference).toContain(`-${tenantA}-`);
+        expect(initier.status).toBe(201);
+        // La facture PayDunya doit avoir été créée avec les identifiants de l'organisation A, pas B.
+        expect(creerFacture).toHaveBeenCalledWith(expect.objectContaining({ credentials: credentialsA }));
 
-        const webhook = await request(app).post('/api/finance/paiements/webhook').send({
-            reference_transaction: reference, statut_paiement: 'SUCCESS', montant: 5000, provider: 'WAVE',
-        });
+        confirmerFacture.mockResolvedValue({ status: 'completed', montant: 5000, providerReference: 'PD-A' });
+        const ipn = await request(app).post('/api/finance/paiements/ipn').send({ data: { token: 'paydunya-token-A' } });
 
-        expect(webhook.status).toBe(200);
+        expect(ipn.status).toBe(200);
+        // L'IPN n'avait aucun contexte tenant : elle a dû retrouver l'organisation A elle-même
+        // (via le paiement en attente) puis appeler PayDunya avec SES clés, pas celles de B.
+        expect(confirmerFacture).toHaveBeenCalledWith('paydunya-token-A', credentialsA);
         const facture = await pool.query(`SELECT statut FROM factures WHERE commande_id = $1`, [commandeA.id]);
         expect(facture.rows[0].statut).toBe('PAYEE');
+    });
+
+    test('sans agrégateur PayDunya configuré pour son organisation, une initiation de paiement échoue proprement', async () => {
+        getPaydunyaConfig.mockResolvedValue(null);
+        const clientA = await creerClientPourTenant(pool, tenantA, { telephone: '+221770000063' });
+        const commandeA = await creerCommandePourTenant(pool, tenantA, clientA.id, 3000, 'CMD-A-5');
+
+        const initier = await request(app).post('/api/finance/paiements/initier').set('Authorization', `Bearer ${tokenA}`).send({
+            commande_id: commandeA.id, client_id: clientA.id, montant: 3000, provider: 'WAVE',
+        });
+
+        expect(initier.status).toBe(400);
+        expect(creerFacture).not.toHaveBeenCalled();
     });
 });
 

@@ -7,7 +7,7 @@
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/icons/icon.svg" />
-  <meta name="theme-color" content="#2E2A22" />
+  <meta name="theme-color" content="#1A1A1A" />
   <link rel="stylesheet" href="/css/style.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
@@ -31,22 +31,35 @@
   </div>
 
   <div id="app-shell" class="hidden">
-    <header class="top">
-      <div>
-        <div class="brand">Ferme Massla</div>
-        <div class="sub">Avicole · Piscicole · Maraîchage · Finances · Logistique</div>
-      </div>
-      <div class="who">
-        <div id="who-name"></div>
+    <header class="topbar">
+      <button class="icon-btn menu-toggle" id="btn-menu-toggle" aria-label="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <div class="topbar-brand">Ferme Massla <span class="version-pill">Massla '26</span></div>
+      <div class="topbar-who">
+        <span id="sync-indicator" class="sync-indicator synced" title="Toutes les actions sont synchronisées">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.6-1.6A4.5 4.5 0 0 0 6.5 19h11Z"/>
+          </svg>
+          <span class="sync-count hidden" id="sync-count"></span>
+        </span>
+        <span id="who-name"></span>
         <span id="who-role" class="role-pill"></span>
-        <span id="sync-badge" class="badge warn hidden" title="Actions en attente d'envoi au serveur"></span>
-        <div style="margin-top:8px;"><button class="secondary" id="btn-logout">Déconnexion</button></div>
+        <button class="secondary" id="btn-logout">Déconnexion</button>
       </div>
     </header>
 
-    <nav class="tabs" id="tabs"></nav>
-
-    <main id="view"></main>
+    <div class="layout">
+      <aside class="sidebar" id="sidebar">
+        <nav id="tabs"></nav>
+        <button class="sidebar-collapse-toggle" id="btn-sidebar-collapse" aria-label="Réduire le menu" title="Réduire le menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+          <span>Réduire</span>
+        </button>
+      </aside>
+      <div class="sidebar-overlay hidden" id="sidebar-overlay"></div>
+      <main id="view"></main>
+    </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -58,9 +71,11 @@
   <script src="/js/views/clients.js"></script>
   <script src="/js/views/abonnements.js"></script>
   <script src="/js/views/commandes.js"></script>
+  <script src="/js/views/fournisseurs.js"></script>
   <script src="/js/views/logistique.js"></script>
   <script src="/js/views/finance.js"></script>
   <script src="/js/views/comptabilite.js"></script>
+  <script src="/js/views/tickets.js"></script>
   <script src="/js/views/utilisateurs.js"></script>
   <script src="/js/views/audit.js"></script>
   <script src="/js/app.js"></script>

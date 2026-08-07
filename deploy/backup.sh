@@ -26,10 +26,12 @@ FICHIER="$BACKUP_DIR/erp-ferme-$HORODATAGE.dump"
 pg_dump "$DATABASE_URL" --format=custom --file="$FICHIER"
 echo "Sauvegarde créée : $FICHIER"
 
-# ⚠️ Externalisation : ce script ne fait que la sauvegarde LOCALE sur le VPS. Pour respecter
-# l'exigence de backups externalisés, synchroniser $BACKUP_DIR vers un stockage distant, par ex. :
-#   rclone sync "$BACKUP_DIR" remote:erp-ferme-backups
-#   aws s3 sync "$BACKUP_DIR" s3://votre-bucket/erp-ferme-backups
-# (nécessite de configurer rclone/aws cli avec les identifiants du stockage choisi au préalable)
+# Externalisation : synchronise vers Cloudflare R2 (remote "r2" défini dans
+# ~/.config/rclone/rclone.conf sur le VPS, jamais versionné). `sync` (et non `copy`) pour que la
+# purge locale ci-dessous se propage aussi côté distant au cycle suivant, sans devoir dupliquer la
+# politique de rétention côté S3.
+RCLONE_REMOTE="${RCLONE_REMOTE:-r2:erp-ferme-backups}"
+rclone sync "$BACKUP_DIR" "$RCLONE_REMOTE"
+echo "Sauvegarde synchronisée vers $RCLONE_REMOTE"
 
 find "$BACKUP_DIR" -name '*.dump' -mtime "+$RETENTION_JOURS" -delete

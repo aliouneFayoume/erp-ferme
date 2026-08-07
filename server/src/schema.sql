@@ -44,6 +44,23 @@ CREATE TABLE utilisateurs (
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Chaque organisation est son propre agrégateur de paiement PayDunya (ses propres identifiants,
+-- son propre compte marchand) — Massla n'est qu'une organisation comme une autre de ce point de
+-- vue, avec ses identifiants migrés depuis les variables d'environnement historiques. Une ligne
+-- par organisation ; absente tant que l'admin de cette organisation n'a pas renseigné ses clés
+-- (voir routes/parametres-paiement.js). Les 4 identifiants sont chiffrés au repos (credentials.js) :
+-- jamais lisibles en clair dans un dump ou un accès direct à la base.
+CREATE TABLE organisation_paydunya_config (
+    tenant_id INT PRIMARY KEY REFERENCES organisations(id),
+    mode VARCHAR(10) CHECK (mode IN ('test', 'live')) NOT NULL DEFAULT 'test',
+    master_key_chiffre TEXT NOT NULL,
+    private_key_chiffre TEXT NOT NULL,
+    public_key_chiffre TEXT NOT NULL,
+    token_chiffre TEXT NOT NULL,
+    mis_a_jour_par INT REFERENCES utilisateurs(id),
+    mis_a_jour_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- --------------------------------------------------------
 -- 2. CRM & CLIENTS (B2B / B2C)
 -- --------------------------------------------------------
@@ -61,6 +78,8 @@ CREATE TABLE clients (
     limite_credit NUMERIC DEFAULT 0.00, -- Limite d'encours pour B2B
     solde_encours NUMERIC DEFAULT 0.00, -- Dette actuelle (pour le Dashboard)
     est_abonne BOOLEAN DEFAULT FALSE, -- Pour les paniers B2C récurrents
+    pin_hash VARCHAR(255), -- Code d'accès au portail client (haché comme un mot de passe), NULL tant qu'aucun n'a été généré
+    pin_version INT NOT NULL DEFAULT 1, -- Incrémenté à chaque régénération du PIN : invalide immédiatement les sessions portail déjà émises
     deleted_at TIMESTAMP,
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -263,7 +282,91 @@ CREATE TABLE releves_bancaires (
 );
 
 -- --------------------------------------------------------
--- 8. JOURNAL D'AUDIT (traçabilité obligatoire)
+-- 7bis. APPROVISIONNEMENT (fournisseurs & commandes d'achat)
+-- --------------------------------------------------------
+-- Miroir côté achats du couple commandes/lignes_commande (côté ventes) pour le numéro/statut/soft
+-- delete, mais porte sur des intrants achetés (aliment bétail, vaccins, semences, matériel...), pas
+-- sur le catalogue `produits` (les produits VENDUS aux clients, avec tarifs B2B/B2C) : une commande
+-- fournisseur ne doit donc pas référencer `produits` ni créditer `stocks`, d'où la désignation en
+-- texte libre plutôt qu'une FK. Le seuil de réapprovisionnement réutilise stocks.seuil_alerte (déjà
+-- utilisé pour le badge stock bas du Catalogue) comme simple signal pour l'équipe, sans lien
+-- automatique avec les commandes fournisseurs.
+
+CREATE TABLE fournisseurs (
+    id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
+    nom VARCHAR(150) NOT NULL,
+    categorie VARCHAR(50), -- 'Aliment', 'Intrants', 'Vétérinaire', 'Matériel', 'Autre'
+    telephone VARCHAR(30),
+    email VARCHAR(150),
+    adresse TEXT,
+    notes TEXT,
+    deleted_at TIMESTAMP,
+    cree_par INT REFERENCES utilisateurs(id),
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE commandes_fournisseurs (
+    id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
+    numero_commande VARCHAR(20) UNIQUE NOT NULL, -- ex: 'CMF-8492'
+    fournisseur_id INT REFERENCES fournisseurs(id),
+    statut VARCHAR(20) CHECK (statut IN ('COMMANDEE', 'RECUE', 'ANNULEE')) DEFAULT 'COMMANDEE',
+    date_commande DATE NOT NULL DEFAULT CURRENT_DATE,
+    date_livraison_prevue DATE,
+    date_livraison_reelle DATE, -- renseignée à la réception : base du suivi des délais fournisseur
+    montant_total NUMERIC NOT NULL DEFAULT 0,
+    notes TEXT,
+    cree_par INT REFERENCES utilisateurs(id),
+    deleted_at TIMESTAMP,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE lignes_commande_fournisseur (
+    id SERIAL PRIMARY KEY,
+    commande_fournisseur_id INT REFERENCES commandes_fournisseurs(id) ON DELETE CASCADE,
+    designation VARCHAR(150) NOT NULL, -- article acheté en texte libre (ex: "Aliment ponte 25kg"), pas un produit du catalogue de vente
+    unite VARCHAR(30),
+    quantite NUMERIC NOT NULL,
+    prix_unitaire NUMERIC NOT NULL,
+    sous_total NUMERIC NOT NULL
+);
+
+CREATE INDEX idx_commandes_fournisseurs_statut ON commandes_fournisseurs(statut);
+
+-- --------------------------------------------------------
+-- 8. SUPPORT CLIENT (SAV)
+-- --------------------------------------------------------
+
+CREATE TABLE tickets (
+    id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
+    client_id INT REFERENCES clients(id),
+    sujet VARCHAR(150) NOT NULL,
+    description TEXT,
+    priorite VARCHAR(10) CHECK (priorite IN ('BASSE', 'NORMALE', 'HAUTE', 'URGENTE')) DEFAULT 'NORMALE',
+    statut VARCHAR(20) CHECK (statut IN ('OUVERT', 'EN_COURS', 'RESOLU', 'FERME')) DEFAULT 'OUVERT',
+    assigne_a INT REFERENCES utilisateurs(id),
+    cree_par INT REFERENCES utilisateurs(id),
+    deleted_at TIMESTAMP,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    mis_a_jour_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Fil d'échanges d'un ticket (notes internes + suivi des réponses au client).
+-- Auteur d'un message : soit un membre du staff (utilisateur_id), soit le client lui-même via le
+-- portail (auteur_client_id) — exactement un des deux est renseigné.
+CREATE TABLE ticket_messages (
+    id SERIAL PRIMARY KEY,
+    ticket_id INT REFERENCES tickets(id) ON DELETE CASCADE,
+    utilisateur_id INT REFERENCES utilisateurs(id),
+    auteur_client_id INT REFERENCES clients(id),
+    message TEXT NOT NULL,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- --------------------------------------------------------
+-- 9. JOURNAL D'AUDIT (traçabilité obligatoire)
 -- --------------------------------------------------------
 
 CREATE TABLE audit_logs (
@@ -285,3 +388,4 @@ CREATE INDEX idx_releves_lot_date ON releves_journaliers(lot_id, date_releve);
 CREATE INDEX idx_clients_type ON clients(type_client);
 CREATE INDEX idx_paiements_statut ON paiements(statut);
 CREATE INDEX idx_audit_table_row ON audit_logs(table_name, row_id);
+CREATE INDEX idx_tickets_statut ON tickets(statut);
