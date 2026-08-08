@@ -4,8 +4,8 @@ const { requireAuth, checkRole } = require('../auth');
 module.exports = function auditRoutes(pool) {
     const router = express.Router();
 
-    router.get('/', requireAuth, checkRole(['admin']), async (req, res) => {
-        const result = await pool.query(
+    router.get('/', requireAuth(pool), checkRole(['admin']), async (req, res) => {
+        const result = await req.db.query(
             `SELECT a.*, u.nom_complet as utilisateur_nom FROM audit_logs a
              LEFT JOIN utilisateurs u ON a.utilisateur_id = u.id
              WHERE a.tenant_id = $1

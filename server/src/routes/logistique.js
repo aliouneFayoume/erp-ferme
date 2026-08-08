@@ -10,7 +10,7 @@ module.exports = function logistiqueRoutes(pool) {
      * Feuille de route du livreur connecté (TMS), basée sur les coordonnées GPS du client (pas
      * d'adresse textuelle) et optimisée par ordre de passage depuis le dépôt de la ferme.
      */
-    router.get('/tournees', requireAuth, checkRole(['livreur']), async (req, res) => {
+    router.get('/tournees', requireAuth(pool), checkRole(['livreur']), async (req, res) => {
         try {
             const livreurId = req.user.role === 'livreur' ? req.user.id : req.query.livreur_id;
             const aujourdhui = new Date().toISOString().slice(0, 10);
@@ -27,7 +27,7 @@ module.exports = function logistiqueRoutes(pool) {
                 AND l.statut IN ('A_FAIRE', 'EN_COURS')
                 ORDER BY l.statut DESC, l.id ASC
             `;
-            const result = await pool.query(query, [livreurId || null, req.user.tenant_id, aujourdhui]);
+            const result = await req.db.query(query, [livreurId || null, req.user.tenant_id, aujourdhui]);
             const tournee = await optimiserTournee(result.rows);
 
             // Tracé routier réel suivant l'ordre optimisé (dépôt puis arrêts) — distinct de la
@@ -51,8 +51,8 @@ module.exports = function logistiqueRoutes(pool) {
     });
 
     // Historique des livraisons (toutes statuts confondus) : sert notamment à consulter la preuve de livraison.
-    router.get('/livraisons', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
-        const result = await pool.query(
+    router.get('/livraisons', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+        const result = await req.db.query(
             `SELECT l.*, c.numero_commande, cl.nom as client_nom, u.nom_complet as livreur_nom
              FROM livraisons l
              JOIN commandes c ON l.commande_id = c.id
@@ -65,23 +65,23 @@ module.exports = function logistiqueRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.post('/livraisons', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/livraisons', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
         const { commande_id, livreur_id, date_prevue } = req.body;
-        const commandeRes = await pool.query(`SELECT id FROM commandes WHERE id = $1 AND tenant_id = $2`, [commande_id, req.user.tenant_id]);
+        const commandeRes = await req.db.query(`SELECT id FROM commandes WHERE id = $1 AND tenant_id = $2`, [commande_id, req.user.tenant_id]);
         if (commandeRes.rows.length === 0) return res.status(400).json({ erreur: 'Commande invalide.' });
-        const result = await pool.query(
+        const result = await req.db.query(
             `INSERT INTO livraisons (tenant_id, commande_id, livreur_id, date_prevue, statut) VALUES ($1, $2, $3, $4, 'A_FAIRE') RETURNING *`,
             [req.user.tenant_id, commande_id, livreur_id, date_prevue]
         );
-        await pool.query(`UPDATE commandes SET statut = 'EN_LIVRAISON' WHERE id = $1 AND tenant_id = $2`, [commande_id, req.user.tenant_id]);
-        await logAudit(pool, { table: 'livraisons', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { commande_id, livreur_id } });
+        await req.db.query(`UPDATE commandes SET statut = 'EN_LIVRAISON' WHERE id = $1 AND tenant_id = $2`, [commande_id, req.user.tenant_id]);
+        await logAudit(req.db, { table: 'livraisons', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { commande_id, livreur_id } });
         res.status(201).json(result.rows[0]);
     });
 
     // Mise à jour terrain : statut, preuve de livraison, et éventuel encaissement espèces (caisse chauffeur virtuelle).
     const METHODES_PAIEMENT_VALIDES = ['ESPECES', 'WAVE', 'ORANGE_MONEY', 'VIREMENT'];
 
-    router.put('/livraisons/:id/statut', requireAuth, checkRole(['livreur']), async (req, res) => {
+    router.put('/livraisons/:id/statut', requireAuth(pool), checkRole(['livreur']), async (req, res) => {
         const { statut, notes_livreur, preuve_livraison, montant_encaisse } = req.body;
         // Le livreur encaisse aussi bien en espèces qu'en Wave/Orange Money reçu sur place au
         // moment de la livraison — la caisse chauffeur virtuelle doit refléter le mode réel.
@@ -89,7 +89,7 @@ module.exports = function logistiqueRoutes(pool) {
         if (montant_encaisse && !METHODES_PAIEMENT_VALIDES.includes(methode_paiement)) {
             return res.status(400).json({ erreur: 'Mode de paiement invalide.' });
         }
-        const client = await pool.connect();
+        const client = req.db;
         try {
             await client.query('BEGIN');
             const tenantId = req.user.tenant_id;
@@ -164,28 +164,26 @@ module.exports = function logistiqueRoutes(pool) {
             }
 
             await client.query('COMMIT');
-            await logAudit(pool, { table: 'livraisons', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: { statut } });
+            await logAudit(req.db, { table: 'livraisons', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: { statut } });
             res.json(updated.rows[0]);
         } catch (err) {
             await client.query('ROLLBACK');
             if (err.statut) return res.status(err.statut).json({ erreur: err.message });
             console.error(err);
             res.status(500).json({ erreur: 'Erreur lors de la mise à jour de la livraison.' });
-        } finally {
-            client.release();
         }
     });
 
     // Caisse Chauffeur Virtuelle : ouverture journalière par le livreur.
-    router.post('/caisse/ouvrir', requireAuth, checkRole(['livreur']), async (req, res) => {
+    router.post('/caisse/ouvrir', requireAuth(pool), checkRole(['livreur']), async (req, res) => {
         try {
             const aujourdhui = new Date().toISOString().slice(0, 10);
-            const result = await pool.query(
+            const result = await req.db.query(
                 `INSERT INTO caisses_chauffeur (tenant_id, livreur_id, date_caisse, statut) VALUES ($1, $2, $3, 'OUVERTE')
                  ON CONFLICT (livreur_id, date_caisse) DO UPDATE SET statut = caisses_chauffeur.statut RETURNING *`,
                 [req.user.tenant_id, req.user.id, aujourdhui]
             );
-            await logAudit(pool, { table: 'caisses_chauffeur', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id });
+            await logAudit(req.db, { table: 'caisses_chauffeur', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id });
             res.status(201).json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -193,14 +191,14 @@ module.exports = function logistiqueRoutes(pool) {
         }
     });
 
-    router.get('/caisse', requireAuth, checkRole(['comptable', 'livreur']), async (req, res) => {
+    router.get('/caisse', requireAuth(pool), checkRole(['comptable', 'livreur']), async (req, res) => {
         const params = [req.user.tenant_id];
         let where = 'cc.tenant_id = $1';
         if (req.user.role === 'livreur') {
             params.push(req.user.id);
             where += ` AND cc.livreur_id = $${params.length}`;
         }
-        const result = await pool.query(
+        const result = await req.db.query(
             `SELECT cc.*, u.nom_complet as livreur_nom FROM caisses_chauffeur cc
              JOIN utilisateurs u ON cc.livreur_id = u.id
              WHERE ${where} ORDER BY cc.date_caisse DESC LIMIT 60`,
@@ -210,21 +208,21 @@ module.exports = function logistiqueRoutes(pool) {
     });
 
     // Clôture de caisse : rapprochement entre encaissements théoriques (app) et dépôt réel (comptable).
-    router.put('/caisse/:id/cloturer', requireAuth, checkRole(['comptable']), async (req, res) => {
+    router.put('/caisse/:id/cloturer', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
         const { montant_depose, notes } = req.body;
         try {
-            const caisseRes = await pool.query(`SELECT * FROM caisses_chauffeur WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);
+            const caisseRes = await req.db.query(`SELECT * FROM caisses_chauffeur WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);
             if (caisseRes.rows.length === 0) return res.status(404).json({ erreur: 'Caisse introuvable.' });
             const theorique = Number(caisseRes.rows[0].montant_theorique);
             const ecart = Number(montant_depose) - theorique;
 
-            const result = await pool.query(
+            const result = await req.db.query(
                 `UPDATE caisses_chauffeur SET statut = 'CLOTUREE', montant_depose = $1, ecart = $2,
                         valide_par = $3, notes = $4, cloturee_le = CURRENT_TIMESTAMP
                  WHERE id = $5 RETURNING *`,
                 [montant_depose, ecart, req.user.id, notes || null, req.params.id]
             );
-            await logAudit(pool, { table: 'caisses_chauffeur', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { montant_depose, ecart } });
+            await logAudit(req.db, { table: 'caisses_chauffeur', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { montant_depose, ecart } });
             res.json(result.rows[0]);
         } catch (err) {
             console.error(err);

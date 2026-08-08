@@ -6,16 +6,12 @@ const { newDb } = require('pg-mem');
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-erp-massla';
 
 const { signToken } = require('../../src/auth');
+const { registerGucStubs } = require('../../src/db');
 
 /** Base pg-mem fraîche avec le schéma réel appliqué — une par test (isolation totale). */
 function createTestPool() {
     const db = newDb({ autoCreateForeignKeyIndices: true });
-    db.public.registerFunction({
-        name: 'current_setting',
-        args: [],
-        returns: 'text',
-        implementation: () => null,
-    });
+    registerGucStubs(db);
     const schema = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'schema.sql'), 'utf-8');
     db.public.none(schema);
     const { Pool } = db.adapters.createPg();

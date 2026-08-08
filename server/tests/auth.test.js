@@ -58,12 +58,18 @@ describe('auth — login', () => {
 });
 
 describe('auth — middlewares requireAuth / checkRole', () => {
+    let pool;
     let app;
 
     beforeEach(() => {
+        pool = createTestPool();
         app = express();
-        app.get('/protegee', requireAuth, (req, res) => res.json({ ok: true }));
-        app.get('/comptable-seulement', requireAuth, checkRole(['comptable']), (req, res) => res.json({ ok: true }));
+        app.get('/protegee', requireAuth(pool), (req, res) => res.json({ ok: true }));
+        app.get('/comptable-seulement', requireAuth(pool), checkRole(['comptable']), (req, res) => res.json({ ok: true }));
+    });
+
+    afterEach(async () => {
+        await pool.end();
     });
 
     test('requête sans token est rejetée (401)', async () => {

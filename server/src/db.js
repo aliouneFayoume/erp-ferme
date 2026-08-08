@@ -2,6 +2,33 @@ const fs = require('fs');
 const path = require('path');
 
 /**
+ * pg-mem ne connaît ni `current_setting` ni `set_config` nativement. On simule un stockage
+ * clé/valeur en mémoire pour que le contexte tenant posé par `attachTenantConnection` (auth.js)
+ * soit lisible — ce qui exerce le plumbing sous les tests, sans reproduire l'isolation par
+ * connexion/session d'un vrai PostgreSQL (pg-mem partage cet état entre toutes les "connexions"
+ * d'une même instance en mémoire). Ça ne remplace donc jamais la vérification RLS réelle
+ * (verify-rls.js contre la vraie base) : ça garantit juste que rien ne casse côté application.
+ */
+function registerGucStubs(db) {
+    const guc = new Map();
+    db.public.registerFunction({
+        name: 'current_setting',
+        args: ['text', 'bool'],
+        returns: 'text',
+        implementation: (name) => guc.get(name) ?? null,
+    });
+    db.public.registerFunction({
+        name: 'set_config',
+        args: ['text', 'text', 'bool'],
+        returns: 'text',
+        implementation: (name, value) => {
+            guc.set(name, value || null);
+            return value;
+        },
+    });
+}
+
+/**
  * Fournit un Pool compatible `pg`. Si DATABASE_URL est défini, on se connecte
  * à une vraie instance PostgreSQL (ex: Supabase, VPS). Sinon, on démarre une
  * base PostgreSQL en mémoire (pg-mem) pour permettre une démo/simulation
@@ -15,13 +42,7 @@ function createPool() {
 
     const { newDb } = require('pg-mem');
     const db = newDb({ autoCreateForeignKeyIndices: true });
-
-    db.public.registerFunction({
-        name: 'current_setting',
-        args: [],
-        returns: 'text',
-        implementation: () => null,
-    });
+    registerGucStubs(db);
 
     const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.public.none(schema);
@@ -30,4 +51,4 @@ function createPool() {
     return { pool: new Pool(), mode: 'pg-mem (simulation en mémoire)' };
 }
 
-module.exports = { createPool };
+module.exports = { createPool, registerGucStubs };

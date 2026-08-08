@@ -17,8 +17,8 @@ function resolvePrixUnitaire(produit, acheteur) {
 module.exports = function commandesRoutes(pool) {
     const router = express.Router();
 
-    router.get('/', requireAuth, async (req, res) => {
-        const result = await pool.query(
+    router.get('/', requireAuth(pool), async (req, res) => {
+        const result = await req.db.query(
             `SELECT c.*, cl.nom as client_nom, cl.type_client
              FROM commandes c JOIN clients cl ON c.client_id = cl.id
              WHERE c.tenant_id = $1 AND c.deleted_at IS NULL ORDER BY c.cree_le DESC LIMIT 200`,
@@ -27,13 +27,13 @@ module.exports = function commandesRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.get('/:id', requireAuth, async (req, res) => {
-        const commande = await pool.query(
+    router.get('/:id', requireAuth(pool), async (req, res) => {
+        const commande = await req.db.query(
             `SELECT c.*, cl.nom as client_nom, cl.type_client FROM commandes c JOIN clients cl ON c.client_id = cl.id WHERE c.id = $1 AND c.tenant_id = $2`,
             [req.params.id, req.user.tenant_id]
         );
         if (commande.rows.length === 0) return res.status(404).json({ erreur: 'Commande introuvable.' });
-        const lignes = await pool.query(
+        const lignes = await req.db.query(
             `SELECT lc.*, p.nom as produit_nom FROM lignes_commande lc JOIN produits p ON lc.produit_id = p.id WHERE lc.commande_id = $1`,
             [req.params.id]
         );
@@ -46,13 +46,13 @@ module.exports = function commandesRoutes(pool) {
      * - Réserve le stock dans le pool dédié (B2B ou B2C) pour éviter les surventes croisées.
      * - Pour le B2B : bloque automatiquement la commande si l'encours dépasse la limite de crédit.
      */
-    router.post('/', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
         const { client_id, lignes } = req.body;
         if (!client_id || !Array.isArray(lignes) || lignes.length === 0) {
             return res.status(400).json({ erreur: 'Client et au moins une ligne de commande sont requis.' });
         }
 
-        const client = await pool.connect();
+        const client = req.db;
         try {
             await client.query('BEGIN');
 
@@ -130,7 +130,7 @@ module.exports = function commandesRoutes(pool) {
             }
 
             await client.query('COMMIT');
-            await logAudit(pool, { table: 'commandes', rowId: commande.id, action: 'CREATE', userId: req.user.id, tenantId, details: { montantTotal, client_id } });
+            await logAudit(req.db, { table: 'commandes', rowId: commande.id, action: 'CREATE', userId: req.user.id, tenantId, details: { montantTotal, client_id } });
             res.status(201).json({ ...commande, lignes: lignesPreparees });
         } catch (err) {
             await client.query('ROLLBACK');
@@ -140,19 +140,17 @@ module.exports = function commandesRoutes(pool) {
                 console.error(err);
                 res.status(500).json({ erreur: 'Erreur lors de la création de la commande.' });
             }
-        } finally {
-            client.release();
         }
     });
 
-    router.put('/:id/statut', requireAuth, checkRole(['admin', 'comptable', 'livreur']), async (req, res) => {
+    router.put('/:id/statut', requireAuth(pool), checkRole(['admin', 'comptable', 'livreur']), async (req, res) => {
         const { statut } = req.body;
         const statutsValides = ['EN_ATTENTE', 'PREPAREE', 'EN_LIVRAISON', 'LIVREE', 'ANNULEE'];
         if (!statutsValides.includes(statut)) {
             return res.status(400).json({ erreur: 'Statut invalide.' });
         }
 
-        const client = await pool.connect();
+        const client = req.db;
         try {
             await client.query('BEGIN');
             const tenantId = req.user.tenant_id;
@@ -199,15 +197,13 @@ module.exports = function commandesRoutes(pool) {
             );
 
             await client.query('COMMIT');
-            await logAudit(pool, { table: 'commandes', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: { statut } });
+            await logAudit(req.db, { table: 'commandes', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: { statut } });
             res.json(result.rows[0]);
         } catch (err) {
             await client.query('ROLLBACK');
             if (err.statut) return res.status(err.statut).json({ erreur: err.message });
             console.error(err);
             res.status(500).json({ erreur: 'Erreur lors de la mise à jour du statut.' });
-        } finally {
-            client.release();
         }
     });
 

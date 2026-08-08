@@ -29,6 +29,8 @@ module.exports = function portailRoutes(pool) {
         // (sous-domaine par ferme, non construit). Si deux fermes distinctes doivent un jour pouvoir
         // avoir chacune un client avec le même numéro, cette contrainte devra être revue en même
         // temps qu'une résolution de tenant côté login.
+        // Lecture pré-tenant (le tenant n'est pas encore connu avant cette ligne) : policy RLS dédiée
+        // sur `clients` qui autorise ce cas précis, voir rls-policies.sql.
         const result = await pool.query(
             `SELECT id, nom, telephone, type_client, pin_hash, pin_version FROM clients WHERE telephone = $1 AND deleted_at IS NULL`,
             [telephone]
@@ -46,7 +48,7 @@ module.exports = function portailRoutes(pool) {
     });
 
     router.get('/moi', clientAuth, async (req, res) => {
-        const result = await pool.query(
+        const result = await req.db.query(
             `SELECT id, nom, telephone, type_client, categorie_tarifaire, adresse, limite_credit, solde_encours
              FROM clients WHERE id = $1`,
             [req.client.id]
@@ -55,13 +57,13 @@ module.exports = function portailRoutes(pool) {
     });
 
     router.get('/commandes', clientAuth, async (req, res) => {
-        const commandes = await pool.query(
+        const commandes = await req.db.query(
             `SELECT * FROM commandes WHERE client_id = $1 AND deleted_at IS NULL ORDER BY cree_le DESC LIMIT 100`,
             [req.client.id]
         );
         const commandesAvecLignes = [];
         for (const c of commandes.rows) {
-            const lignes = await pool.query(
+            const lignes = await req.db.query(
                 `SELECT lc.*, p.nom as produit_nom FROM lignes_commande lc JOIN produits p ON lc.produit_id = p.id WHERE lc.commande_id = $1`,
                 [c.id]
             );
@@ -71,7 +73,7 @@ module.exports = function portailRoutes(pool) {
     });
 
     router.get('/factures', clientAuth, async (req, res) => {
-        const result = await pool.query(
+        const result = await req.db.query(
             `SELECT f.*, c.numero_commande FROM factures f
              JOIN commandes c ON f.commande_id = c.id
              WHERE c.client_id = $1 ORDER BY f.date_echeance DESC LIMIT 100`,
@@ -81,7 +83,7 @@ module.exports = function portailRoutes(pool) {
     });
 
     router.get('/factures/:id/pdf', clientAuth, async (req, res) => {
-        const factureRes = await pool.query(
+        const factureRes = await req.db.query(
             `SELECT f.*, c.numero_commande, c.montant_total, c.client_id
              FROM factures f JOIN commandes c ON f.commande_id = c.id
              WHERE f.id = $1`,
@@ -92,8 +94,8 @@ module.exports = function portailRoutes(pool) {
             return res.status(404).json({ erreur: 'Facture introuvable.' });
         }
 
-        const clientRes = await pool.query(`SELECT * FROM clients WHERE id = $1`, [facture.client_id]);
-        const lignesRes = await pool.query(
+        const clientRes = await req.db.query(`SELECT * FROM clients WHERE id = $1`, [facture.client_id]);
+        const lignesRes = await req.db.query(
             `SELECT lc.*, p.nom as produit_nom FROM lignes_commande lc JOIN produits p ON lc.produit_id = p.id WHERE lc.commande_id = $1`,
             [facture.commande_id]
         );
@@ -109,7 +111,7 @@ module.exports = function portailRoutes(pool) {
     });
 
     router.get('/livraisons', clientAuth, async (req, res) => {
-        const result = await pool.query(
+        const result = await req.db.query(
             `SELECT l.*, c.numero_commande FROM livraisons l
              JOIN commandes c ON l.commande_id = c.id
              WHERE c.client_id = $1 ORDER BY l.date_prevue DESC LIMIT 100`,
@@ -119,7 +121,7 @@ module.exports = function portailRoutes(pool) {
     });
 
     router.get('/tickets', clientAuth, async (req, res) => {
-        const result = await pool.query(
+        const result = await req.db.query(
             `SELECT * FROM tickets WHERE client_id = $1 AND deleted_at IS NULL ORDER BY cree_le DESC LIMIT 100`,
             [req.client.id]
         );
@@ -131,7 +133,7 @@ module.exports = function portailRoutes(pool) {
         if (!sujet || !sujet.trim()) {
             return res.status(400).json({ erreur: 'Le sujet est obligatoire.' });
         }
-        const result = await pool.query(
+        const result = await req.db.query(
             `INSERT INTO tickets (tenant_id, client_id, sujet, description) VALUES ($1, $2, $3, $4) RETURNING *`,
             [req.client.tenant_id, req.client.id, sujet.trim(), description || null]
         );
@@ -139,11 +141,11 @@ module.exports = function portailRoutes(pool) {
     });
 
     router.get('/tickets/:id/messages', clientAuth, async (req, res) => {
-        const ticketRes = await pool.query(`SELECT client_id FROM tickets WHERE id = $1 AND deleted_at IS NULL`, [req.params.id]);
+        const ticketRes = await req.db.query(`SELECT client_id FROM tickets WHERE id = $1 AND deleted_at IS NULL`, [req.params.id]);
         if (ticketRes.rows.length === 0 || ticketRes.rows[0].client_id !== req.client.id) {
             return res.status(404).json({ erreur: 'Ticket introuvable.' });
         }
-        const result = await pool.query(
+        const result = await req.db.query(
             `SELECT m.*, COALESCE(u.nom_complet, cl.nom) as auteur_nom,
                     CASE WHEN m.auteur_client_id IS NOT NULL THEN 'client' ELSE 'staff' END as auteur_type
              FROM ticket_messages m
@@ -158,15 +160,15 @@ module.exports = function portailRoutes(pool) {
     router.post('/tickets/:id/messages', clientAuth, async (req, res) => {
         const { message } = req.body;
         if (!message || !message.trim()) return res.status(400).json({ erreur: 'Message vide.' });
-        const ticketRes = await pool.query(`SELECT client_id FROM tickets WHERE id = $1 AND deleted_at IS NULL`, [req.params.id]);
+        const ticketRes = await req.db.query(`SELECT client_id FROM tickets WHERE id = $1 AND deleted_at IS NULL`, [req.params.id]);
         if (ticketRes.rows.length === 0 || ticketRes.rows[0].client_id !== req.client.id) {
             return res.status(404).json({ erreur: 'Ticket introuvable.' });
         }
-        const result = await pool.query(
+        const result = await req.db.query(
             `INSERT INTO ticket_messages (ticket_id, auteur_client_id, message) VALUES ($1, $2, $3) RETURNING *`,
             [req.params.id, req.client.id, message.trim()]
         );
-        await pool.query(`UPDATE tickets SET mis_a_jour_le = CURRENT_TIMESTAMP WHERE id = $1`, [req.params.id]);
+        await req.db.query(`UPDATE tickets SET mis_a_jour_le = CURRENT_TIMESTAMP WHERE id = $1`, [req.params.id]);
         res.status(201).json(result.rows[0]);
     });
 

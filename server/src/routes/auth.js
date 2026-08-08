@@ -61,7 +61,7 @@ module.exports = function authRoutes(pool) {
         }
     });
 
-    router.get('/me', requireAuth, (req, res) => {
+    router.get('/me', requireAuth(pool), (req, res) => {
         res.json({ utilisateur: req.user });
     });
 

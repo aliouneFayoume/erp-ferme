@@ -5,8 +5,8 @@ const { logAudit } = require('../audit');
 module.exports = function abonnementsRoutes(pool) {
     const router = express.Router();
 
-    router.get('/', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
-        const result = await pool.query(
+    router.get('/', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+        const result = await req.db.query(
             `SELECT a.*, c.nom as client_nom, c.telephone, p.nom as produit_nom, p.prix_unitaire_b2c
              FROM abonnements a
              JOIN clients c ON a.client_id = c.id
@@ -18,19 +18,19 @@ module.exports = function abonnementsRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.post('/', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
         const { client_id, produit_id, quantite, frequence, jour_livraison } = req.body;
         if (!client_id || !produit_id || !jour_livraison) {
             return res.status(400).json({ erreur: 'Client, produit et jour de livraison sont requis.' });
         }
         try {
-            const result = await pool.query(
+            const result = await req.db.query(
                 `INSERT INTO abonnements (tenant_id, client_id, produit_id, quantite, frequence, jour_livraison, actif)
                  VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING *`,
                 [req.user.tenant_id, client_id, produit_id, quantite || 1, frequence || 'HEBDOMADAIRE', jour_livraison]
             );
-            await pool.query(`UPDATE clients SET est_abonne = TRUE WHERE id = $1 AND tenant_id = $2`, [client_id, req.user.tenant_id]);
-            await logAudit(pool, { table: 'abonnements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
+            await req.db.query(`UPDATE clients SET est_abonne = TRUE WHERE id = $1 AND tenant_id = $2`, [client_id, req.user.tenant_id]);
+            await logAudit(req.db, { table: 'abonnements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.status(201).json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -38,20 +38,20 @@ module.exports = function abonnementsRoutes(pool) {
         }
     });
 
-    router.put('/:id/statut', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
+    router.put('/:id/statut', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
         const { actif } = req.body;
-        const result = await pool.query(
+        const result = await req.db.query(
             `UPDATE abonnements SET actif = $1 WHERE id = $2 AND tenant_id = $3 RETURNING *`,
             [!!actif, req.params.id, req.user.tenant_id]
         );
         if (result.rows.length === 0) return res.status(404).json({ erreur: 'Abonnement introuvable.' });
-        await logAudit(pool, { table: 'abonnements', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { actif } });
+        await logAudit(req.db, { table: 'abonnements', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { actif } });
         res.json(result.rows[0]);
     });
 
-    router.delete('/:id', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
-        await pool.query(`UPDATE abonnements SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);
-        await logAudit(pool, { table: 'abonnements', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
+    router.delete('/:id', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+        await req.db.query(`UPDATE abonnements SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);
+        await logAudit(req.db, { table: 'abonnements', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
         res.status(204).end();
     });
 
@@ -60,7 +60,7 @@ module.exports = function abonnementsRoutes(pool) {
      * correspond au jour de la semaine courant (paniers récurrents). Applique la même logique de
      * réservation de stock et de tarification que la création manuelle de commande.
      */
-    router.post('/generer-commandes', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/generer-commandes', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
         // Le Sénégal (Dakar) est en GMT+0, comme UTC : on utilise getUTCDay() pour ne pas dépendre
         // du fuseau horaire local de la machine qui héberge le serveur.
         const JOURS = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
@@ -71,7 +71,7 @@ module.exports = function abonnementsRoutes(pool) {
         try {
 
         const tenantId = req.user.tenant_id;
-        const abonnements = await pool.query(
+        const abonnements = await req.db.query(
             `SELECT a.*, p.nom as produit_nom, p.prix_unitaire_b2c, s.quantite_disponible
              FROM abonnements a
              JOIN produits p ON a.produit_id = p.id
@@ -82,8 +82,11 @@ module.exports = function abonnementsRoutes(pool) {
 
         const resultats = { creees: 0, echecs: [] };
 
+        // Une connexion dédiée à la requête (req.db) suffit : chaque itération termine sa propre
+        // transaction (COMMIT/ROLLBACK) avant que la suivante n'en ouvre une nouvelle, donc pas de
+        // besoin d'une connexion séparée par abonnement.
+        const client = req.db;
         for (const ab of abonnements.rows) {
-            const client = await pool.connect();
             try {
                 await client.query('BEGIN');
 
@@ -133,12 +136,10 @@ module.exports = function abonnementsRoutes(pool) {
             } catch (err) {
                 await client.query('ROLLBACK');
                 resultats.echecs.push({ abonnement_id: ab.id, produit: ab.produit_nom, erreur: err.message });
-            } finally {
-                client.release();
             }
         }
 
-        await logAudit(pool, { table: 'commandes', action: 'CREATE', userId: req.user.id, tenantId, details: { source: 'abonnements', ...resultats } });
+        await logAudit(req.db, { table: 'commandes', action: 'CREATE', userId: req.user.id, tenantId, details: { source: 'abonnements', ...resultats } });
         res.json({ jour: jourDuJour, ...resultats });
         } catch (err) {
             console.error(err);

@@ -1,5 +1,5 @@
 const express = require('express');
-const { requireAuth, checkRole } = require('../auth');
+const { requireAuth, checkRole, attachTenantConnection } = require('../auth');
 const { logAudit } = require('../audit');
 const { genererFacturePDF } = require('../facturePdf');
 const { creerFacture, confirmerFacture } = require('../paydunya');
@@ -8,7 +8,7 @@ const { getPaydunyaConfig } = require('../paymentConfig');
 module.exports = function financeRoutes(pool) {
     const router = express.Router();
 
-    router.get('/factures', requireAuth, checkRole(['comptable']), async (req, res) => {
+    router.get('/factures', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
         // Bascule automatique en retard : pas de tâche planifiée dédiée, le statut est simplement
         // remis à jour à chaque consultation de l'écran (même logique "à la demande" que la
         // génération des commandes d'abonnement ailleurs dans ce projet).
@@ -16,11 +16,11 @@ module.exports = function financeRoutes(pool) {
         // horodatage complet pour CURRENT_DATE plutôt qu'une date tronquée, ce qui ferait basculer
         // une facture en retard dès le jour même de son échéance au lieu du lendemain.
         const aujourdhui = new Date().toISOString().slice(0, 10);
-        await pool.query(
+        await req.db.query(
             `UPDATE factures SET statut = 'EN_RETARD' WHERE tenant_id = $1 AND statut = 'A_PAYER' AND date_echeance < $2 AND montant_restant > 0`,
             [req.user.tenant_id, aujourdhui]
         );
-        const result = await pool.query(
+        const result = await req.db.query(
             `SELECT f.*, c.numero_commande, cl.nom as client_nom, cl.type_client
              FROM factures f
              JOIN commandes c ON f.commande_id = c.id
@@ -33,9 +33,9 @@ module.exports = function financeRoutes(pool) {
     });
 
     /** Génère et télécharge la facture PDF correspondante (client, lignes, montants, échéance). */
-    router.get('/factures/:id/pdf', requireAuth, checkRole(['comptable']), async (req, res) => {
+    router.get('/factures/:id/pdf', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
         const tenantId = req.user.tenant_id;
-        const factureRes = await pool.query(
+        const factureRes = await req.db.query(
             `SELECT f.*, c.numero_commande, c.montant_total, c.client_id
              FROM factures f JOIN commandes c ON f.commande_id = c.id
              WHERE f.id = $1 AND f.tenant_id = $2`,
@@ -44,8 +44,8 @@ module.exports = function financeRoutes(pool) {
         if (factureRes.rows.length === 0) return res.status(404).json({ erreur: 'Facture introuvable.' });
         const facture = factureRes.rows[0];
 
-        const clientRes = await pool.query(`SELECT * FROM clients WHERE id = $1 AND tenant_id = $2`, [facture.client_id, tenantId]);
-        const lignesRes = await pool.query(
+        const clientRes = await req.db.query(`SELECT * FROM clients WHERE id = $1 AND tenant_id = $2`, [facture.client_id, tenantId]);
+        const lignesRes = await req.db.query(
             `SELECT lc.*, p.nom as produit_nom FROM lignes_commande lc JOIN produits p ON lc.produit_id = p.id WHERE lc.commande_id = $1`,
             [facture.commande_id]
         );
@@ -60,8 +60,8 @@ module.exports = function financeRoutes(pool) {
         });
     });
 
-    router.get('/paiements', requireAuth, checkRole(['comptable']), async (req, res) => {
-        const result = await pool.query(
+    router.get('/paiements', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
+        const result = await req.db.query(
             `SELECT p.*, cl.nom as client_nom FROM paiements p JOIN clients cl ON p.client_id = cl.id WHERE p.tenant_id = $1 ORDER BY p.date_paiement DESC LIMIT 200`,
             [req.user.tenant_id]
         );
@@ -75,14 +75,14 @@ module.exports = function financeRoutes(pool) {
      * laquelle le frontend doit rediriger le client. Le paiement reste EN_ATTENTE tant que l'IPN de
      * confirmation n'est pas arrivé (voir /paiements/ipn).
      */
-    router.post('/paiements/initier', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/paiements/initier', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { commande_id, client_id, montant, provider } = req.body;
 
         const [commandeRes, organisationRes, credentials] = await Promise.all([
-            pool.query(`SELECT numero_commande FROM commandes WHERE id = $1 AND tenant_id = $2`, [commande_id, tenantId]),
-            pool.query(`SELECT nom FROM organisations WHERE id = $1`, [tenantId]),
-            getPaydunyaConfig(pool, tenantId),
+            req.db.query(`SELECT numero_commande FROM commandes WHERE id = $1 AND tenant_id = $2`, [commande_id, tenantId]),
+            req.db.query(`SELECT nom FROM organisations WHERE id = $1`, [tenantId]),
+            getPaydunyaConfig(req.db, tenantId),
         ]);
         if (commandeRes.rows.length === 0) return res.status(404).json({ erreur: 'Commande introuvable.' });
         if (!credentials) {
@@ -105,12 +105,12 @@ module.exports = function financeRoutes(pool) {
             return res.status(502).json({ erreur: 'Impossible de contacter PayDunya pour initier le paiement.' });
         }
 
-        const result = await pool.query(
+        const result = await req.db.query(
             `INSERT INTO paiements (tenant_id, commande_id, client_id, montant, methode_paiement, reference_transaction, statut)
              VALUES ($1, $2, $3, $4, $5, $6, 'EN_ATTENTE') RETURNING *`,
             [tenantId, commande_id, client_id, montant, provider || 'WAVE', facture.token]
         );
-        await logAudit(pool, { table: 'paiements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: { commande_id, montant, provider } });
+        await logAudit(req.db, { table: 'paiements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: { commande_id, montant, provider } });
         res.status(201).json({ ...result.rows[0], checkout_url: facture.url });
     });
 
@@ -147,8 +147,12 @@ module.exports = function financeRoutes(pool) {
             return res.status(200).json({ message: 'Paiement introuvable ou déjà traité (idempotence).' });
         }
         const tenantId = paiementInitial.rows[0].tenant_id;
+        // Le tenant vient d'être découvert (aucun contexte au démarrage de la requête, voir le
+        // commentaire au-dessus de cette route) : on pose maintenant le contexte RLS pour toutes les
+        // requêtes qui suivent, comme le ferait requireAuth/requireClientAuth pour une requête normale.
+        await attachTenantConnection(req, res, pool, tenantId);
 
-        const credentials = await getPaydunyaConfig(pool, tenantId);
+        const credentials = await getPaydunyaConfig(req.db, tenantId);
         if (!credentials) {
             console.error(`IPN PayDunya reçue pour le tenant ${tenantId}, mais aucun identifiant configuré.`);
             return res.status(500).json({ erreur: 'Configuration de paiement introuvable pour cette organisation.' });
@@ -168,7 +172,7 @@ module.exports = function financeRoutes(pool) {
             return res.status(200).json({ message: `Statut ${confirmation.status} — aucune écriture.` });
         }
 
-        const client = await pool.connect();
+        const client = req.db;
         try {
             await client.query('BEGIN');
 
@@ -205,7 +209,7 @@ module.exports = function financeRoutes(pool) {
             }
 
             await client.query('COMMIT');
-            await logAudit(pool, {
+            await logAudit(req.db, {
                 table: 'paiements',
                 rowId: paiement.id,
                 action: 'UPDATE',
@@ -217,8 +221,6 @@ module.exports = function financeRoutes(pool) {
             await client.query('ROLLBACK');
             console.error('Erreur de traitement IPN PayDunya:', err.message);
             res.status(500).json({ erreur: 'Erreur interne lors du traitement du paiement.' });
-        } finally {
-            client.release();
         }
     });
 
