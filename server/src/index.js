@@ -10,6 +10,12 @@ const { seed } = require('./seed');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// En production, l'app est derrière un unique reverse proxy (nginx, voir docker-compose.yml) qui
+// ajoute X-Forwarded-For. Sans ce réglage, express-rate-limit (utilisé par le login du portail
+// client) refuse de faire confiance à cet en-tête et lève une erreur de validation sur chaque
+// requête au lieu de calculer la limite par IP réelle du client.
+app.set('trust proxy', 1);
+
 app.use(cors());
 app.use(express.json());
 // PayDunya envoie ses notifications IPN en application/x-www-form-urlencoded, pas en JSON.
