@@ -33,13 +33,27 @@ CREATE POLICY allow_all ON roles USING (true) WITH CHECK (true);
 
 -- ------------------------------------------------------------------------------
 -- organisations : policy sur `id` (c'est elle-même le tenant), pas sur `tenant_id`.
--- Rien ne la lit avant l'authentification : pas d'échappatoire nécessaire.
+-- Lecture/écriture des lignes EXISTANTES restent strictes (rien ne les lit avant
+-- l'authentification). L'INSERT est en revanche permissif : c'est la création d'une organisation
+-- elle-même (inscription self-service, routes/inscription.js) qui n'a par définition aucun
+-- contexte tenant à vérifier — on ne peut pas connaître l'id avant de l'avoir créé, et ajouter une
+-- ligne neuve ne peut jamais exposer les données d'une organisation existante.
 -- ------------------------------------------------------------------------------
 
 DROP POLICY IF EXISTS tenant_isolation ON organisations;
-CREATE POLICY tenant_isolation ON organisations
+DROP POLICY IF EXISTS tenant_isolation_select ON organisations;
+DROP POLICY IF EXISTS tenant_isolation_insert ON organisations;
+DROP POLICY IF EXISTS tenant_isolation_update ON organisations;
+DROP POLICY IF EXISTS tenant_isolation_delete ON organisations;
+CREATE POLICY tenant_isolation_select ON organisations FOR SELECT
+    USING (id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON organisations FOR INSERT
+    WITH CHECK (true);
+CREATE POLICY tenant_isolation_update ON organisations FOR UPDATE
     USING (id = current_tenant_id())
     WITH CHECK (id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON organisations FOR DELETE
+    USING (id = current_tenant_id());
 
 -- ------------------------------------------------------------------------------
 -- Tables avec tenant_id direct, échappatoire ciblée en lecture uniquement : consultées avant que le

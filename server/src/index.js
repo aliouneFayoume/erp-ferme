@@ -49,6 +49,7 @@ async function main() {
     }
 
     app.use('/api/auth', require('./routes/auth')(pool));
+    app.use('/api/inscription', require('./routes/inscription')(pool));
     app.use('/api/dashboard', require('./routes/dashboard')(pool));
     app.use('/api/production', require('./routes/production')(pool));
     app.use('/api/catalogue', require('./routes/catalogue')(pool));

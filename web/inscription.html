@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ferme Massla — Créer une ferme</title>
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+  <meta name="theme-color" content="#1A1A1A" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <div id="login-screen">
+    <div class="login-box" style="max-width: 440px;">
+      <h1>Créer une ferme</h1>
+      <p class="sub">Réservé aux nouveaux clients — le code d'invitation vous a été transmis directement.</p>
+      <form id="inscription-form">
+        <label>Code d'invitation
+          <input type="text" name="code" required autocomplete="off" />
+        </label>
+        <label>Nom de la ferme
+          <input type="text" name="nomFerme" required autocomplete="organization" />
+        </label>
+
+        <div>
+          <p class="sub" style="margin:0 0 8px;">Secteur(s) d'activité (au moins un)</p>
+          <label style="flex-direction: row; align-items: center; gap: 8px;">
+            <input type="checkbox" name="secteur-avicole" style="width:auto" /> Avicole
+          </label>
+          <label style="flex-direction: row; align-items: center; gap: 8px;">
+            <input type="checkbox" name="secteur-piscicole" style="width:auto" /> Piscicole
+          </label>
+          <label style="flex-direction: row; align-items: center; gap: 8px;">
+            <input type="checkbox" name="secteur-maraicher" style="width:auto" /> Maraîcher
+          </label>
+          <label>Autre secteur (optionnel)
+            <input type="text" name="secteurAutreNom" autocomplete="off" placeholder="ex: Élevage bovin" />
+          </label>
+          <label style="flex-direction: row; align-items: center; gap: 8px;">
+            <input type="checkbox" name="secteurAutreRecolte" style="width:auto" /> Suivre une date de récolte prévue pour ce secteur
+          </label>
+        </div>
+
+        <label>Votre nom complet (administrateur du compte)
+          <input type="text" name="adminNomComplet" required autocomplete="name" />
+        </label>
+        <label>Email
+          <input type="email" name="adminEmail" required autocomplete="email" />
+        </label>
+        <label>Mot de passe (8 caractères minimum)
+          <input type="password" name="adminPassword" required minlength="8" autocomplete="new-password" />
+        </label>
+
+        <div id="inscription-error" class="login-error hidden"></div>
+        <button type="submit">Créer ma ferme</button>
+      </form>
+      <p class="sub" style="margin-top:16px;">Déjà un compte ? <a href="/">Se connecter</a></p>
+    </div>
+  </div>
+
+  <script src="/js/inscription.js"></script>
+</body>
+</html>
