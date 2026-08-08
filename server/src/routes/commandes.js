@@ -21,15 +21,16 @@ module.exports = function commandesRoutes(pool) {
         const result = await pool.query(
             `SELECT c.*, cl.nom as client_nom, cl.type_client
              FROM commandes c JOIN clients cl ON c.client_id = cl.id
-             WHERE c.deleted_at IS NULL ORDER BY c.cree_le DESC LIMIT 200`
+             WHERE c.tenant_id = $1 AND c.deleted_at IS NULL ORDER BY c.cree_le DESC LIMIT 200`,
+            [req.user.tenant_id]
         );
         res.json(result.rows);
     });
 
     router.get('/:id', requireAuth, async (req, res) => {
         const commande = await pool.query(
-            `SELECT c.*, cl.nom as client_nom, cl.type_client FROM commandes c JOIN clients cl ON c.client_id = cl.id WHERE c.id = $1`,
-            [req.params.id]
+            `SELECT c.*, cl.nom as client_nom, cl.type_client FROM commandes c JOIN clients cl ON c.client_id = cl.id WHERE c.id = $1 AND c.tenant_id = $2`,
+            [req.params.id, req.user.tenant_id]
         );
         if (commande.rows.length === 0) return res.status(404).json({ erreur: 'Commande introuvable.' });
         const lignes = await pool.query(
@@ -55,7 +56,8 @@ module.exports = function commandesRoutes(pool) {
         try {
             await client.query('BEGIN');
 
-            const clientRes = await client.query(`SELECT * FROM clients WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [client_id]);
+            const tenantId = req.user.tenant_id;
+            const clientRes = await client.query(`SELECT * FROM clients WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL FOR UPDATE`, [client_id, tenantId]);
             if (clientRes.rows.length === 0) throw { statut: 404, message: 'Client introuvable.' };
             const acheteur = clientRes.rows[0];
             const estB2B = acheteur.type_client === 'B2B';
@@ -65,8 +67,8 @@ module.exports = function commandesRoutes(pool) {
 
             for (const ligne of lignes) {
                 const produitRes = await client.query(
-                    `SELECT p.*, s.quantite_disponible FROM produits p JOIN stocks s ON s.produit_id = p.id WHERE p.id = $1 AND p.deleted_at IS NULL FOR UPDATE`,
-                    [ligne.produit_id]
+                    `SELECT p.*, s.quantite_disponible FROM produits p JOIN stocks s ON s.produit_id = p.id WHERE p.id = $1 AND p.tenant_id = $2 AND p.deleted_at IS NULL FOR UPDATE`,
+                    [ligne.produit_id, tenantId]
                 );
                 if (produitRes.rows.length === 0) throw { statut: 404, message: `Produit ${ligne.produit_id} introuvable.` };
                 const produit = produitRes.rows[0];
@@ -104,8 +106,8 @@ module.exports = function commandesRoutes(pool) {
 
             const numero = `CMD-${Date.now().toString().slice(-6)}`;
             const commandeRes = await client.query(
-                `INSERT INTO commandes (numero_commande, client_id, statut, montant_total) VALUES ($1, $2, 'EN_ATTENTE', $3) RETURNING *`,
-                [numero, client_id, montantTotal]
+                `INSERT INTO commandes (tenant_id, numero_commande, client_id, statut, montant_total) VALUES ($1, $2, $3, 'EN_ATTENTE', $4) RETURNING *`,
+                [tenantId, numero, client_id, montantTotal]
             );
             const commande = commandeRes.rows[0];
 
@@ -119,16 +121,16 @@ module.exports = function commandesRoutes(pool) {
             const dateEcheance = new Date();
             dateEcheance.setDate(dateEcheance.getDate() + (estB2B ? 30 : 0));
             await client.query(
-                `INSERT INTO factures (commande_id, date_echeance, statut, montant_restant) VALUES ($1, $2, 'A_PAYER', $3)`,
-                [commande.id, dateEcheance.toISOString().slice(0, 10), montantTotal]
+                `INSERT INTO factures (tenant_id, commande_id, date_echeance, statut, montant_restant) VALUES ($1, $2, $3, 'A_PAYER', $4)`,
+                [tenantId, commande.id, dateEcheance.toISOString().slice(0, 10), montantTotal]
             );
 
             if (estB2B) {
-                await client.query(`UPDATE clients SET solde_encours = solde_encours + $1 WHERE id = $2`, [montantTotal, client_id]);
+                await client.query(`UPDATE clients SET solde_encours = solde_encours + $1 WHERE id = $2 AND tenant_id = $3`, [montantTotal, client_id, tenantId]);
             }
 
             await client.query('COMMIT');
-            await logAudit(pool, { table: 'commandes', rowId: commande.id, action: 'CREATE', userId: req.user.id, details: { montantTotal, client_id } });
+            await logAudit(pool, { table: 'commandes', rowId: commande.id, action: 'CREATE', userId: req.user.id, tenantId, details: { montantTotal, client_id } });
             res.status(201).json({ ...commande, lignes: lignesPreparees });
         } catch (err) {
             await client.query('ROLLBACK');
@@ -153,10 +155,11 @@ module.exports = function commandesRoutes(pool) {
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
+            const tenantId = req.user.tenant_id;
 
             const commandeRes = await client.query(
-                `SELECT * FROM commandes WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
-                [req.params.id]
+                `SELECT * FROM commandes WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL FOR UPDATE`,
+                [req.params.id, tenantId]
             );
             if (commandeRes.rows.length === 0) throw { statut: 404, message: 'Commande introuvable.' };
             const commande = commandeRes.rows[0];
@@ -168,7 +171,7 @@ module.exports = function commandesRoutes(pool) {
                     throw { statut: 400, message: 'Impossible d\'annuler une commande déjà livrée.' };
                 }
 
-                const clientRes = await client.query(`SELECT * FROM clients WHERE id = $1 FOR UPDATE`, [commande.client_id]);
+                const clientRes = await client.query(`SELECT * FROM clients WHERE id = $1 AND tenant_id = $2 FOR UPDATE`, [commande.client_id, tenantId]);
                 const acheteur = clientRes.rows[0];
                 const colonnePool = acheteur.type_client === 'B2B' ? 'quantite_reservee_b2b' : 'quantite_reservee_b2c';
 
@@ -182,20 +185,21 @@ module.exports = function commandesRoutes(pool) {
                 }
 
                 if (acheteur.type_client === 'B2B') {
-                    await client.query(`UPDATE clients SET solde_encours = GREATEST(solde_encours + $1, 0) WHERE id = $2`, [
+                    await client.query(`UPDATE clients SET solde_encours = GREATEST(solde_encours + $1, 0) WHERE id = $2 AND tenant_id = $3`, [
                         -Number(commande.montant_total),
                         commande.client_id,
+                        tenantId,
                     ]);
                 }
             }
 
             const result = await client.query(
-                `UPDATE commandes SET statut = $1 WHERE id = $2 RETURNING *`,
-                [statut, req.params.id]
+                `UPDATE commandes SET statut = $1 WHERE id = $2 AND tenant_id = $3 RETURNING *`,
+                [statut, req.params.id, tenantId]
             );
 
             await client.query('COMMIT');
-            await logAudit(pool, { table: 'commandes', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, details: { statut } });
+            await logAudit(pool, { table: 'commandes', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: { statut } });
             res.json(result.rows[0]);
         } catch (err) {
             await client.query('ROLLBACK');

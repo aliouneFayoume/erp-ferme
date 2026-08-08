@@ -15,12 +15,14 @@ module.exports = function fournisseursRoutes(pool) {
      * portable pg-mem/PostgreSQL, même contrainte que le dashboard et le rapprochement bancaire.
      */
     router.get('/', requireAuth, checkRole(ROLES_APPRO), async (req, res) => {
+        const tenantId = req.user.tenant_id;
         const [fournisseurs, commandesRecues] = await Promise.all([
-            pool.query(`SELECT * FROM fournisseurs WHERE deleted_at IS NULL ORDER BY nom`),
+            pool.query(`SELECT * FROM fournisseurs WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY nom`, [tenantId]),
             pool.query(
                 `SELECT fournisseur_id, date_commande, date_livraison_prevue, date_livraison_reelle
                  FROM commandes_fournisseurs
-                 WHERE statut = 'RECUE' AND date_livraison_reelle IS NOT NULL AND deleted_at IS NULL`
+                 WHERE tenant_id = $1 AND statut = 'RECUE' AND date_livraison_reelle IS NOT NULL AND deleted_at IS NULL`,
+                [tenantId]
             ),
         ]);
 
@@ -56,15 +58,16 @@ module.exports = function fournisseursRoutes(pool) {
     });
 
     router.post('/', requireAuth, checkRole(ROLES_APPRO), async (req, res) => {
+        const tenantId = req.user.tenant_id;
         const { nom, categorie, telephone, email, adresse, notes } = req.body;
         if (!nom) return res.status(400).json({ erreur: 'Le nom du fournisseur est requis.' });
         try {
             const result = await pool.query(
-                `INSERT INTO fournisseurs (nom, categorie, telephone, email, adresse, notes, cree_par)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-                [nom, categorie || null, telephone || null, email || null, adresse || null, notes || null, req.user.id]
+                `INSERT INTO fournisseurs (tenant_id, nom, categorie, telephone, email, adresse, notes, cree_par)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+                [tenantId, nom, categorie || null, telephone || null, email || null, adresse || null, notes || null, req.user.id]
             );
-            await logAudit(pool, { table: 'fournisseurs', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, details: req.body });
+            await logAudit(pool, { table: 'fournisseurs', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: req.body });
             res.status(201).json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -73,17 +76,18 @@ module.exports = function fournisseursRoutes(pool) {
     });
 
     router.put('/:id', requireAuth, checkRole(ROLES_APPRO), async (req, res) => {
+        const tenantId = req.user.tenant_id;
         const { nom, categorie, telephone, email, adresse, notes } = req.body;
         try {
             const result = await pool.query(
                 `UPDATE fournisseurs SET nom = COALESCE($1, nom), categorie = COALESCE($2, categorie),
                         telephone = COALESCE($3, telephone), email = COALESCE($4, email),
                         adresse = COALESCE($5, adresse), notes = COALESCE($6, notes)
-                 WHERE id = $7 AND deleted_at IS NULL RETURNING *`,
-                [nom, categorie, telephone, email, adresse, notes, req.params.id]
+                 WHERE id = $7 AND tenant_id = $8 AND deleted_at IS NULL RETURNING *`,
+                [nom, categorie, telephone, email, adresse, notes, req.params.id, tenantId]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Fournisseur introuvable.' });
-            await logAudit(pool, { table: 'fournisseurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, details: req.body });
+            await logAudit(pool, { table: 'fournisseurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: req.body });
             res.json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -92,8 +96,9 @@ module.exports = function fournisseursRoutes(pool) {
     });
 
     router.delete('/:id', requireAuth, checkRole(['admin']), async (req, res) => {
-        await pool.query(`UPDATE fournisseurs SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1`, [req.params.id]);
-        await logAudit(pool, { table: 'fournisseurs', rowId: req.params.id, action: 'DELETE', userId: req.user.id });
+        const tenantId = req.user.tenant_id;
+        await pool.query(`UPDATE fournisseurs SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [req.params.id, tenantId]);
+        await logAudit(pool, { table: 'fournisseurs', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId });
         res.status(204).end();
     });
 
@@ -107,8 +112,9 @@ module.exports = function fournisseursRoutes(pool) {
              FROM stocks st
              JOIN produits p ON p.id = st.produit_id
              JOIN secteurs s ON s.id = p.secteur_id
-             WHERE p.deleted_at IS NULL AND p.actif = TRUE AND st.quantite_disponible <= st.seuil_alerte
-             ORDER BY st.quantite_disponible - st.seuil_alerte`
+             WHERE p.tenant_id = $1 AND p.deleted_at IS NULL AND p.actif = TRUE AND st.quantite_disponible <= st.seuil_alerte
+             ORDER BY st.quantite_disponible - st.seuil_alerte`,
+            [req.user.tenant_id]
         );
         res.json(result.rows);
     });
@@ -120,16 +126,18 @@ module.exports = function fournisseursRoutes(pool) {
             `SELECT cf.*, f.nom as fournisseur_nom
              FROM commandes_fournisseurs cf
              JOIN fournisseurs f ON f.id = cf.fournisseur_id
-             WHERE cf.deleted_at IS NULL ORDER BY cf.cree_le DESC LIMIT 200`
+             WHERE cf.tenant_id = $1 AND cf.deleted_at IS NULL ORDER BY cf.cree_le DESC LIMIT 200`,
+            [req.user.tenant_id]
         );
         res.json(result.rows);
     });
 
     router.get('/commandes/:id', requireAuth, checkRole(ROLES_APPRO), async (req, res) => {
+        const tenantId = req.user.tenant_id;
         const commande = await pool.query(
             `SELECT cf.*, f.nom as fournisseur_nom FROM commandes_fournisseurs cf
-             JOIN fournisseurs f ON f.id = cf.fournisseur_id WHERE cf.id = $1`,
-            [req.params.id]
+             JOIN fournisseurs f ON f.id = cf.fournisseur_id WHERE cf.id = $1 AND cf.tenant_id = $2`,
+            [req.params.id, tenantId]
         );
         if (commande.rows.length === 0) return res.status(404).json({ erreur: 'Commande fournisseur introuvable.' });
         const lignes = await pool.query(
@@ -140,6 +148,7 @@ module.exports = function fournisseursRoutes(pool) {
     });
 
     router.post('/commandes', requireAuth, checkRole(ROLES_APPRO), async (req, res) => {
+        const tenantId = req.user.tenant_id;
         const { fournisseur_id, date_livraison_prevue, notes, lignes } = req.body;
         if (!fournisseur_id || !Array.isArray(lignes) || lignes.length === 0) {
             return res.status(400).json({ erreur: 'Fournisseur et au moins une ligne sont requis.' });
@@ -149,7 +158,7 @@ module.exports = function fournisseursRoutes(pool) {
         try {
             await client.query('BEGIN');
 
-            const fournisseurRes = await client.query(`SELECT * FROM fournisseurs WHERE id = $1 AND deleted_at IS NULL`, [fournisseur_id]);
+            const fournisseurRes = await client.query(`SELECT * FROM fournisseurs WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, [fournisseur_id, tenantId]);
             if (fournisseurRes.rows.length === 0) throw { statut: 404, message: 'Fournisseur introuvable.' };
 
             let montantTotal = 0;
@@ -175,9 +184,9 @@ module.exports = function fournisseursRoutes(pool) {
             // artificiel selon le fuseau horaire du moteur SQL (déjà rencontré avec CURRENT_DATE en pg-mem).
             const aujourdhui = new Date().toISOString().slice(0, 10);
             const commandeRes = await client.query(
-                `INSERT INTO commandes_fournisseurs (numero_commande, fournisseur_id, date_commande, date_livraison_prevue, montant_total, notes, cree_par)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-                [numero, fournisseur_id, aujourdhui, date_livraison_prevue || null, montantTotal, notes || null, req.user.id]
+                `INSERT INTO commandes_fournisseurs (tenant_id, numero_commande, fournisseur_id, date_commande, date_livraison_prevue, montant_total, notes, cree_par)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+                [tenantId, numero, fournisseur_id, aujourdhui, date_livraison_prevue || null, montantTotal, notes || null, req.user.id]
             );
             const commande = commandeRes.rows[0];
 
@@ -190,7 +199,7 @@ module.exports = function fournisseursRoutes(pool) {
             }
 
             await client.query('COMMIT');
-            await logAudit(pool, { table: 'commandes_fournisseurs', rowId: commande.id, action: 'CREATE', userId: req.user.id, details: { montantTotal, fournisseur_id } });
+            await logAudit(pool, { table: 'commandes_fournisseurs', rowId: commande.id, action: 'CREATE', userId: req.user.id, tenantId, details: { montantTotal, fournisseur_id } });
             res.status(201).json({ ...commande, lignes: lignesPreparees });
         } catch (err) {
             await client.query('ROLLBACK');
@@ -212,13 +221,14 @@ module.exports = function fournisseursRoutes(pool) {
      * vaccins, semences...), sans rapport avec le catalogue des produits vendus aux clients.
      */
     router.put('/commandes/:id/recevoir', requireAuth, checkRole(ROLES_APPRO), async (req, res) => {
+        const tenantId = req.user.tenant_id;
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
 
             const commandeRes = await client.query(
-                `SELECT * FROM commandes_fournisseurs WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
-                [req.params.id]
+                `SELECT * FROM commandes_fournisseurs WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL FOR UPDATE`,
+                [req.params.id, tenantId]
             );
             if (commandeRes.rows.length === 0) throw { statut: 404, message: 'Commande fournisseur introuvable.' };
             const commande = commandeRes.rows[0];
@@ -226,7 +236,7 @@ module.exports = function fournisseursRoutes(pool) {
                 throw { statut: 400, message: 'Seule une commande au statut "Commandée" peut être réceptionnée.' };
             }
 
-            const fournisseurRes = await client.query(`SELECT * FROM fournisseurs WHERE id = $1`, [commande.fournisseur_id]);
+            const fournisseurRes = await client.query(`SELECT * FROM fournisseurs WHERE id = $1 AND tenant_id = $2`, [commande.fournisseur_id, tenantId]);
             const fournisseur = fournisseurRes.rows[0];
 
             const aujourdhui = new Date().toISOString().slice(0, 10);
@@ -236,9 +246,10 @@ module.exports = function fournisseursRoutes(pool) {
             );
 
             const depenseRes = await client.query(
-                `INSERT INTO depenses (categorie, montant, description, date_depense, cree_par)
-                 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+                `INSERT INTO depenses (tenant_id, categorie, montant, description, date_depense, cree_par)
+                 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
                 [
+                    tenantId,
                     fournisseur?.categorie || 'Autre',
                     commande.montant_total,
                     `Réception commande ${commande.numero_commande} — ${fournisseur?.nom || 'fournisseur'}`,
@@ -253,6 +264,7 @@ module.exports = function fournisseursRoutes(pool) {
                 rowId: commande.id,
                 action: 'UPDATE',
                 userId: req.user.id,
+                tenantId,
                 details: { statut: 'RECUE', depense_id: depenseRes.rows[0].id },
             });
             res.json(updated.rows[0]);
@@ -267,15 +279,16 @@ module.exports = function fournisseursRoutes(pool) {
     });
 
     router.put('/commandes/:id/annuler', requireAuth, checkRole(ROLES_APPRO), async (req, res) => {
+        const tenantId = req.user.tenant_id;
         const result = await pool.query(
             `UPDATE commandes_fournisseurs SET statut = 'ANNULEE'
-             WHERE id = $1 AND statut = 'COMMANDEE' AND deleted_at IS NULL RETURNING *`,
-            [req.params.id]
+             WHERE id = $1 AND tenant_id = $2 AND statut = 'COMMANDEE' AND deleted_at IS NULL RETURNING *`,
+            [req.params.id, tenantId]
         );
         if (result.rows.length === 0) {
             return res.status(400).json({ erreur: 'Seule une commande au statut "Commandée" peut être annulée.' });
         }
-        await logAudit(pool, { table: 'commandes_fournisseurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, details: { statut: 'ANNULEE' } });
+        await logAudit(pool, { table: 'commandes_fournisseurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: { statut: 'ANNULEE' } });
         res.json(result.rows[0]);
     });
 

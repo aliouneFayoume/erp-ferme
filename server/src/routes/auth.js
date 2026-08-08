@@ -25,7 +25,7 @@ module.exports = function authRoutes(pool) {
 
         try {
             const result = await pool.query(
-                `SELECT u.id, u.nom_complet, u.email, u.mot_de_passe_hash, u.secteur_id, u.actif, r.nom as role_nom
+                `SELECT u.id, u.nom_complet, u.email, u.mot_de_passe_hash, u.secteur_id, u.tenant_id, u.actif, r.nom as role_nom
                  FROM utilisateurs u JOIN roles r ON u.role_id = r.id
                  WHERE u.email = $1 AND u.deleted_at IS NULL`,
                 [email]
@@ -42,7 +42,7 @@ module.exports = function authRoutes(pool) {
             }
 
             const token = signToken(user);
-            await logAudit(pool, { table: 'utilisateurs', rowId: user.id, action: 'LOGIN', userId: user.id });
+            await logAudit(pool, { table: 'utilisateurs', rowId: user.id, action: 'LOGIN', userId: user.id, tenantId: user.tenant_id });
 
             res.json({
                 token,
@@ -52,6 +52,7 @@ module.exports = function authRoutes(pool) {
                     email: user.email,
                     role: user.role_nom,
                     secteur_id: user.secteur_id,
+                    tenant_id: user.tenant_id,
                 },
             });
         } catch (err) {

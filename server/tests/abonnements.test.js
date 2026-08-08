@@ -1,5 +1,5 @@
 const request = require('supertest');
-const { createTestPool, buildApp, seedRolesEtSecteurs, creerClient, creerProduitAvecStock, creerUtilisateurEtToken } = require('./helpers/testApp');
+const { createTestPool, buildApp, seedRolesEtSecteurs, creerOrganisation, creerClient, creerProduitAvecStock, creerUtilisateurEtToken } = require('./helpers/testApp');
 
 const JOURS = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
 const AUJOURDHUI = JOURS[new Date().getUTCDay()];
@@ -7,10 +7,12 @@ const AUJOURDHUI = JOURS[new Date().getUTCDay()];
 describe('abonnements — génération des commandes récurrentes', () => {
     let pool;
     let app;
+    let tenantId;
 
     beforeEach(async () => {
         pool = createTestPool();
         await seedRolesEtSecteurs(pool);
+        tenantId = await creerOrganisation(pool);
         app = buildApp(pool, ['abonnements']);
     });
 
@@ -19,11 +21,11 @@ describe('abonnements — génération des commandes récurrentes', () => {
     });
 
     async function creerAbonnement({ quantite = 2, jour = AUJOURDHUI } = {}) {
-        const client = await creerClient(pool, { type_client: 'B2C', est_abonne: true });
-        const produit = await creerProduitAvecStock(pool, { prix_unitaire_b2c: 1500, quantite_disponible: 100 });
+        const client = await creerClient(pool, { tenant_id: tenantId, type_client: 'B2C', est_abonne: true });
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId, prix_unitaire_b2c: 1500, quantite_disponible: 100 });
         await pool.query(
-            `INSERT INTO abonnements (client_id, produit_id, quantite, frequence, jour_livraison, actif) VALUES ($1, $2, $3, 'HEBDOMADAIRE', $4, TRUE)`,
-            [client.id, produit.id, quantite, jour]
+            `INSERT INTO abonnements (tenant_id, client_id, produit_id, quantite, frequence, jour_livraison, actif) VALUES ($1, $2, $3, $4, 'HEBDOMADAIRE', $5, TRUE)`,
+            [tenantId, client.id, produit.id, quantite, jour]
         );
         return { client, produit };
     }
@@ -33,7 +35,7 @@ describe('abonnements — génération des commandes récurrentes', () => {
 
         const res = await request(app)
             .post('/api/abonnements/generer-commandes')
-            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'admin' })}`)
+            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'admin', tenant_id: tenantId })}`)
             .send();
 
         expect(res.status).toBe(200);
@@ -51,7 +53,7 @@ describe('abonnements — génération des commandes récurrentes', () => {
 
     test('un second déclenchement le même jour ne crée pas de commande en double', async () => {
         const { client } = await creerAbonnement({ quantite: 2 });
-        const token = await creerUtilisateurEtToken(pool,{ role: 'admin' });
+        const token = await creerUtilisateurEtToken(pool,{ role: 'admin', tenant_id: tenantId });
 
         const premier = await request(app).post('/api/abonnements/generer-commandes').set('Authorization', `Bearer ${token}`).send();
         expect(premier.body.creees).toBe(1);
@@ -69,7 +71,7 @@ describe('abonnements — génération des commandes récurrentes', () => {
 
         const res = await request(app)
             .post('/api/abonnements/generer-commandes')
-            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'admin' })}`)
+            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'admin', tenant_id: tenantId })}`)
             .send();
 
         expect(res.body.creees).toBe(0);
@@ -82,7 +84,7 @@ describe('abonnements — génération des commandes récurrentes', () => {
 
         const res = await request(app)
             .post('/api/abonnements/generer-commandes')
-            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'admin' })}`)
+            .set('Authorization', `Bearer ${await creerUtilisateurEtToken(pool,{ role: 'admin', tenant_id: tenantId })}`)
             .send();
 
         expect(res.body.creees).toBe(0);

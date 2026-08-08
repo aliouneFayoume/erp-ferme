@@ -6,7 +6,7 @@ window.Views.dashboard = {
 
     const alertes = [];
     if (stats.recoltesProches > 0) {
-      alertes.push(`${stats.recoltesProches} récolte(s) maraîchère(s) prévue(s) sous 7 jours.`);
+      alertes.push(`${stats.recoltesProches} récolte(s) prévue(s) sous 7 jours.`);
     }
     if (stats.produitsSousSeuil > 0) {
       alertes.push(`${stats.produitsSousSeuil} produit(s) sous le seuil de réapprovisionnement — voir Fournisseurs.`);
@@ -25,10 +25,11 @@ window.Views.dashboard = {
       <div class="grid-stats">
         ${statCard("Chiffre d'affaires du jour", `${fmt(stats.chiffreAffairesJour)} FCFA`, null, 'var(--finance)')}
         ${statCard('Commandes B2C du jour', stats.commandesB2C, null, 'var(--clients)')}
-        ${statCard('Stock Avicole disponible', fmt(stats.stockAvicole), 'toutes unités confondues', 'var(--avicole)')}
+        ${statCard('Stock total disponible', fmt(stats.stockTotal), 'tous secteurs, toutes unités confondues', 'var(--avicole)')}
         ${statCard('Encours B2B total', `${fmt(stats.encoursB2B)} FCFA`, 'crédit accordé aux pros', 'var(--stock)')}
         ${statCard('Caisses chauffeur ouvertes', stats.caissesOuvertes, null, 'var(--livraison)')}
         ${statCard('Lots de production actifs', stats.lotsActifs, null, 'var(--maraicher)')}
+        ${statCard('Récoltes proches (≤7j)', stats.recoltesProches, 'secteurs à suivi de récolte', stats.recoltesProches > 0 ? 'var(--warn)' : 'var(--maraicher)')}
       </div>
 
       ${

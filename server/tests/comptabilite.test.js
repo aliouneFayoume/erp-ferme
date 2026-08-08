@@ -1,16 +1,18 @@
 const request = require('supertest');
-const { createTestPool, buildApp, seedRolesEtSecteurs, creerClient, creerUtilisateurEtToken } = require('./helpers/testApp');
+const { createTestPool, buildApp, seedRolesEtSecteurs, creerOrganisation, creerClient, creerUtilisateurEtToken } = require('./helpers/testApp');
 
 describe('comptabilite — import de relevé bancaire et suggestions de rapprochement', () => {
     let pool;
     let app;
     let token;
+    let tenantId;
 
     beforeEach(async () => {
         pool = createTestPool();
         await seedRolesEtSecteurs(pool);
+        tenantId = await creerOrganisation(pool);
         app = buildApp(pool, ['comptabilite', 'finance']);
-        token = await creerUtilisateurEtToken(pool, { role: 'comptable', nom_complet: 'Comptable Test' });
+        token = await creerUtilisateurEtToken(pool, { role: 'comptable', nom_complet: 'Comptable Test', tenant_id: tenantId });
     });
 
     afterEach(async () => {
@@ -48,21 +50,22 @@ describe('comptabilite — import de relevé bancaire et suggestions de rapproch
     });
 
     test('suggère le paiement correspondant (montant identique, date proche) et pas un autre trop éloigné', async () => {
-        const client = await creerClient(pool, { nom: 'Client Wave' });
+        const client = await creerClient(pool, { tenant_id: tenantId, nom: 'Client Wave' });
 
         // Paiement proche (2 jours d'écart, même montant) : doit être suggéré.
         await pool.query(
-            `INSERT INTO paiements (client_id, montant, methode_paiement, statut, date_paiement) VALUES ($1, 15000, 'WAVE', 'VALIDE', '2026-02-10')`,
-            [client.id]
+            `INSERT INTO paiements (tenant_id, client_id, montant, methode_paiement, statut, date_paiement) VALUES ($1, $2, 15000, 'WAVE', 'VALIDE', '2026-02-10')`,
+            [tenantId, client.id]
         );
         // Paiement même montant mais bien trop loin dans le temps : ne doit pas être suggéré à sa place.
         await pool.query(
-            `INSERT INTO paiements (client_id, montant, methode_paiement, statut, date_paiement) VALUES ($1, 15000, 'WAVE', 'VALIDE', '2026-01-01')`,
-            [client.id]
+            `INSERT INTO paiements (tenant_id, client_id, montant, methode_paiement, statut, date_paiement) VALUES ($1, $2, 15000, 'WAVE', 'VALIDE', '2026-01-01')`,
+            [tenantId, client.id]
         );
 
         await pool.query(
-            `INSERT INTO releves_bancaires (date_operation, libelle, montant, type_operation, cree_par) VALUES ('2026-02-12', 'VIR WAVE', 15000, 'CREDIT', NULL)`
+            `INSERT INTO releves_bancaires (tenant_id, date_operation, libelle, montant, type_operation, cree_par) VALUES ($1, '2026-02-12', 'VIR WAVE', 15000, 'CREDIT', NULL)`,
+            [tenantId]
         );
 
         const res = await request(app).get('/api/comptabilite/releves-bancaires').set('Authorization', `Bearer ${token}`);
@@ -74,17 +77,29 @@ describe('comptabilite — import de relevé bancaire et suggestions de rapproch
     });
 
     test('ne suggère rien quand aucun paiement ne correspond (montant différent)', async () => {
-        const client = await creerClient(pool, { nom: 'Client Sans Match' });
+        const client = await creerClient(pool, { tenant_id: tenantId, nom: 'Client Sans Match' });
         await pool.query(
-            `INSERT INTO paiements (client_id, montant, methode_paiement, statut, date_paiement) VALUES ($1, 3000, 'WAVE', 'VALIDE', '2026-02-10')`,
-            [client.id]
+            `INSERT INTO paiements (tenant_id, client_id, montant, methode_paiement, statut, date_paiement) VALUES ($1, $2, 3000, 'WAVE', 'VALIDE', '2026-02-10')`,
+            [tenantId, client.id]
         );
         await pool.query(
-            `INSERT INTO releves_bancaires (date_operation, libelle, montant, type_operation, cree_par) VALUES ('2026-02-10', 'VIR INCONNU', 15000, 'CREDIT', NULL)`
+            `INSERT INTO releves_bancaires (tenant_id, date_operation, libelle, montant, type_operation, cree_par) VALUES ($1, '2026-02-10', 'VIR INCONNU', 15000, 'CREDIT', NULL)`,
+            [tenantId]
         );
 
         const res = await request(app).get('/api/comptabilite/releves-bancaires').set('Authorization', `Bearer ${token}`);
         const releve = res.body.find((r) => r.libelle === 'VIR INCONNU');
         expect(releve.suggestion).toBeNull();
+    });
+
+    test("un relevé d'une autre organisation n'apparaît jamais dans la liste (isolation)", async () => {
+        const autreTenantId = await creerOrganisation(pool, 'Autre Ferme');
+        await pool.query(
+            `INSERT INTO releves_bancaires (tenant_id, date_operation, libelle, montant, type_operation, cree_par) VALUES ($1, '2026-02-10', 'VIR AUTRE FERME', 5000, 'CREDIT', NULL)`,
+            [autreTenantId]
+        );
+
+        const res = await request(app).get('/api/comptabilite/releves-bancaires').set('Authorization', `Bearer ${token}`);
+        expect(res.body.find((r) => r.libelle === 'VIR AUTRE FERME')).toBeUndefined();
     });
 });

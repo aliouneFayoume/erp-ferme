@@ -10,8 +10,8 @@ module.exports = function utilisateursRoutes(pool) {
     // comptes actifs (ex: assignation d'une livraison à un livreur) filtrent `actif` côté front.
     router.get('/', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
         const { role } = req.query;
-        const params = [];
-        let where = `u.deleted_at IS NULL`;
+        const params = [req.user.tenant_id];
+        let where = `u.tenant_id = $1 AND u.deleted_at IS NULL`;
         if (role) {
             params.push(role);
             where += ` AND r.nom = $${params.length}`;
@@ -44,15 +44,16 @@ module.exports = function utilisateursRoutes(pool) {
 
             const hash = await bcrypt.hash(password, 10);
             const result = await pool.query(
-                `INSERT INTO utilisateurs (nom_complet, email, mot_de_passe_hash, role_id, secteur_id, actif)
-                 VALUES ($1, $2, $3, $4, $5, TRUE) RETURNING id, nom_complet, email, secteur_id, actif, cree_le`,
-                [nom_complet, email, hash, roleRes.rows[0].id, role === 'chef_prod' ? secteur_id || null : null]
+                `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, secteur_id, actif)
+                 VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING id, nom_complet, email, secteur_id, actif, cree_le`,
+                [req.user.tenant_id, nom_complet, email, hash, roleRes.rows[0].id, role === 'chef_prod' ? secteur_id || null : null]
             );
             await logAudit(pool, {
                 table: 'utilisateurs',
                 rowId: result.rows[0].id,
                 action: 'CREATE',
                 userId: req.user.id,
+                tenantId: req.user.tenant_id,
                 details: { nom_complet, email, role, secteur_id },
             });
             res.status(201).json({ ...result.rows[0], role });
@@ -84,12 +85,12 @@ module.exports = function utilisateursRoutes(pool) {
                     role_id = COALESCE($3, role_id),
                     secteur_id = $4,
                     actif = COALESCE($5, actif)
-                 WHERE id = $6 AND deleted_at IS NULL
+                 WHERE id = $6 AND tenant_id = $7 AND deleted_at IS NULL
                  RETURNING id, nom_complet, email, secteur_id, actif`,
-                [nom_complet || null, email || null, roleId, role === 'chef_prod' ? secteur_id || null : null, actif, req.params.id]
+                [nom_complet || null, email || null, roleId, role === 'chef_prod' ? secteur_id || null : null, actif, req.params.id, req.user.tenant_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Utilisateur introuvable.' });
-            await logAudit(pool, { table: 'utilisateurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, details: { nom_complet, email, role, secteur_id, actif } });
+            await logAudit(pool, { table: 'utilisateurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { nom_complet, email, role, secteur_id, actif } });
             res.json({ ...result.rows[0], role });
         } catch (err) {
             console.error(err);
@@ -105,12 +106,12 @@ module.exports = function utilisateursRoutes(pool) {
         try {
             const hash = await bcrypt.hash(password, 10);
             const result = await pool.query(
-                `UPDATE utilisateurs SET mot_de_passe_hash = $1 WHERE id = $2 AND deleted_at IS NULL RETURNING id`,
-                [hash, req.params.id]
+                `UPDATE utilisateurs SET mot_de_passe_hash = $1 WHERE id = $2 AND tenant_id = $3 AND deleted_at IS NULL RETURNING id`,
+                [hash, req.params.id, req.user.tenant_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Utilisateur introuvable.' });
             // Ne jamais journaliser le mot de passe, même haché : seule l'action est tracée.
-            await logAudit(pool, { table: 'utilisateurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, details: { motDePasseModifie: true } });
+            await logAudit(pool, { table: 'utilisateurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { motDePasseModifie: true } });
             res.json({ message: 'Mot de passe mis à jour.' });
         } catch (err) {
             console.error(err);
@@ -123,11 +124,11 @@ module.exports = function utilisateursRoutes(pool) {
             return res.status(400).json({ erreur: 'Vous ne pouvez pas supprimer votre propre compte.' });
         }
         const result = await pool.query(
-            `UPDATE utilisateurs SET deleted_at = CURRENT_TIMESTAMP, actif = FALSE WHERE id = $1 AND deleted_at IS NULL RETURNING id`,
-            [req.params.id]
+            `UPDATE utilisateurs SET deleted_at = CURRENT_TIMESTAMP, actif = FALSE WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL RETURNING id`,
+            [req.params.id, req.user.tenant_id]
         );
         if (result.rows.length === 0) return res.status(404).json({ erreur: 'Utilisateur introuvable.' });
-        await logAudit(pool, { table: 'utilisateurs', rowId: req.params.id, action: 'DELETE', userId: req.user.id });
+        await logAudit(pool, { table: 'utilisateurs', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
         res.status(204).end();
     });
 

@@ -23,6 +23,12 @@ module.exports = function portailRoutes(pool) {
         if (!telephone || !pin) {
             return res.status(400).json({ erreur: 'Téléphone et code sont obligatoires.' });
         }
+        // telephone reste unique globalement (pas par organisation) — même choix pragmatique que
+        // utilisateurs.email (voir schema.sql) : le login ne connaît pas l'organisation au moment de
+        // la requête, donc scoper par tenant nécessiterait de la résoudre autrement au préalable
+        // (sous-domaine par ferme, non construit). Si deux fermes distinctes doivent un jour pouvoir
+        // avoir chacune un client avec le même numéro, cette contrainte devra être revue en même
+        // temps qu'une résolution de tenant côté login.
         const result = await pool.query(
             `SELECT id, nom, telephone, type_client, pin_hash, pin_version FROM clients WHERE telephone = $1 AND deleted_at IS NULL`,
             [telephone]
@@ -126,8 +132,8 @@ module.exports = function portailRoutes(pool) {
             return res.status(400).json({ erreur: 'Le sujet est obligatoire.' });
         }
         const result = await pool.query(
-            `INSERT INTO tickets (client_id, sujet, description) VALUES ($1, $2, $3) RETURNING *`,
-            [req.client.id, sujet.trim(), description || null]
+            `INSERT INTO tickets (tenant_id, client_id, sujet, description) VALUES ($1, $2, $3, $4) RETURNING *`,
+            [req.client.tenant_id, req.client.id, sujet.trim(), description || null]
         );
         res.status(201).json(result.rows[0]);
     });

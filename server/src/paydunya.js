@@ -4,18 +4,23 @@
 //
 // Endpoints/format vérifiés à partir du code source du SDK officiel
 // (github.com/paydunyadev/paydunya-node-master), pas seulement de la doc publique.
+//
+// Chaque organisation est son propre agrégateur PayDunya (ses propres identifiants, son propre
+// compte marchand) — ces fonctions ne lisent donc plus de clés depuis process.env, elles prennent
+// les identifiants de l'organisation courante en paramètre (voir paymentConfig.js pour comment ils
+// sont récupérés/déchiffrés).
 
-const BASE_URL =
-  (process.env.PAYDUNYA_MODE || 'test').toLowerCase() === 'live'
-    ? 'https://app.paydunya.com/api/v1'
-    : 'https://app.paydunya.com/sandbox-api/v1';
+function baseUrl(mode) {
+  return (mode || 'test').toLowerCase() === 'live' ? 'https://app.paydunya.com/api/v1' : 'https://app.paydunya.com/sandbox-api/v1';
+}
 
-function headers() {
+function headers(credentials) {
   return {
     'Content-Type': 'application/json',
-    'PAYDUNYA-MASTER-KEY': process.env.PAYDUNYA_MASTER_KEY,
-    'PAYDUNYA-PRIVATE-KEY': process.env.PAYDUNYA_PRIVATE_KEY,
-    'PAYDUNYA-TOKEN': process.env.PAYDUNYA_TOKEN,
+    'PAYDUNYA-MASTER-KEY': credentials.masterKey,
+    'PAYDUNYA-PRIVATE-KEY': credentials.privateKey,
+    'PAYDUNYA-PUBLIC-KEY': credentials.publicKey,
+    'PAYDUNYA-TOKEN': credentials.token,
   };
 }
 
@@ -29,17 +34,19 @@ function publicUrl() {
  *
  * `referenceInterne` est renvoyé tel quel dans `custom_data` par l'API de confirmation — il sert
  * de vérification croisée en plus du token lui-même lors du traitement de l'IPN.
+ * `credentials` : { mode, masterKey, privateKey, publicKey, token } — identifiants de
+ * l'organisation qui initie ce paiement (jamais ceux d'une autre organisation).
  */
-async function creerFacture({ montant, description, referenceInterne }) {
-  const res = await fetch(`${BASE_URL}/checkout-invoice/create`, {
+async function creerFacture({ montant, description, referenceInterne, storeName, credentials }) {
+  const res = await fetch(`${baseUrl(credentials.mode)}/checkout-invoice/create`, {
     method: 'POST',
-    headers: headers(),
+    headers: headers(credentials),
     body: JSON.stringify({
       invoice: {
         total_amount: Math.round(Number(montant)),
         description,
       },
-      store: { name: 'Ferme Massla' },
+      store: { name: storeName || 'Ferme' },
       actions: {
         callback_url: `${publicUrl()}/api/finance/paiements/ipn`,
         return_url: `${publicUrl()}/?paiement=succes`,
@@ -57,14 +64,19 @@ async function creerFacture({ montant, description, referenceInterne }) {
 }
 
 /**
- * Vérifie de façon authentifiée (avec nos propres clés API) le statut réel d'une facture auprès
- * du serveur PayDunya, plutôt que de faire confiance au contenu brut de la notification IPN
- * reçue. Seule une requête portant notre clé privée peut obtenir cette réponse : c'est cette
- * authentification qui garantit l'origine de la donnée, indépendamment du corps de l'IPN entrante.
+ * Vérifie de façon authentifiée (avec les clés API de l'organisation propriétaire du paiement) le
+ * statut réel d'une facture auprès du serveur PayDunya, plutôt que de faire confiance au contenu
+ * brut de la notification IPN reçue. Seule une requête portant la bonne clé privée peut obtenir
+ * cette réponse : c'est cette authentification qui garantit l'origine de la donnée, indépendamment
+ * du corps de l'IPN entrante.
+ *
+ * Comme l'IPN arrive sans contexte utilisateur/tenant, l'appelant doit d'abord retrouver quelle
+ * organisation possède ce paiement (recherche par token, sans filtre tenant, voir finance.js) avant
+ * de pouvoir fournir ses `credentials` ici — impossible de vérifier une facture avec les mauvaises clés.
  */
-async function confirmerFacture(token) {
-  const res = await fetch(`${BASE_URL}/checkout-invoice/confirm/${token}`, {
-    headers: headers(),
+async function confirmerFacture(token, credentials) {
+  const res = await fetch(`${baseUrl(credentials.mode)}/checkout-invoice/confirm/${token}`, {
+    headers: headers(credentials),
   });
 
   const data = await res.json();

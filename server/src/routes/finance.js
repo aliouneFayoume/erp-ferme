@@ -3,6 +3,7 @@ const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
 const { genererFacturePDF } = require('../facturePdf');
 const { creerFacture, confirmerFacture } = require('../paydunya');
+const { getPaydunyaConfig } = require('../paymentConfig');
 
 module.exports = function financeRoutes(pool) {
     const router = express.Router();
@@ -16,31 +17,34 @@ module.exports = function financeRoutes(pool) {
         // une facture en retard dès le jour même de son échéance au lieu du lendemain.
         const aujourdhui = new Date().toISOString().slice(0, 10);
         await pool.query(
-            `UPDATE factures SET statut = 'EN_RETARD' WHERE statut = 'A_PAYER' AND date_echeance < $1 AND montant_restant > 0`,
-            [aujourdhui]
+            `UPDATE factures SET statut = 'EN_RETARD' WHERE tenant_id = $1 AND statut = 'A_PAYER' AND date_echeance < $2 AND montant_restant > 0`,
+            [req.user.tenant_id, aujourdhui]
         );
         const result = await pool.query(
             `SELECT f.*, c.numero_commande, cl.nom as client_nom, cl.type_client
              FROM factures f
              JOIN commandes c ON f.commande_id = c.id
              JOIN clients cl ON c.client_id = cl.id
-             ORDER BY f.date_echeance ASC LIMIT 200`
+             WHERE f.tenant_id = $1
+             ORDER BY f.date_echeance ASC LIMIT 200`,
+            [req.user.tenant_id]
         );
         res.json(result.rows);
     });
 
     /** Génère et télécharge la facture PDF correspondante (client, lignes, montants, échéance). */
     router.get('/factures/:id/pdf', requireAuth, checkRole(['comptable']), async (req, res) => {
+        const tenantId = req.user.tenant_id;
         const factureRes = await pool.query(
             `SELECT f.*, c.numero_commande, c.montant_total, c.client_id
              FROM factures f JOIN commandes c ON f.commande_id = c.id
-             WHERE f.id = $1`,
-            [req.params.id]
+             WHERE f.id = $1 AND f.tenant_id = $2`,
+            [req.params.id, tenantId]
         );
         if (factureRes.rows.length === 0) return res.status(404).json({ erreur: 'Facture introuvable.' });
         const facture = factureRes.rows[0];
 
-        const clientRes = await pool.query(`SELECT * FROM clients WHERE id = $1`, [facture.client_id]);
+        const clientRes = await pool.query(`SELECT * FROM clients WHERE id = $1 AND tenant_id = $2`, [facture.client_id, tenantId]);
         const lignesRes = await pool.query(
             `SELECT lc.*, p.nom as produit_nom FROM lignes_commande lc JOIN produits p ON lc.produit_id = p.id WHERE lc.commande_id = $1`,
             [facture.commande_id]
@@ -58,29 +62,43 @@ module.exports = function financeRoutes(pool) {
 
     router.get('/paiements', requireAuth, checkRole(['comptable']), async (req, res) => {
         const result = await pool.query(
-            `SELECT p.*, cl.nom as client_nom FROM paiements p JOIN clients cl ON p.client_id = cl.id ORDER BY p.date_paiement DESC LIMIT 200`
+            `SELECT p.*, cl.nom as client_nom FROM paiements p JOIN clients cl ON p.client_id = cl.id WHERE p.tenant_id = $1 ORDER BY p.date_paiement DESC LIMIT 200`,
+            [req.user.tenant_id]
         );
         res.json(result.rows);
     });
 
     /**
-     * Initie un paiement Mobile Money (Wave/Orange Money) ou carte via PayDunya : crée une
-     * facture PayDunya réelle et renvoie l'URL de paiement hébergée vers laquelle le frontend doit
-     * rediriger le client. Le paiement reste EN_ATTENTE tant que l'IPN de confirmation n'est pas
-     * arrivé (voir /paiements/ipn).
+     * Initie un paiement Mobile Money (Wave/Orange Money) ou carte via PayDunya : crée une facture
+     * PayDunya réelle — avec les identifiants PayDunya propres à l'organisation courante, chaque
+     * organisation étant son propre agrégateur — et renvoie l'URL de paiement hébergée vers
+     * laquelle le frontend doit rediriger le client. Le paiement reste EN_ATTENTE tant que l'IPN de
+     * confirmation n'est pas arrivé (voir /paiements/ipn).
      */
     router.post('/paiements/initier', requireAuth, checkRole(['admin', 'comptable']), async (req, res) => {
+        const tenantId = req.user.tenant_id;
         const { commande_id, client_id, montant, provider } = req.body;
 
-        const commandeRes = await pool.query(`SELECT numero_commande FROM commandes WHERE id = $1`, [commande_id]);
+        const [commandeRes, organisationRes, credentials] = await Promise.all([
+            pool.query(`SELECT numero_commande FROM commandes WHERE id = $1 AND tenant_id = $2`, [commande_id, tenantId]),
+            pool.query(`SELECT nom FROM organisations WHERE id = $1`, [tenantId]),
+            getPaydunyaConfig(pool, tenantId),
+        ]);
         if (commandeRes.rows.length === 0) return res.status(404).json({ erreur: 'Commande introuvable.' });
+        if (!credentials) {
+            return res.status(400).json({
+                erreur: "Aucun agrégateur de paiement configuré pour votre organisation. Renseignez vos identifiants PayDunya dans Réglages > Paiements.",
+            });
+        }
 
         let facture;
         try {
             facture = await creerFacture({
                 montant,
-                description: `Commande ${commandeRes.rows[0].numero_commande} — Ferme Massla`,
+                description: `Commande ${commandeRes.rows[0].numero_commande}`,
                 referenceInterne: `${commande_id}-${Date.now()}`,
+                storeName: organisationRes.rows[0]?.nom,
+                credentials,
             });
         } catch (err) {
             console.error('Échec de création de facture PayDunya:', err.message);
@@ -88,19 +106,23 @@ module.exports = function financeRoutes(pool) {
         }
 
         const result = await pool.query(
-            `INSERT INTO paiements (commande_id, client_id, montant, methode_paiement, reference_transaction, statut)
-             VALUES ($1, $2, $3, $4, $5, 'EN_ATTENTE') RETURNING *`,
-            [commande_id, client_id, montant, provider || 'WAVE', facture.token]
+            `INSERT INTO paiements (tenant_id, commande_id, client_id, montant, methode_paiement, reference_transaction, statut)
+             VALUES ($1, $2, $3, $4, $5, $6, 'EN_ATTENTE') RETURNING *`,
+            [tenantId, commande_id, client_id, montant, provider || 'WAVE', facture.token]
         );
-        await logAudit(pool, { table: 'paiements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, details: { commande_id, montant, provider } });
+        await logAudit(pool, { table: 'paiements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: { commande_id, montant, provider } });
         res.status(201).json({ ...result.rows[0], checkout_url: facture.url });
     });
 
     /**
      * IPN (Instant Payment Notification) appelée par PayDunya après une tentative de paiement.
-     * Pas de checkRole : appelée par un serveur externe. Sécurité : on ne fait JAMAIS confiance au
-     * contenu de cette requête pour créditer quoi que ce soit — on relit le token puis on interroge
-     * l'API PayDunya nous-mêmes (avec nos propres clés) pour connaître le statut réel de la facture.
+     * Pas de checkRole : appelée par un serveur externe, sans contexte utilisateur — donc sans
+     * tenant connu a priori. Sécurité : on ne fait JAMAIS confiance au contenu de cette requête pour
+     * créditer quoi que ce soit — on relit le token, on retrouve l'organisation propriétaire du
+     * paiement correspondant (recherche par token, volontairement sans filtre tenant puisqu'on ne le
+     * connaît pas encore), PUIS on interroge l'API PayDunya avec les clés de CETTE organisation pour
+     * connaître le statut réel de la facture — impossible de vérifier une facture avec les clés
+     * d'une autre organisation.
      */
     router.post('/paiements/ipn', async (req, res) => {
         const body = req.body || {};
@@ -115,9 +137,26 @@ module.exports = function financeRoutes(pool) {
         }
         if (!token) return res.status(400).json({ erreur: 'Token de facture manquant dans la notification.' });
 
+        // Recherche globale (sans tenant_id, inconnu à ce stade) : reference_transaction porte le
+        // token PayDunya, généré par PayDunya lui-même donc déjà unique tous tenants confondus.
+        const paiementInitial = await pool.query(
+            `SELECT tenant_id FROM paiements WHERE reference_transaction = $1`,
+            [token]
+        );
+        if (paiementInitial.rows.length === 0) {
+            return res.status(200).json({ message: 'Paiement introuvable ou déjà traité (idempotence).' });
+        }
+        const tenantId = paiementInitial.rows[0].tenant_id;
+
+        const credentials = await getPaydunyaConfig(pool, tenantId);
+        if (!credentials) {
+            console.error(`IPN PayDunya reçue pour le tenant ${tenantId}, mais aucun identifiant configuré.`);
+            return res.status(500).json({ erreur: 'Configuration de paiement introuvable pour cette organisation.' });
+        }
+
         let confirmation;
         try {
-            confirmation = await confirmerFacture(token);
+            confirmation = await confirmerFacture(token, credentials);
         } catch (err) {
             console.error('Échec de confirmation PayDunya (IPN):', err.message);
             return res.status(502).json({ erreur: 'Impossible de vérifier le paiement auprès de PayDunya.' });
@@ -136,7 +175,7 @@ module.exports = function financeRoutes(pool) {
             // FOR UPDATE : verrouille la ligne le temps de la transaction pour qu'une IPN dupliquée
             // (retry légitime de PayDunya) ne puisse pas valider et créditer deux fois le même paiement.
             const paiementRes = await client.query(
-                `SELECT id, commande_id, client_id FROM paiements WHERE reference_transaction = $1 AND statut = 'EN_ATTENTE' FOR UPDATE`,
+                `SELECT id, tenant_id, commande_id, client_id FROM paiements WHERE reference_transaction = $1 AND statut = 'EN_ATTENTE' FOR UPDATE`,
                 [token]
             );
             if (paiementRes.rows.length === 0) {
@@ -156,13 +195,13 @@ module.exports = function financeRoutes(pool) {
             await client.query(
                 `UPDATE factures SET montant_restant = GREATEST(montant_restant + $1, 0),
                      statut = CASE WHEN montant_restant + $1 <= 0 THEN 'PAYEE' ELSE 'PAYEE_PARTIEL' END
-                 WHERE commande_id = $2`,
-                [moinsMontant, paiement.commande_id]
+                 WHERE commande_id = $2 AND tenant_id = $3`,
+                [moinsMontant, paiement.commande_id, paiement.tenant_id]
             );
 
-            const clientRow = await client.query(`SELECT type_client FROM clients WHERE id = $1`, [paiement.client_id]);
+            const clientRow = await client.query(`SELECT type_client FROM clients WHERE id = $1 AND tenant_id = $2`, [paiement.client_id, paiement.tenant_id]);
             if (clientRow.rows[0]?.type_client === 'B2B') {
-                await client.query(`UPDATE clients SET solde_encours = GREATEST(solde_encours + $1, 0) WHERE id = $2`, [moinsMontant, paiement.client_id]);
+                await client.query(`UPDATE clients SET solde_encours = GREATEST(solde_encours + $1, 0) WHERE id = $2 AND tenant_id = $3`, [moinsMontant, paiement.client_id, paiement.tenant_id]);
             }
 
             await client.query('COMMIT');
@@ -170,6 +209,7 @@ module.exports = function financeRoutes(pool) {
                 table: 'paiements',
                 rowId: paiement.id,
                 action: 'UPDATE',
+                tenantId: paiement.tenant_id,
                 details: { token, montant: confirmation.montant, provider_reference: confirmation.providerReference },
             });
             res.status(200).json({ message: 'Paiement PayDunya confirmé, caisse mise à jour.' });

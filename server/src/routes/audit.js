@@ -8,7 +8,9 @@ module.exports = function auditRoutes(pool) {
         const result = await pool.query(
             `SELECT a.*, u.nom_complet as utilisateur_nom FROM audit_logs a
              LEFT JOIN utilisateurs u ON a.utilisateur_id = u.id
-             ORDER BY a.cree_le DESC LIMIT 100`
+             WHERE a.tenant_id = $1
+             ORDER BY a.cree_le DESC LIMIT 100`,
+            [req.user.tenant_id]
         );
         res.json(result.rows);
     });
