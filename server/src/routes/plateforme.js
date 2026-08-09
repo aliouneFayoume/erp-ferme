@@ -43,7 +43,12 @@ module.exports = function plateformeRoutes(pool) {
             res.status(201).json({ tenantId, admin: { id: admin.id, nom_complet: admin.nom_complet, email: admin.email, organisation_nom: nomFermeCree } });
         } catch (err) {
             if (err.statut) return res.status(err.statut).json({ erreur: err.message });
-            if (err.code === '23505') return res.status(409).json({ erreur: 'Cette adresse email est déjà utilisée.' });
+            if (err.code === '23505') {
+                if (err.constraint === 'organisations_slug_key') {
+                    return res.status(409).json({ erreur: 'Ce nom de ferme est déjà utilisé, réessayez.' });
+                }
+                return res.status(409).json({ erreur: 'Cette adresse email est déjà utilisée.' });
+            }
             console.error(err);
             res.status(500).json({ erreur: 'Erreur lors de la création de la ferme.' });
         }
@@ -57,7 +62,7 @@ module.exports = function plateformeRoutes(pool) {
             // fonctionnalité manquante). Volumes concernés (nombre de fermes, de tickets) restent
             // largement dans une fourchette où trois requêtes à plat + un tally JS sont insignifiants.
             const [orgsRes, ticketsRes, usersRes] = await Promise.all([
-                req.db.query(`SELECT id, nom, cree_le FROM organisations WHERE deleted_at IS NULL ORDER BY cree_le DESC`),
+                req.db.query(`SELECT id, nom, slug, cree_le FROM organisations WHERE deleted_at IS NULL ORDER BY cree_le DESC`),
                 req.db.query(`SELECT tenant_id, statut FROM tickets WHERE deleted_at IS NULL`),
                 req.db.query(`SELECT tenant_id FROM utilisateurs WHERE actif = TRUE AND deleted_at IS NULL`),
             ]);
@@ -111,6 +116,33 @@ module.exports = function plateformeRoutes(pool) {
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: 'Erreur lors de la suppression de la ferme.' });
+        }
+    });
+
+    /**
+     * Modifie le sous-domaine (<slug>.massla.sn, voir routes/public.js) d'une ferme — généré
+     * automatiquement à la création (creerFerme.js), mais ajustable ici si le nom auto-dérivé ne
+     * convient pas. Format volontairement strict (DNS-safe) : minuscules, chiffres, tirets, jamais
+     * en début/fin.
+     */
+    router.put('/organisations/:id/slug', ...garde, async (req, res) => {
+        try {
+            const tenantId = Number(req.params.id);
+            const slug = String(req.body.slug || '').trim().toLowerCase();
+            if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) || slug.length > 63) {
+                return res.status(400).json({ erreur: 'Sous-domaine invalide (minuscules, chiffres et tirets uniquement, sans tiret en début/fin).' });
+            }
+            const result = await req.db.query(
+                `UPDATE organisations SET slug = $1 WHERE id = $2 AND deleted_at IS NULL RETURNING id, slug`,
+                [slug, tenantId]
+            );
+            if (result.rows.length === 0) return res.status(404).json({ erreur: 'Organisation introuvable.' });
+            await logAudit(req.db, { table: 'organisations', rowId: tenantId, action: 'UPDATE', userId: req.user.id, tenantId, details: { slug } });
+            res.json(result.rows[0]);
+        } catch (err) {
+            if (err.code === '23505') return res.status(409).json({ erreur: 'Ce sous-domaine est déjà utilisé par une autre ferme.' });
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la mise à jour du sous-domaine.' });
         }
     });
 

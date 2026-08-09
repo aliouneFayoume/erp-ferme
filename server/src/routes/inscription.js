@@ -58,8 +58,14 @@ module.exports = function inscriptionRoutes(pool) {
         } catch (err) {
             if (err.statut) return res.status(err.statut).json({ erreur: err.message });
             if (err.code === '23505') {
-                // contrainte unique violée (utilisateurs.email) — jamais tenant_id, qui n'a pas de
-                // contrainte unique propre.
+                // Deux contraintes uniques possibles ici : utilisateurs.email (le cas courant) ou,
+                // beaucoup plus rarement, organisations.slug en cas de course entre deux créations
+                // du même nom de ferme au même instant (genererSlugUnique vérifie avant l'insertion,
+                // mais ne verrouille rien entre-temps) — la base tranche en dernier ressort dans les
+                // deux cas.
+                if (err.constraint === 'organisations_slug_key') {
+                    return res.status(409).json({ erreur: 'Ce nom de ferme est déjà utilisé, réessayez.' });
+                }
                 return res.status(409).json({ erreur: 'Cette adresse email est déjà utilisée.' });
             }
             console.error(err);

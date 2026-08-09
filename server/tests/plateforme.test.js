@@ -350,3 +350,76 @@ describe('plateforme — suppression de ferme', () => {
         expect(res.status).toBe(403);
     });
 });
+
+describe('plateforme — sous-domaines (slug)', () => {
+    let pool;
+    let app;
+    let tenantA;
+    let tenantB;
+    let tokenSuperviseur;
+    let tokenAdminNormal;
+
+    beforeEach(async () => {
+        pool = createTestPool();
+        await seedRolesEtSecteurs(pool);
+        tenantA = await creerOrganisation(pool, 'Ferme A');
+        tenantB = await creerOrganisation(pool, 'Ferme B');
+        await pool.query(`UPDATE organisations SET slug = 'ferme-a' WHERE id = $1`, [tenantA]);
+        await pool.query(`UPDATE organisations SET slug = 'ferme-b' WHERE id = $1`, [tenantB]);
+        tokenSuperviseur = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantA, estSuperviseurPlateforme: true });
+        tokenAdminNormal = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantA, estSuperviseurPlateforme: false });
+        app = buildApp(pool, ['plateforme']);
+    });
+
+    afterEach(async () => {
+        await pool.end();
+    });
+
+    test('le superviseur peut modifier le sous-domaine d\'une ferme', async () => {
+        const res = await request(app)
+            .put(`/api/plateforme/organisations/${tenantB}/slug`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ slug: 'nouveau-nom' });
+
+        expect(res.status).toBe(200);
+        expect(res.body.slug).toBe('nouveau-nom');
+        const org = await pool.query(`SELECT slug FROM organisations WHERE id = $1`, [tenantB]);
+        expect(org.rows[0].slug).toBe('nouveau-nom');
+    });
+
+    test('rejette un sous-domaine déjà utilisé par une autre ferme', async () => {
+        const res = await request(app)
+            .put(`/api/plateforme/organisations/${tenantB}/slug`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ slug: 'ferme-a' });
+
+        expect(res.status).toBe(409);
+    });
+
+    test('rejette un format invalide (espaces, caractères spéciaux, tiret en bordure)', async () => {
+        const invalides = ['ferme a', '-ferme-c', 'ferme-c-', '', 'ferme_c', 'ferme@c'];
+        for (const slug of invalides) {
+            const res = await request(app)
+                .put(`/api/plateforme/organisations/${tenantB}/slug`)
+                .set('Authorization', `Bearer ${tokenSuperviseur}`)
+                .send({ slug });
+            expect(res.status).toBe(400);
+        }
+    });
+
+    test('un admin sans le flag superviseur ne peut pas modifier de sous-domaine', async () => {
+        const res = await request(app)
+            .put(`/api/plateforme/organisations/${tenantB}/slug`)
+            .set('Authorization', `Bearer ${tokenAdminNormal}`)
+            .send({ slug: 'nouveau-nom' });
+        expect(res.status).toBe(403);
+    });
+
+    test('renvoie 404 pour une ferme inexistante', async () => {
+        const res = await request(app)
+            .put(`/api/plateforme/organisations/999999/slug`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ slug: 'nouveau-nom' });
+        expect(res.status).toBe(404);
+    });
+});

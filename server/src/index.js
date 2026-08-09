@@ -48,6 +48,7 @@ async function main() {
         console.log('Données de démonstration chargées.');
     }
 
+    app.use('/api/public', require('./routes/public')(pool));
     app.use('/api/auth', require('./routes/auth')(pool));
     app.use('/api/inscription', require('./routes/inscription')(pool));
     app.use('/api/dashboard', require('./routes/dashboard')(pool));

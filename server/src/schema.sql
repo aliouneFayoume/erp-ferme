@@ -19,6 +19,12 @@
 CREATE TABLE organisations (
     id SERIAL PRIMARY KEY,
     nom VARCHAR(100) NOT NULL,
+    -- Sous-domaine (<slug>.massla.sn) utilisé UNIQUEMENT pour l'image de marque avant connexion
+    -- (routes/public.js) : la ferme racine massla.sn continue de servir Massla par défaut, sans
+    -- changer la logique de connexion elle-même (email reste global, voir utilisateurs.email).
+    -- Nullable : les fixtures de test (verify-rls.js) n'en ont pas besoin ; toute vraie ferme créée
+    -- via creerFerme.js en reçoit toujours un.
+    slug VARCHAR(63) UNIQUE,
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     -- Soft delete : une ferme qui n'est plus cliente disparaît de la vue plateforme (voir
     -- routes/plateforme.js) et son accès est bloqué (requireAuth, auth.js), mais ses données

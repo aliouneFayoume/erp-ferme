@@ -312,6 +312,8 @@ async function selectTab(key) {
 }
 
 function buildShell(client) {
+  document.querySelector('.brand').textContent = client.organisation_nom || 'Ferme Massla';
+  document.title = client.organisation_nom ? `${client.organisation_nom} — Espace client` : 'Ferme Massla — Espace client';
   document.getElementById('who-name').textContent = client.nom;
   const nav = document.getElementById('tabs');
   nav.innerHTML = '';

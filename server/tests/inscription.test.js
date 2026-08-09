@@ -90,6 +90,23 @@ describe('inscription — création self-service d\'une nouvelle ferme', () => {
         // pas via cette suite — même limite déjà documentée pour RLS (voir verify-rls.js).
     });
 
+    test('génère un slug (sous-domaine) dérivé du nom de la ferme', async () => {
+        const res = await request(app).post('/api/inscription').send(payloadValide({ nomFerme: 'Ferme Écologique du Sénégal', adminEmail: `slug-${Date.now()}@test.sn` }));
+        expect(res.status).toBe(201);
+        const org = await pool.query(`SELECT slug FROM organisations WHERE id = $1`, [res.body.utilisateur.tenant_id]);
+        expect(org.rows[0].slug).toBe('ferme-ecologique-du-senegal');
+    });
+
+    test('deux fermes de même nom reçoivent des slugs distincts (suffixe -2)', async () => {
+        const resA = await request(app).post('/api/inscription').send(payloadValide({ nomFerme: 'Même Nom', adminEmail: `meme-a-${Date.now()}@test.sn` }));
+        const resB = await request(app).post('/api/inscription').send(payloadValide({ nomFerme: 'Même Nom', adminEmail: `meme-b-${Date.now()}@test.sn` }));
+
+        const orgA = await pool.query(`SELECT slug FROM organisations WHERE id = $1`, [resA.body.utilisateur.tenant_id]);
+        const orgB = await pool.query(`SELECT slug FROM organisations WHERE id = $1`, [resB.body.utilisateur.tenant_id]);
+        expect(orgA.rows[0].slug).toBe('meme-nom');
+        expect(orgB.rows[0].slug).toBe('meme-nom-2');
+    });
+
     test('deux fermes créées séparément sont bien isolées (secteurs et admin distincts)', async () => {
         const resA = await request(app).post('/api/inscription').send(payloadValide({ nomFerme: 'Ferme Alpha', adminEmail: `alpha-${Date.now()}@test.sn` }));
         const resB = await request(app).post('/api/inscription').send(payloadValide({ nomFerme: 'Ferme Beta', adminEmail: `beta-${Date.now()}@test.sn` }));

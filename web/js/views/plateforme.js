@@ -22,12 +22,16 @@ window.Views.plateforme = {
         <p class="desc">Vue lecture seule sur toutes les organisations — pour répondre à un ticket, connectez-vous en tant qu'administrateur de la ferme concernée.</p>
         <button id="btn-creer-ferme" style="margin-bottom: 1rem;">Créer une nouvelle ferme</button>
         <table>
-          <thead><tr><th>Ferme</th><th>Créée le</th><th>Utilisateurs actifs</th><th>Tickets ouverts</th><th>Tickets (total)</th><th></th></tr></thead>
+          <thead><tr><th>Ferme</th><th>Sous-domaine</th><th>Créée le</th><th>Utilisateurs actifs</th><th>Tickets ouverts</th><th>Tickets (total)</th><th></th></tr></thead>
           <tbody>
             ${organisations
               .map(
                 (o) => `<tr>
                   <td>${esc(o.nom)}</td>
+                  <td>
+                    ${o.slug ? `<code>${esc(o.slug)}.massla.sn</code>` : '<span class="desc">—</span>'}
+                    <button class="secondary" data-modifier-slug="${o.id}" data-slug="${esc(o.slug || '')}" style="margin-left:6px;">Modifier</button>
+                  </td>
                   <td>${fmtDate(o.cree_le)}</td>
                   <td>${o.utilisateurs_actifs}</td>
                   <td>${o.tickets_ouverts > 0 ? `<span class="badge warn">${o.tickets_ouverts}</span>` : '0'}</td>
@@ -85,6 +89,9 @@ window.Views.plateforme = {
     });
     container.querySelectorAll('button[data-supprimer]').forEach((btn) => {
       btn.addEventListener('click', () => supprimerFerme(container, btn.dataset.supprimer, btn.dataset.nom));
+    });
+    container.querySelectorAll('button[data-modifier-slug]').forEach((btn) => {
+      btn.addEventListener('click', () => modifierSlug(container, btn.dataset.modifierSlug, btn.dataset.slug));
     });
 
     container.querySelector('#filtre-statut-plateforme').addEventListener('change', async (e) => {
@@ -259,6 +266,20 @@ async function supprimerFerme(container, tenantId, nom) {
   try {
     await Api.del(`/plateforme/organisations/${tenantId}`);
     showToast('Ferme supprimée.', 'success');
+    window.Views.plateforme.render(container);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function modifierSlug(container, tenantId, slugActuel) {
+  const values = await Modal.open('Modifier le sous-domaine', [
+    { name: 'slug', label: 'Sous-domaine (ex: massla → massla.massla.sn)', type: 'text', value: slugActuel },
+  ]);
+  if (!values) return;
+  try {
+    await Api.put(`/plateforme/organisations/${tenantId}/slug`, { slug: values.slug });
+    showToast('Sous-domaine mis à jour.', 'success');
     window.Views.plateforme.render(container);
   } catch (err) {
     showToast(err.message, 'error');

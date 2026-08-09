@@ -25,14 +25,17 @@ module.exports = function portailRoutes(pool) {
         }
         // telephone reste unique globalement (pas par organisation) — même choix pragmatique que
         // utilisateurs.email (voir schema.sql) : le login ne connaît pas l'organisation au moment de
-        // la requête, donc scoper par tenant nécessiterait de la résoudre autrement au préalable
-        // (sous-domaine par ferme, non construit). Si deux fermes distinctes doivent un jour pouvoir
-        // avoir chacune un client avec le même numéro, cette contrainte devra être revue en même
-        // temps qu'une résolution de tenant côté login.
+        // la requête. Les sous-domaines par ferme (routes/public.js) existent maintenant, mais
+        // UNIQUEMENT pour l'image de marque avant connexion — décision explicite de ne pas les
+        // utiliser pour résoudre le tenant ici, donc cette contrainte globale reste inchangée pour
+        // l'instant. Si deux fermes distinctes doivent un jour pouvoir avoir chacune un client avec
+        // le même numéro, ce serait le moment de revisiter les deux ensemble.
         // Lecture pré-tenant (le tenant n'est pas encore connu avant cette ligne) : policy RLS dédiée
         // sur `clients` qui autorise ce cas précis, voir rls-policies.sql.
         const result = await pool.query(
-            `SELECT id, nom, telephone, type_client, pin_hash, pin_version FROM clients WHERE telephone = $1 AND deleted_at IS NULL`,
+            `SELECT c.id, c.nom, c.telephone, c.type_client, c.pin_hash, c.pin_version, o.nom as organisation_nom
+             FROM clients c LEFT JOIN organisations o ON c.tenant_id = o.id
+             WHERE c.telephone = $1 AND c.deleted_at IS NULL`,
             [telephone]
         );
         const client = result.rows[0];
@@ -44,7 +47,10 @@ module.exports = function portailRoutes(pool) {
             return res.status(401).json({ erreur: 'Identifiants incorrects.' });
         }
         const token = signClientToken(client);
-        res.json({ token, client: { id: client.id, nom: client.nom, telephone: client.telephone, type_client: client.type_client } });
+        res.json({
+            token,
+            client: { id: client.id, nom: client.nom, telephone: client.telephone, type_client: client.type_client, organisation_nom: client.organisation_nom },
+        });
     });
 
     router.get('/moi', clientAuth, async (req, res) => {

@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const { logAudit } = require('./audit');
+const { genererSlugUnique } = require('./slug');
 
 /**
  * Crée une nouvelle organisation (ferme cliente) + ses secteurs + son premier compte admin, dans
@@ -35,6 +36,14 @@ async function creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, a
     try {
         await client.query('BEGIN');
 
+        // Généré AVANT de poser is_plateforme_admin : une connexion fraîchement sortie du pool n'a
+        // par convention aucun contexte posé (voir le `finally` plus bas et attachTenantConnection,
+        // auth.js, qui remettent toujours '' avant de relâcher), donc current_tenant_id() est déjà
+        // NULL ici et la policy SELECT de organisations laisse passer cette vérification d'unicité
+        // via son échappatoire pré-tenant (voir rls-policies.sql) sans avoir besoin d'échappatoire
+        // supplémentaire.
+        const slug = await genererSlugUnique(client, nomFerme.trim());
+
         // `INSERT ... RETURNING` exige EN PLUS que la ligne insérée passe la policy SELECT, pas
         // seulement le WITH CHECK de l'INSERT (piège déjà rencontré pour audit_logs, voir
         // rls-policies.sql) — et à cet instant précis, aucun tenant_id n'existe encore à poser en
@@ -45,7 +54,7 @@ async function creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, a
         // relâchée vers le pool (voir le `finally` plus bas).
         await client.query("SELECT set_config('app.is_plateforme_admin', 'true', false)");
 
-        const orgRes = await client.query(`INSERT INTO organisations (nom) VALUES ($1) RETURNING id`, [nomFerme.trim()]);
+        const orgRes = await client.query(`INSERT INTO organisations (nom, slug) VALUES ($1, $2) RETURNING id`, [nomFerme.trim(), slug]);
         const tenantId = orgRes.rows[0].id;
 
         await client.query('SELECT set_config($1, $2, false)', ['app.current_tenant_id', String(tenantId)]);
@@ -79,7 +88,7 @@ async function creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, a
         });
 
         await client.query('COMMIT');
-        return { tenantId, admin, nomFerme: nomFerme.trim() };
+        return { tenantId, admin, nomFerme: nomFerme.trim(), slug };
     } catch (err) {
         await client.query('ROLLBACK').catch(() => {});
         throw err;
