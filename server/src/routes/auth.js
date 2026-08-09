@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
-const { signToken, requireAuth, attachTenantConnection } = require('../auth');
+const { signToken, requireAuth, attachTenantConnection, queryPreTenant } = require('../auth');
 const { logAudit } = require('../audit');
 
 // Limite le brute-force sur les mots de passe : 10 tentatives / 15 min par IP, au-delà d'un usage
@@ -24,7 +24,8 @@ module.exports = function authRoutes(pool) {
         }
 
         try {
-            const result = await pool.query(
+            const result = await queryPreTenant(
+                pool,
                 `SELECT u.id, u.nom_complet, u.email, u.mot_de_passe_hash, u.secteur_id, u.tenant_id, u.actif,
                         u.est_superviseur_plateforme, r.nom as role_nom, o.nom as organisation_nom, o.deleted_at as organisation_supprimee_le
                  FROM utilisateurs u JOIN roles r ON u.role_id = r.id LEFT JOIN organisations o ON u.tenant_id = o.id

@@ -1,4 +1,5 @@
 const express = require('express');
+const { queryPreTenant } = require('../auth');
 
 // Domaine racine de la plateforme — massla.sn et www.massla.sn continuent de servir la marque
 // Massla par défaut (comportement historique inchangé), seul un VRAI sous-domaine de ferme
@@ -32,10 +33,7 @@ module.exports = function publicRoutes(pool) {
         const slug = extraireSlug(req.hostname);
         if (!slug) return res.json({ nom: null });
         try {
-            const result = await pool.query(
-                `SELECT nom FROM organisations WHERE slug = $1 AND deleted_at IS NULL`,
-                [slug]
-            );
+            const result = await queryPreTenant(pool, `SELECT nom FROM organisations WHERE slug = $1 AND deleted_at IS NULL`, [slug]);
             res.json({ nom: result.rows[0]?.nom || null });
         } catch (err) {
             console.error(err);

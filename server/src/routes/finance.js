@@ -1,5 +1,5 @@
 const express = require('express');
-const { requireAuth, checkRole, attachTenantConnection } = require('../auth');
+const { requireAuth, checkRole, attachTenantConnection, queryPreTenant } = require('../auth');
 const { logAudit } = require('../audit');
 const { genererFacturePDF } = require('../facturePdf');
 const { creerFacture, confirmerFacture } = require('../paydunya');
@@ -139,10 +139,10 @@ module.exports = function financeRoutes(pool) {
 
         // Recherche globale (sans tenant_id, inconnu à ce stade) : reference_transaction porte le
         // token PayDunya, généré par PayDunya lui-même donc déjà unique tous tenants confondus.
-        const paiementInitial = await pool.query(
-            `SELECT tenant_id FROM paiements WHERE reference_transaction = $1`,
-            [token]
-        );
+        // queryPreTenant (pas pool.query) : voir son commentaire dans auth.js — critique ici, un
+        // contexte résiduel ferait passer un paiement RÉEL pour introuvable (200 "idempotence"),
+        // sans jamais confirmer la facture correspondante.
+        const paiementInitial = await queryPreTenant(pool, `SELECT tenant_id FROM paiements WHERE reference_transaction = $1`, [token]);
         if (paiementInitial.rows.length === 0) {
             return res.status(200).json({ message: 'Paiement introuvable ou déjà traité (idempotence).' });
         }

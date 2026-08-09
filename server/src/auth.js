@@ -72,6 +72,29 @@ async function attachTenantConnection(req, res, pool, tenantId) {
 }
 
 /**
+ * Exécute une requête qui DOIT tourner sans aucun contexte tenant (login staff par email, login
+ * portail par téléphone, IPN PayDunya par token, résolution de sous-domaine — voir les policies RLS
+ * avec échappatoire "current_tenant_id() IS NULL", rls-policies.sql). Remet explicitement le contexte
+ * à vide AVANT la requête plutôt que de supposer qu'une connexion tout juste sortie de `pool` en est
+ * dépourvue par défaut — constaté en production (2026-08-09) qu'une connexion du pool applicatif
+ * peut porter un `app.current_tenant_id` résiduel non vide (une des connexions physiques réutilisées
+ * par le pooler Supabase, cause exacte non confirmée), ce qui masquait silencieusement, via RLS, les
+ * lignes de toute organisation autre que celle du contexte figé — un vrai risque de connexion/
+ * paiement bloqué pour n'importe quel tenant hors celui-là, jamais visible via pg-mem (aucune policy
+ * RLS simulée). Coût : un aller-retour set_config supplémentaire par lecture pré-tenant, négligeable.
+ */
+async function queryPreTenant(pool, sql, params) {
+    const client = await pool.connect();
+    try {
+        await client.query("SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_plateforme_admin', '', false)");
+        return await client.query(sql, params);
+    } finally {
+        await client.query("SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_plateforme_admin', '', false)").catch(() => {});
+        client.release();
+    }
+}
+
+/**
  * Authentification portail client. Revérifie `pin_version` en base à chaque requête (coût
  * négligeable à cette échelle) : régénérer le code d'un client invalide instantanément toute
  * session déjà émise, sans quoi un JWT volé resterait valable jusqu'à 7 jours malgré la régénération.
@@ -89,8 +112,9 @@ function requireClientAuth(pool) {
                 return res.status(401).json({ erreur: 'Session invalide.' });
             }
             // Lecture pré-tenant (le tenant n'est pas encore connu avant cette ligne) : policy RLS
-            // dédiée sur `clients` qui autorise ce cas précis, voir rls-policies.sql.
-            const result = await pool.query(`SELECT id, tenant_id, pin_version FROM clients WHERE id = $1 AND deleted_at IS NULL`, [
+            // dédiée sur `clients` qui autorise ce cas précis, voir rls-policies.sql. queryPreTenant
+            // (pas pool.query) : voir son commentaire — nécessaire même ici, à chaque requête portail.
+            const result = await queryPreTenant(pool, `SELECT id, tenant_id, pin_version FROM clients WHERE id = $1 AND deleted_at IS NULL`, [
                 payload.clientId,
             ]);
             const client = result.rows[0];
@@ -192,6 +216,7 @@ module.exports = {
     signClientToken,
     requireClientAuth,
     attachTenantConnection,
+    queryPreTenant,
     requireSuperviseurPlateforme,
     JWT_SECRET,
 };

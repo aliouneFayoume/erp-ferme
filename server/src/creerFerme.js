@@ -36,24 +36,23 @@ async function creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, a
     try {
         await client.query('BEGIN');
 
-        // Généré AVANT de poser is_plateforme_admin : une connexion fraîchement sortie du pool n'a
-        // par convention aucun contexte posé (voir le `finally` plus bas et attachTenantConnection,
-        // auth.js, qui remettent toujours '' avant de relâcher), donc current_tenant_id() est déjà
-        // NULL ici et la policy SELECT de organisations laisse passer cette vérification d'unicité
-        // via son échappatoire pré-tenant (voir rls-policies.sql) sans avoir besoin d'échappatoire
-        // supplémentaire.
+        // Posé AVANT toute lecture/écriture sur cette connexion, PAS après : une connexion tout
+        // juste sortie de `pool.connect()` n'est PAS garantie d'avoir un contexte vide par défaut —
+        // constaté en production (2026-08-09, voir le commentaire de queryPreTenant dans auth.js)
+        // qu'un `app.current_tenant_id` résiduel peut persister sur une connexion du pool. Poser
+        // explicitement is_plateforme_admin ici couvre à la fois la vérification d'unicité du slug
+        // ci-dessous ET l'INSERT + RETURNING qui suit (qui en a besoin de toute façon, voir plus bas)
+        // — sans dépendre d'une hypothèse sur l'état de current_tenant_id(). Créer une organisation
+        // est par nature une opération non scopée à un tenant existant ; cette connexion ne sert
+        // jamais à rien d'autre, et son contexte est remis à zéro avant d'être relâchée vers le pool
+        // (voir le `finally` plus bas).
+        await client.query("SELECT set_config('app.is_plateforme_admin', 'true', false)");
+
         const slug = await genererSlugUnique(client, nomFerme.trim());
 
         // `INSERT ... RETURNING` exige EN PLUS que la ligne insérée passe la policy SELECT, pas
         // seulement le WITH CHECK de l'INSERT (piège déjà rencontré pour audit_logs, voir
-        // rls-policies.sql) — et à cet instant précis, aucun tenant_id n'existe encore à poser en
-        // contexte. Créer une organisation est par nature une opération non scopée à un tenant
-        // existant ; poser is_plateforme_admin ici, sur cette connexion dédiée et de courte durée,
-        // est le même échappatoire déjà utilisé pour la vue plateforme — sans risque puisque cette
-        // connexion ne sert jamais à rien d'autre, et son contexte est remis à zéro avant d'être
-        // relâchée vers le pool (voir le `finally` plus bas).
-        await client.query("SELECT set_config('app.is_plateforme_admin', 'true', false)");
-
+        // rls-policies.sql) — is_plateforme_admin (posé plus haut) couvre aussi ce cas.
         const orgRes = await client.query(`INSERT INTO organisations (nom, slug) VALUES ($1, $2) RETURNING id`, [nomFerme.trim(), slug]);
         const tenantId = orgRes.rows[0].id;
 

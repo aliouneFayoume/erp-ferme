@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
-const { signClientToken, requireClientAuth } = require('../auth');
+const { signClientToken, requireClientAuth, queryPreTenant } = require('../auth');
 const { genererFacturePDF } = require('../facturePdf');
 
 // Un PIN à 6 chiffres a beaucoup moins d'entropie qu'un mot de passe : limite plus stricte que le
@@ -32,7 +32,8 @@ module.exports = function portailRoutes(pool) {
         // le même numéro, ce serait le moment de revisiter les deux ensemble.
         // Lecture pré-tenant (le tenant n'est pas encore connu avant cette ligne) : policy RLS dédiée
         // sur `clients` qui autorise ce cas précis, voir rls-policies.sql.
-        const result = await pool.query(
+        const result = await queryPreTenant(
+            pool,
             `SELECT c.id, c.nom, c.telephone, c.type_client, c.pin_hash, c.pin_version, o.nom as organisation_nom
              FROM clients c LEFT JOIN organisations o ON c.tenant_id = o.id
              WHERE c.telephone = $1 AND c.deleted_at IS NULL`,
