@@ -41,6 +41,26 @@ const Api = (() => {
     // Évite qu'un autre utilisateur du même appareil consulte hors-ligne les données du compte
     // précédent une fois déconnecté.
     clearReadCache();
+    clearSuperviseurSession();
+  }
+
+  // Session superviseur mise de côté pendant une impersonation ("Se connecter en tant
+  // qu'administrateur" depuis la vue plateforme) — clé distincte de erp_token/erp_user pour pouvoir
+  // restaurer la session d'origine sans avoir à se reconnecter. Voir web/js/views/plateforme.js et
+  // buildShell() dans app.js.
+  function setSuperviseurSession(token, utilisateur) {
+    localStorage.setItem('erp_superviseur_token', token);
+    localStorage.setItem('erp_superviseur_user', JSON.stringify(utilisateur));
+  }
+  function getSuperviseurSession() {
+    const token = localStorage.getItem('erp_superviseur_token');
+    const raw = localStorage.getItem('erp_superviseur_user');
+    if (!token || !raw) return null;
+    return { token, utilisateur: JSON.parse(raw) };
+  }
+  function clearSuperviseurSession() {
+    localStorage.removeItem('erp_superviseur_token');
+    localStorage.removeItem('erp_superviseur_user');
   }
 
   async function request(path, { method = 'GET', body } = {}) {
@@ -120,6 +140,9 @@ const Api = (() => {
     getUser,
     setSession,
     clearSession,
+    setSuperviseurSession,
+    getSuperviseurSession,
+    clearSuperviseurSession,
     get: (path) => request(path),
     post: (path, body) => request(path, { method: 'POST', body }),
     put: (path, body) => request(path, { method: 'PUT', body }),

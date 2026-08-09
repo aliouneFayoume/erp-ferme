@@ -1,15 +1,15 @@
 const request = require('supertest');
 const bcrypt = require('bcryptjs');
 const express = require('express');
-const { createTestPool, seedRolesEtSecteurs, tokenPour } = require('./helpers/testApp');
-const { requireAuth, checkRole } = require('../src/auth');
+const { createTestPool, seedRolesEtSecteurs, creerOrganisation, tokenPour } = require('./helpers/testApp');
+const { requireAuth, checkRole, signToken } = require('../src/auth');
 
-async function creerUtilisateur(pool, { email = 'test@massla.sn', motDePasse = 'demo1234', role = 'admin', actif = true } = {}) {
+async function creerUtilisateur(pool, { email = 'test@massla.sn', motDePasse = 'demo1234', role = 'admin', actif = true, tenant_id = null } = {}) {
     const roleRes = await pool.query(`SELECT id FROM roles WHERE nom = $1`, [role]);
     const hash = await bcrypt.hash(motDePasse, 4);
     await pool.query(
-        `INSERT INTO utilisateurs (nom_complet, email, mot_de_passe_hash, role_id, actif) VALUES ($1, $2, $3, $4, $5)`,
-        ['Utilisateur Test', email, hash, roleRes.rows[0].id, actif]
+        `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, actif) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [tenant_id, 'Utilisateur Test', email, hash, roleRes.rows[0].id, actif]
     );
 }
 
@@ -55,6 +55,38 @@ describe('auth — login', () => {
 
         expect(res.status).toBe(401);
     });
+
+    test("une organisation dont l'abonnement SaaS est suspendu ne peut pas se connecter", async () => {
+        const tenantId = await creerOrganisation(pool, 'Ferme Suspendue');
+        await pool.query(
+            `INSERT INTO organisation_abonnement_saas (tenant_id, montant_mensuel, actif) VALUES ($1, 40000, FALSE)`,
+            [tenantId]
+        );
+        await creerUtilisateur(pool, { email: 'suspendu@test.sn', motDePasse: 'demo1234', role: 'admin', tenant_id: tenantId });
+
+        const res = await request(app).post('/api/auth/login').send({ email: 'suspendu@test.sn', password: 'demo1234' });
+
+        expect(res.status).toBe(403);
+    });
+
+    test('une organisation supprimée ne peut pas se connecter', async () => {
+        const tenantId = await creerOrganisation(pool, 'Ferme Supprimée');
+        await pool.query(`UPDATE organisations SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1`, [tenantId]);
+        await creerUtilisateur(pool, { email: 'supprime@test.sn', motDePasse: 'demo1234', role: 'admin', tenant_id: tenantId });
+
+        const res = await request(app).post('/api/auth/login').send({ email: 'supprime@test.sn', password: 'demo1234' });
+
+        expect(res.status).toBe(403);
+    });
+
+    test('une organisation sans ligne d\'abonnement (jamais mise sous facturation) peut se connecter normalement', async () => {
+        const tenantId = await creerOrganisation(pool, 'Ferme Sans Facturation');
+        await creerUtilisateur(pool, { email: 'sans-facturation@test.sn', motDePasse: 'demo1234', role: 'admin', tenant_id: tenantId });
+
+        const res = await request(app).post('/api/auth/login').send({ email: 'sans-facturation@test.sn', password: 'demo1234' });
+
+        expect(res.status).toBe(200);
+    });
 });
 
 describe('auth — middlewares requireAuth / checkRole', () => {
@@ -94,6 +126,44 @@ describe('auth — middlewares requireAuth / checkRole', () => {
 
     test('checkRole laisse toujours passer admin, même hors liste', async () => {
         const res = await request(app).get('/comptable-seulement').set('Authorization', `Bearer ${tokenPour({ role: 'admin' })}`);
+        expect(res.status).toBe(200);
+    });
+
+    test('un token déjà émis est bloqué immédiatement si son organisation est suspendue entre-temps', async () => {
+        const tenantId = await creerOrganisation(pool, 'Ferme Suspendue En Cours de Session');
+        const token = tokenPour({ role: 'admin', tenant_id: tenantId });
+
+        const avant = await request(app).get('/protegee').set('Authorization', `Bearer ${token}`);
+        expect(avant.status).toBe(200);
+
+        await pool.query(
+            `INSERT INTO organisation_abonnement_saas (tenant_id, montant_mensuel, actif) VALUES ($1, 40000, FALSE)`,
+            [tenantId]
+        );
+
+        const apres = await request(app).get('/protegee').set('Authorization', `Bearer ${token}`);
+        expect(apres.status).toBe(403);
+    });
+
+    test('un token déjà émis est bloqué immédiatement si son organisation est supprimée entre-temps', async () => {
+        const tenantId = await creerOrganisation(pool, 'Ferme Supprimée En Cours de Session');
+        const token = tokenPour({ role: 'admin', tenant_id: tenantId });
+
+        await pool.query(`UPDATE organisations SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1`, [tenantId]);
+
+        const res = await request(app).get('/protegee').set('Authorization', `Bearer ${token}`);
+        expect(res.status).toBe(403);
+    });
+
+    test("un token d'impersonation ignore le blocage, pour que le superviseur puisse dépanner une ferme suspendue", async () => {
+        const tenantId = await creerOrganisation(pool, 'Ferme Suspendue Mais Dépannée');
+        await pool.query(
+            `INSERT INTO organisation_abonnement_saas (tenant_id, montant_mensuel, actif) VALUES ($1, 40000, FALSE)`,
+            [tenantId]
+        );
+        const tokenImpersonation = signToken({ id: 1, role_nom: 'admin', nom_complet: 'Admin Ferme', tenant_id: tenantId }, { viaImpersonation: true });
+
+        const res = await request(app).get('/protegee').set('Authorization', `Bearer ${tokenImpersonation}`);
         expect(res.status).toBe(200);
     });
 });

@@ -54,13 +54,20 @@ DROP POLICY IF EXISTS tenant_isolation_select ON organisations;
 DROP POLICY IF EXISTS tenant_isolation_insert ON organisations;
 DROP POLICY IF EXISTS tenant_isolation_update ON organisations;
 DROP POLICY IF EXISTS tenant_isolation_delete ON organisations;
+-- "current_tenant_id() IS NULL" : même échappatoire pré-tenant que utilisateurs/clients ci-dessous —
+-- /auth/login (routes/auth.js) fait maintenant JOIN organisations pour afficher le nom réel de la
+-- ferme dans le topbar, sur une connexion pool brute où aucun contexte n'est encore posé. Sans cette
+-- échappatoire, le JOIN renvoie zéro ligne pour TOUT LE MONDE et casse le login (piège déjà vécu deux
+-- fois cette session avec RETURNING — celui-ci est un piège cousin, découvert avant déploiement cette
+-- fois). Le nom d'une ferme n'est pas une donnée sensible (comparable à l'email/téléphone déjà lisible
+-- pré-tenant), donc ce n'est pas une régression de confidentialité.
 CREATE POLICY tenant_isolation_select ON organisations FOR SELECT
-    USING (id = current_tenant_id() OR is_plateforme_admin());
+    USING (id = current_tenant_id() OR current_tenant_id() IS NULL OR is_plateforme_admin());
 CREATE POLICY tenant_isolation_insert ON organisations FOR INSERT
     WITH CHECK (true);
 CREATE POLICY tenant_isolation_update ON organisations FOR UPDATE
-    USING (id = current_tenant_id())
-    WITH CHECK (id = current_tenant_id());
+    USING (id = current_tenant_id() OR is_plateforme_admin())
+    WITH CHECK (id = current_tenant_id() OR is_plateforme_admin());
 CREATE POLICY tenant_isolation_delete ON organisations FOR DELETE
     USING (id = current_tenant_id());
 
@@ -234,10 +241,25 @@ CREATE POLICY tenant_isolation_write ON ticket_messages FOR INSERT
 -- normalement tenant-scopé.
 -- ------------------------------------------------------------------------------
 
+-- Exception à la règle ci-dessus, en LECTURE SEULE : requireAuth (auth.js) doit pouvoir lire le
+-- statut "actif" de l'abonnement DE SA PROPRE organisation à chaque requête, pour bloquer l'usage en
+-- cas de non-paiement (voir le commentaire dans requireAuth). Ce n'est pas une fuite : une ferme voit
+-- son propre statut d'abonnement, jamais celui d'une autre, et jamais les colonnes montant/frais
+-- négociés d'une AUTRE organisation. Écriture reste strictement is_plateforme_admin() : une ferme ne
+-- peut jamais modifier son propre abonnement.
 DROP POLICY IF EXISTS plateforme_seulement ON organisation_abonnement_saas;
-CREATE POLICY plateforme_seulement ON organisation_abonnement_saas
-    USING (is_plateforme_admin())
+DROP POLICY IF EXISTS tenant_lecture_seule ON organisation_abonnement_saas;
+DROP POLICY IF EXISTS plateforme_ecriture ON organisation_abonnement_saas;
+DROP POLICY IF EXISTS plateforme_maj ON organisation_abonnement_saas;
+DROP POLICY IF EXISTS plateforme_suppr ON organisation_abonnement_saas;
+CREATE POLICY tenant_lecture_seule ON organisation_abonnement_saas FOR SELECT
+    USING (tenant_id = current_tenant_id() OR is_plateforme_admin());
+CREATE POLICY plateforme_ecriture ON organisation_abonnement_saas FOR INSERT
     WITH CHECK (is_plateforme_admin());
+CREATE POLICY plateforme_maj ON organisation_abonnement_saas FOR UPDATE
+    USING (is_plateforme_admin()) WITH CHECK (is_plateforme_admin());
+CREATE POLICY plateforme_suppr ON organisation_abonnement_saas FOR DELETE
+    USING (is_plateforme_admin());
 
 DROP POLICY IF EXISTS plateforme_seulement ON factures_saas;
 CREATE POLICY plateforme_seulement ON factures_saas

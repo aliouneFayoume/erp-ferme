@@ -137,9 +137,12 @@ async function main() {
             }
             verifier('audit_logs : is_plateforme_admin permet de journaliser dans le tenant cible (connexion support)', auditInsereSousAutreTenant);
 
-            // 8bis. Facturation SaaS (organisation_abonnement_saas / factures_saas) : accès
-            //    UNIQUEMENT via is_plateforme_admin(), jamais via current_tenant_id() — même son
-            //    PROPRE abonnement doit rester invisible à un admin de ferme normal.
+            // 8bis. Facturation SaaS (organisation_abonnement_saas / factures_saas) : l'ÉCRITURE
+            //    reste UNIQUEMENT via is_plateforme_admin(), jamais via current_tenant_id() — un
+            //    admin de ferme ne peut jamais modifier son propre abonnement. La LECTURE, en
+            //    revanche, autorise désormais aussi current_tenant_id() (nécessaire à requireAuth,
+            //    auth.js, pour bloquer l'accès en cas de non-paiement) — mais UNIQUEMENT sa propre
+            //    ligne, jamais celle d'une autre organisation.
             await poserContexte(client, tenantA);
             await poserPlateforme(client, false);
             let ecritureAbonnementRejetee = false;
@@ -151,12 +154,51 @@ async function main() {
             verifier("organisation_abonnement_saas : un admin de ferme (sans is_plateforme_admin) ne peut pas écrire, même pour SA PROPRE organisation", ecritureAbonnementRejetee);
 
             await admin.query(`INSERT INTO organisation_abonnement_saas (tenant_id, montant_mensuel) VALUES ($1, 10000)`, [tenantA]);
-            const abonnementLectureSansFlag = await client.query(`SELECT tenant_id FROM organisation_abonnement_saas WHERE tenant_id = $1`, [tenantA]);
-            verifier("organisation_abonnement_saas : un admin de ferme (sans is_plateforme_admin) ne peut pas lire SON PROPRE abonnement", abonnementLectureSansFlag.rows.length === 0);
+            await admin.query(`INSERT INTO organisation_abonnement_saas (tenant_id, montant_mensuel) VALUES ($1, 10000)`, [tenantB]);
+            const abonnementLecturePropre = await client.query(`SELECT tenant_id FROM organisation_abonnement_saas WHERE tenant_id = $1`, [tenantA]);
+            verifier("organisation_abonnement_saas : un admin de ferme (sans is_plateforme_admin) peut lire SON PROPRE abonnement (blocage non-paiement)", abonnementLecturePropre.rows.length === 1);
+
+            const abonnementLectureAutre = await client.query(`SELECT tenant_id FROM organisation_abonnement_saas WHERE tenant_id = $1`, [tenantB]);
+            verifier("organisation_abonnement_saas : un admin de ferme ne peut jamais lire l'abonnement d'une AUTRE organisation", abonnementLectureAutre.rows.length === 0);
+
+            let ecrituAbonnementProprePersonnelle = false;
+            try {
+                const maj = await client.query(`UPDATE organisation_abonnement_saas SET montant_mensuel = 99999 WHERE tenant_id = $1 RETURNING tenant_id`, [tenantA]);
+                ecrituAbonnementProprePersonnelle = maj.rows.length > 0;
+            } catch (err) {
+                ecrituAbonnementProprePersonnelle = false;
+            }
+            verifier("organisation_abonnement_saas : un admin de ferme ne peut pas modifier SON PROPRE abonnement (lecture seule)", !ecrituAbonnementProprePersonnelle);
 
             await poserPlateforme(client, true);
             const abonnementLectureAvecFlag = await client.query(`SELECT tenant_id FROM organisation_abonnement_saas WHERE tenant_id = $1`, [tenantA]);
             verifier('organisation_abonnement_saas : is_plateforme_admin donne accès normalement', abonnementLectureAvecFlag.rows.length === 1);
+            await poserPlateforme(client, false);
+
+            // 8ter. organisations : le nom d'une ferme redevient lisible SANS AUCUN contexte posé
+            //    (login staff, routes/auth.js, doit pouvoir afficher le nom réel dans le topbar), et
+            //    is_plateforme_admin() peut désormais aussi mettre à jour une AUTRE organisation
+            //    (soft delete depuis la vue plateforme, routes/plateforme.js).
+            await poserContexte(client, null);
+            await poserPlateforme(client, false);
+            const orgsSansContexte = await client.query(`SELECT id FROM organisations WHERE id IN ($1, $2)`, [tenantA, tenantB]);
+            verifier('organisations : sans contexte tenant, les noms restent lisibles (login)', orgsSansContexte.rows.length === 2);
+
+            await poserContexte(client, tenantA);
+            await poserPlateforme(client, false);
+            let majAutreOrgSansFlagRejetee = false;
+            try {
+                const maj = await client.query(`UPDATE organisations SET nom = 'Modifié par erreur' WHERE id = $1 RETURNING id`, [tenantB]);
+                majAutreOrgSansFlagRejetee = maj.rows.length === 0;
+            } catch (err) {
+                majAutreOrgSansFlagRejetee = true;
+            }
+            verifier("organisations : sans is_plateforme_admin, impossible de modifier une AUTRE organisation", majAutreOrgSansFlagRejetee);
+
+            await poserPlateforme(client, true);
+            const majAutreOrgAvecFlag = await client.query(`UPDATE organisations SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id`, [tenantB]);
+            verifier('organisations : is_plateforme_admin permet de supprimer (soft delete) une AUTRE organisation', majAutreOrgAvecFlag.rows.length === 1);
+            await admin.query(`UPDATE organisations SET deleted_at = NULL WHERE id = $1`, [tenantB]);
             await poserPlateforme(client, false);
 
             // 9. Une fois le flag retiré, plus aucun accès cross-tenant — pas de fuite résiduelle.

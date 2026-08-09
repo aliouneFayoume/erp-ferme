@@ -300,3 +300,53 @@ describe('plateforme — facturation SaaS', () => {
         expect(res.body[0].organisation_nom).toBe('Ferme A');
     });
 });
+
+describe('plateforme — suppression de ferme', () => {
+    let pool;
+    let app;
+    let tenantA;
+    let tenantB;
+    let tokenSuperviseur;
+    let tokenAdminNormal;
+
+    beforeEach(async () => {
+        pool = createTestPool();
+        await seedRolesEtSecteurs(pool);
+        tenantA = await creerOrganisation(pool, 'Ferme A');
+        tenantB = await creerOrganisation(pool, 'Ferme B');
+        tokenSuperviseur = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantA, estSuperviseurPlateforme: true });
+        tokenAdminNormal = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantA, estSuperviseurPlateforme: false });
+        app = buildApp(pool, ['plateforme']);
+    });
+
+    afterEach(async () => {
+        await pool.end();
+    });
+
+    test('le superviseur peut supprimer (soft delete) une autre organisation', async () => {
+        const res = await request(app).delete(`/api/plateforme/organisations/${tenantB}`).set('Authorization', `Bearer ${tokenSuperviseur}`);
+        expect(res.status).toBe(204);
+
+        const org = await pool.query(`SELECT deleted_at FROM organisations WHERE id = $1`, [tenantB]);
+        expect(org.rows[0].deleted_at).toBeTruthy();
+
+        const liste = await request(app).get('/api/plateforme/organisations').set('Authorization', `Bearer ${tokenSuperviseur}`);
+        expect(liste.body.find((o) => o.id === tenantB)).toBeUndefined();
+    });
+
+    test('le superviseur ne peut pas supprimer sa propre organisation', async () => {
+        const res = await request(app).delete(`/api/plateforme/organisations/${tenantA}`).set('Authorization', `Bearer ${tokenSuperviseur}`);
+        expect(res.status).toBe(400);
+    });
+
+    test('supprimer une organisation déjà supprimée renvoie 404', async () => {
+        await request(app).delete(`/api/plateforme/organisations/${tenantB}`).set('Authorization', `Bearer ${tokenSuperviseur}`);
+        const res2 = await request(app).delete(`/api/plateforme/organisations/${tenantB}`).set('Authorization', `Bearer ${tokenSuperviseur}`);
+        expect(res2.status).toBe(404);
+    });
+
+    test('un admin sans le flag superviseur ne peut pas supprimer de ferme', async () => {
+        const res = await request(app).delete(`/api/plateforme/organisations/${tenantB}`).set('Authorization', `Bearer ${tokenAdminNormal}`);
+        expect(res.status).toBe(403);
+    });
+});

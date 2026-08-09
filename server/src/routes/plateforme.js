@@ -32,7 +32,7 @@ module.exports = function plateformeRoutes(pool) {
     router.post('/organisations', ...garde, async (req, res) => {
         try {
             const { nomFerme, secteurs, adminNomComplet, adminEmail, adminPassword } = req.body;
-            const { tenantId, admin } = await creerNouvelleFerme(pool, {
+            const { tenantId, admin, nomFerme: nomFermeCree } = await creerNouvelleFerme(pool, {
                 nomFerme,
                 secteurs,
                 adminNomComplet,
@@ -40,7 +40,7 @@ module.exports = function plateformeRoutes(pool) {
                 adminPassword,
                 auditUserId: req.user.id,
             });
-            res.status(201).json({ tenantId, admin: { id: admin.id, nom_complet: admin.nom_complet, email: admin.email } });
+            res.status(201).json({ tenantId, admin: { id: admin.id, nom_complet: admin.nom_complet, email: admin.email, organisation_nom: nomFermeCree } });
         } catch (err) {
             if (err.statut) return res.status(err.statut).json({ erreur: err.message });
             if (err.code === '23505') return res.status(409).json({ erreur: 'Cette adresse email est déjà utilisée.' });
@@ -57,7 +57,7 @@ module.exports = function plateformeRoutes(pool) {
             // fonctionnalité manquante). Volumes concernés (nombre de fermes, de tickets) restent
             // largement dans une fourchette où trois requêtes à plat + un tally JS sont insignifiants.
             const [orgsRes, ticketsRes, usersRes] = await Promise.all([
-                req.db.query(`SELECT id, nom, cree_le FROM organisations ORDER BY cree_le DESC`),
+                req.db.query(`SELECT id, nom, cree_le FROM organisations WHERE deleted_at IS NULL ORDER BY cree_le DESC`),
                 req.db.query(`SELECT tenant_id, statut FROM tickets WHERE deleted_at IS NULL`),
                 req.db.query(`SELECT tenant_id FROM utilisateurs WHERE actif = TRUE AND deleted_at IS NULL`),
             ]);
@@ -85,6 +85,32 @@ module.exports = function plateformeRoutes(pool) {
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: 'Erreur lors de la récupération des organisations.' });
+        }
+    });
+
+    /**
+     * Suppression (soft delete) d'une ferme qui n'est plus cliente : marque deleted_at, ce qui la
+     * fait disparaître de cette liste et bloque immédiatement l'accès de tout son personnel
+     * (requireAuth, auth.js) — sans jamais toucher à ses données historiques, même logique que le
+     * reste du schéma (deleted_at partout, aucune suppression physique). Réversible en base au besoin
+     * (pas de bouton "restaurer" pour l'instant, non demandé).
+     */
+    router.delete('/organisations/:id', ...garde, async (req, res) => {
+        try {
+            const tenantId = Number(req.params.id);
+            if (tenantId === req.user.tenant_id) {
+                return res.status(400).json({ erreur: 'Impossible de supprimer votre propre organisation.' });
+            }
+            const result = await req.db.query(
+                `UPDATE organisations SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted_at IS NULL RETURNING id`,
+                [tenantId]
+            );
+            if (result.rows.length === 0) return res.status(404).json({ erreur: 'Organisation introuvable.' });
+            await logAudit(req.db, { table: 'organisations', rowId: tenantId, action: 'DELETE', userId: req.user.id, tenantId, details: { superviseur: req.user.nom } });
+            res.status(204).end();
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la suppression de la ferme.' });
         }
     });
 
@@ -147,8 +173,8 @@ module.exports = function plateformeRoutes(pool) {
         try {
             const tenantId = req.params.id;
             const adminRes = await req.db.query(
-                `SELECT u.id, u.nom_complet, u.email, u.secteur_id, u.tenant_id
-                 FROM utilisateurs u JOIN roles r ON u.role_id = r.id
+                `SELECT u.id, u.nom_complet, u.email, u.secteur_id, u.tenant_id, o.nom as organisation_nom
+                 FROM utilisateurs u JOIN roles r ON u.role_id = r.id JOIN organisations o ON u.tenant_id = o.id
                  WHERE u.tenant_id = $1 AND r.nom = 'admin' AND u.actif = TRUE AND u.deleted_at IS NULL
                  ORDER BY u.id ASC LIMIT 1`,
                 [tenantId]
@@ -157,7 +183,11 @@ module.exports = function plateformeRoutes(pool) {
                 return res.status(404).json({ erreur: 'Aucun compte administrateur actif pour cette organisation.' });
             }
             const admin = adminRes.rows[0];
-            const token = signToken({ ...admin, role_nom: 'admin' });
+            // Marqueur d'impersonation : distingue ce token d'une session normale pour que requireAuth
+            // (auth.js) laisse passer même si l'abonnement SaaS de cette ferme est suspendu — le
+            // superviseur doit pouvoir se connecter à une ferme bloquée pour la dépanner ou la
+            // réactiver. Voir la vérification "actif" dans requireAuth.
+            const token = signToken({ ...admin, role_nom: 'admin' }, { viaImpersonation: true });
             await logAudit(req.db, {
                 table: 'utilisateurs',
                 rowId: admin.id,
@@ -175,6 +205,7 @@ module.exports = function plateformeRoutes(pool) {
                     role: 'admin',
                     secteur_id: admin.secteur_id,
                     tenant_id: admin.tenant_id,
+                    organisation_nom: admin.organisation_nom,
                 },
             });
         } catch (err) {

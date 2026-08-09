@@ -41,7 +41,7 @@ module.exports = function inscriptionRoutes(pool) {
         }
 
         try {
-            const { admin } = await creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, adminEmail, adminPassword });
+            const { admin, nomFerme: nomFermeCree } = await creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, adminEmail, adminPassword });
             const token = signToken({ ...admin, role_nom: 'admin' });
             res.status(201).json({
                 token,
@@ -52,6 +52,7 @@ module.exports = function inscriptionRoutes(pool) {
                     role: 'admin',
                     secteur_id: admin.secteur_id,
                     tenant_id: admin.tenant_id,
+                    organisation_nom: nomFermeCree,
                 },
             });
         } catch (err) {

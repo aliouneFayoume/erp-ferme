@@ -13,7 +13,7 @@ if (!process.env.JWT_SECRET) {
 }
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-simulation-ferme-massla';
 
-function signToken(user) {
+function signToken(user, { viaImpersonation = false } = {}) {
     return jwt.sign(
         {
             id: user.id,
@@ -24,6 +24,10 @@ function signToken(user) {
             // Vue plateforme (routes/plateforme.js) : indépendant du rôle, réservé à un seul compte
             // en pratique — voir migration-04-superviseur-plateforme.sql.
             superviseurPlateforme: !!user.est_superviseur_plateforme,
+            // Émis uniquement par /se-connecter-admin : laisse le superviseur agir dans une ferme
+            // même si son abonnement SaaS est suspendu (requireAuth ci-dessous), pour pouvoir la
+            // dépanner ou la réactiver.
+            impersonation: viaImpersonation,
         },
         JWT_SECRET,
         { expiresIn: '12h' }
@@ -102,7 +106,16 @@ function requireClientAuth(pool) {
     };
 }
 
-/** Authentification par JWT (Authorization: Bearer <token>) */
+/**
+ * Authentification par JWT (Authorization: Bearer <token>). Bloque aussi l'accès si l'organisation a
+ * été supprimée (organisations.deleted_at, "Supprimer" dans la vue plateforme) ou si son abonnement
+ * SaaS est explicitement suspendu (organisation_abonnement_saas.actif = false) — effet immédiat sur
+ * toute session déjà ouverte, pas seulement les futures connexions. L'ABSENCE de ligne d'abonnement
+ * (organisation jamais mise sous facturation, ex. Massla elle-même ou une ferme tout juste créée)
+ * n'est PAS un blocage : seule une ligne existante avec actif = false l'est. Un token émis via
+ * /se-connecter-admin (impersonation) ignore ces deux contrôles, pour que le superviseur puisse
+ * toujours dépanner, réactiver ou récupérer une ferme suspendue ou supprimée.
+ */
 function requireAuth(pool) {
     return async (req, res, next) => {
         const header = req.headers['authorization'] || '';
@@ -115,6 +128,21 @@ function requireAuth(pool) {
         try {
             req.user = jwt.verify(token, JWT_SECRET);
             await attachTenantConnection(req, res, pool, req.user.tenant_id);
+            if (!req.user.impersonation) {
+                const etat = await req.db.query(
+                    `SELECT o.deleted_at, s.actif AS abonnement_actif
+                     FROM organisations o LEFT JOIN organisation_abonnement_saas s ON s.tenant_id = o.id
+                     WHERE o.id = $1`,
+                    [req.user.tenant_id]
+                );
+                const ligne = etat.rows[0];
+                if (ligne?.deleted_at) {
+                    return res.status(403).json({ erreur: 'Cette organisation a été supprimée. Contactez le support.' });
+                }
+                if (ligne?.abonnement_actif === false) {
+                    return res.status(403).json({ erreur: 'Accès suspendu pour cette organisation. Contactez le support.' });
+                }
+            }
             next();
         } catch (err) {
             return res.status(401).json({ erreur: 'Session invalide ou expirée' });

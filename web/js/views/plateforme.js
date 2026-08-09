@@ -32,9 +32,10 @@ window.Views.plateforme = {
                   <td>${o.utilisateurs_actifs}</td>
                   <td>${o.tickets_ouverts > 0 ? `<span class="badge warn">${o.tickets_ouverts}</span>` : '0'}</td>
                   <td>${o.tickets_total}</td>
-                  <td>
+                  <td style="white-space:nowrap">
                     <button class="secondary" data-abonnement="${o.id}">Abonnement SaaS</button>
                     <button class="secondary" data-connecter="${o.id}">Se connecter en tant qu'administrateur</button>
+                    <button class="danger" data-supprimer="${o.id}" data-nom="${esc(o.nom)}">Supprimer</button>
                   </td>
                 </tr>`
               )
@@ -81,6 +82,9 @@ window.Views.plateforme = {
     container.querySelectorAll('button[data-abonnement]').forEach((btn) => {
       const org = organisations.find((o) => o.id === Number(btn.dataset.abonnement));
       btn.addEventListener('click', () => ouvrirAbonnementSaas(container, org, catalogue));
+    });
+    container.querySelectorAll('button[data-supprimer]').forEach((btn) => {
+      btn.addEventListener('click', () => supprimerFerme(container, btn.dataset.supprimer, btn.dataset.nom));
     });
 
     container.querySelector('#filtre-statut-plateforme').addEventListener('change', async (e) => {
@@ -237,8 +241,25 @@ function ouvrirCreationFerme(container) {
 async function seConnecterAdmin(tenantId) {
   try {
     const { token, utilisateur } = await Api.post(`/plateforme/organisations/${tenantId}/se-connecter-admin`, {});
+    // Met de côté la session superviseur en cours pour pouvoir y revenir (bouton "Retour à la
+    // supervision" dans le topbar, voir app.js) sans avoir à se reconnecter.
+    Api.setSuperviseurSession(Api.getToken(), Api.getUser());
     Api.setSession(token, utilisateur);
     window.location.href = '/';
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function supprimerFerme(container, tenantId, nom) {
+  const values = await Modal.open(`Supprimer ${esc(nom)} ?`, [
+    { name: 'confirmer', label: 'Cette ferme n\'a plus accès à l\'application. Tapez "OUI" pour confirmer', type: 'text', value: '' },
+  ]);
+  if (!values || values.confirmer.trim().toUpperCase() !== 'OUI') return;
+  try {
+    await Api.del(`/plateforme/organisations/${tenantId}`);
+    showToast('Ferme supprimée.', 'success');
+    window.Views.plateforme.render(container);
   } catch (err) {
     showToast(err.message, 'error');
   }

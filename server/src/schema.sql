@@ -19,7 +19,11 @@
 CREATE TABLE organisations (
     id SERIAL PRIMARY KEY,
     nom VARCHAR(100) NOT NULL,
-    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Soft delete : une ferme qui n'est plus cliente disparaît de la vue plateforme (voir
+    -- routes/plateforme.js) et son accès est bloqué (requireAuth, auth.js), mais ses données
+    -- restent intactes — jamais de suppression physique, même logique qu'ailleurs dans ce schéma.
+    deleted_at TIMESTAMP
 );
 
 -- --------------------------------------------------------

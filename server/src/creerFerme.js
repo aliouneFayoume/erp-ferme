@@ -79,7 +79,7 @@ async function creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, a
         });
 
         await client.query('COMMIT');
-        return { tenantId, admin };
+        return { tenantId, admin, nomFerme: nomFerme.trim() };
     } catch (err) {
         await client.query('ROLLBACK').catch(() => {});
         throw err;

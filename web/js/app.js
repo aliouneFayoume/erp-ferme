@@ -310,8 +310,16 @@ document.getElementById('btn-sidebar-collapse').addEventListener('click', () => 
 applySidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1');
 
 function buildShell(user) {
+  document.getElementById('topbar-brand').textContent = user.organisation_nom || 'Ferme Massla';
+  document.title = user.organisation_nom ? `ERP ${user.organisation_nom}` : 'ERP Ferme Massla';
   document.getElementById('who-name').textContent = user.nom_complet || user.email;
   document.getElementById('who-role').textContent = roleLabel(user.role);
+
+  // Visible uniquement pendant une impersonation ("Se connecter en tant qu'administrateur" depuis
+  // la vue plateforme) — permet de revenir à la session superviseur sans se reconnecter.
+  const btnRetour = document.getElementById('btn-retour-supervision');
+  const superviseurSession = Api.getSuperviseurSession();
+  btnRetour.classList.toggle('hidden', !superviseurSession);
 
   const tabs = tabsForRole(user);
   const nav = document.getElementById('tabs');
@@ -371,6 +379,14 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 document.getElementById('btn-logout').addEventListener('click', () => {
   Api.clearSession();
   showLogin();
+});
+
+document.getElementById('btn-retour-supervision').addEventListener('click', () => {
+  const superviseurSession = Api.getSuperviseurSession();
+  if (!superviseurSession) return;
+  Api.clearSuperviseurSession();
+  Api.setSession(superviseurSession.token, superviseurSession.utilisateur);
+  window.location.href = '/';
 });
 
 (function init() {
