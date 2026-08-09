@@ -1,6 +1,13 @@
 const express = require('express');
 const { requireAuth, requireSuperviseurPlateforme, signToken } = require('../auth');
 const { logAudit } = require('../audit');
+const { SOCLE_ESSENTIEL, MODULES_SAAS, PACK_TOUT_COMPRIS, FRAIS_CONFIGURATION_DEFAUT } = require('../modulesSaas');
+
+function dansNJours(n) {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+}
 
 /**
  * Vue plateforme (support/vente multi-fermes) : réservée à un seul compte (voir
@@ -146,6 +153,152 @@ module.exports = function plateformeRoutes(pool) {
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: 'Erreur lors de la connexion support.' });
+        }
+    });
+
+    router.get('/modules-saas', ...garde, async (req, res) => {
+        res.json({ socleEssentiel: SOCLE_ESSENTIEL, modules: MODULES_SAAS, packToutCompris: PACK_TOUT_COMPRIS, fraisConfigurationDefaut: FRAIS_CONFIGURATION_DEFAUT });
+    });
+
+    router.get('/organisations/:id/abonnement-saas', ...garde, async (req, res) => {
+        try {
+            const result = await req.db.query(`SELECT * FROM organisation_abonnement_saas WHERE tenant_id = $1`, [req.params.id]);
+            res.json(result.rows[0] || null);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: "Erreur lors de la récupération de l'abonnement." });
+        }
+    });
+
+    /**
+     * Crée ou met à jour l'abonnement SaaS d'une organisation. À la toute première configuration
+     * (aucune ligne existante), génère automatiquement la facture de configuration si un montant est
+     * fourni — les mises à jour suivantes (changement de modules, de montant négocié) ne la
+     * régénèrent jamais, voir frais_configuration_facture.
+     */
+    router.put('/organisations/:id/abonnement-saas', ...garde, async (req, res) => {
+        try {
+            const tenantId = req.params.id;
+            const { modulesActifs, montantMensuel, fraisConfiguration, actif } = req.body;
+            if (!Array.isArray(modulesActifs) || !(Number(montantMensuel) > 0)) {
+                return res.status(400).json({ erreur: 'Modules actifs et montant mensuel (positif) sont requis.' });
+            }
+
+            const existant = await req.db.query(`SELECT tenant_id, frais_configuration_facture FROM organisation_abonnement_saas WHERE tenant_id = $1`, [tenantId]);
+
+            let result;
+            if (existant.rows.length === 0) {
+                result = await req.db.query(
+                    `INSERT INTO organisation_abonnement_saas (tenant_id, modules_actifs, montant_mensuel, frais_configuration, actif)
+                     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+                    [tenantId, modulesActifs, montantMensuel, fraisConfiguration || null, actif !== false]
+                );
+                if (Number(fraisConfiguration) > 0) {
+                    await req.db.query(
+                        `INSERT INTO factures_saas (tenant_id, type, montant, date_echeance) VALUES ($1, 'CONFIGURATION', $2, $3)`,
+                        [tenantId, fraisConfiguration, dansNJours(7)]
+                    );
+                    result = await req.db.query(
+                        `UPDATE organisation_abonnement_saas SET frais_configuration_facture = TRUE WHERE tenant_id = $1 RETURNING *`,
+                        [tenantId]
+                    );
+                }
+            } else {
+                result = await req.db.query(
+                    `UPDATE organisation_abonnement_saas SET modules_actifs = $1, montant_mensuel = $2, actif = $3 WHERE tenant_id = $4 RETURNING *`,
+                    [modulesActifs, montantMensuel, actif !== false, tenantId]
+                );
+            }
+
+            await logAudit(req.db, { table: 'organisation_abonnement_saas', rowId: tenantId, action: 'UPDATE', userId: req.user.id, tenantId, details: req.body });
+            res.json(result.rows[0]);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: "Erreur lors de l'enregistrement de l'abonnement." });
+        }
+    });
+
+    router.get('/factures-saas', ...garde, async (req, res) => {
+        try {
+            const { statut } = req.query;
+            const params = [];
+            let where = '1=1';
+            if (statut) {
+                params.push(statut);
+                where += ` AND f.statut = $${params.length}`;
+            }
+            const result = await req.db.query(
+                `SELECT f.*, o.nom as organisation_nom
+                 FROM factures_saas f JOIN organisations o ON f.tenant_id = o.id
+                 WHERE ${where}
+                 ORDER BY CASE f.statut WHEN 'A_PAYER' THEN 0 WHEN 'EN_RETARD' THEN 0 ELSE 1 END, f.date_echeance ASC`,
+                params
+            );
+            res.json(result.rows);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la récupération des factures.' });
+        }
+    });
+
+    /**
+     * Génère les échéances d'abonnement du mois courant pour chaque organisation active — idempotent
+     * (une organisation déjà facturée pour cette période n'est jamais dupliquée), même logique que
+     * /abonnements/generer-commandes (paniers récurrents) : déclenché manuellement, pas de tâche
+     * planifiée dédiée dans ce projet.
+     */
+    router.post('/factures-saas/generer', ...garde, async (req, res) => {
+        try {
+            const periode = new Date().toISOString().slice(0, 7);
+            const abonnements = await req.db.query(`SELECT tenant_id, montant_mensuel FROM organisation_abonnement_saas WHERE actif = TRUE`);
+
+            const resultats = { creees: 0, deja_generees: 0 };
+            for (const ab of abonnements.rows) {
+                const dejaGeneree = await req.db.query(
+                    `SELECT id FROM factures_saas WHERE tenant_id = $1 AND type = 'ABONNEMENT' AND periode = $2`,
+                    [ab.tenant_id, periode]
+                );
+                if (dejaGeneree.rows.length > 0) {
+                    resultats.deja_generees += 1;
+                    continue;
+                }
+                await req.db.query(
+                    `INSERT INTO factures_saas (tenant_id, type, periode, montant, date_echeance) VALUES ($1, 'ABONNEMENT', $2, $3, $4)`,
+                    [ab.tenant_id, periode, ab.montant_mensuel, dansNJours(7)]
+                );
+                resultats.creees += 1;
+            }
+
+            await logAudit(req.db, { table: 'factures_saas', action: 'CREATE', userId: req.user.id, tenantId: null, details: { periode, ...resultats } });
+            res.json({ periode, ...resultats });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la génération des factures.' });
+        }
+    });
+
+    router.put('/factures-saas/:id', ...garde, async (req, res) => {
+        try {
+            const { statut, methodePaiement, notes } = req.body;
+            const statutsValides = ['A_PAYER', 'PAYEE', 'EN_RETARD', 'ANNULEE'];
+            if (statut && !statutsValides.includes(statut)) {
+                return res.status(400).json({ erreur: 'Statut invalide.' });
+            }
+            const result = await req.db.query(
+                `UPDATE factures_saas SET
+                    statut = COALESCE($1, statut),
+                    methode_paiement = COALESCE($2, methode_paiement),
+                    notes = COALESCE($3, notes),
+                    date_paiement = CASE WHEN $1 = 'PAYEE' THEN CURRENT_TIMESTAMP ELSE date_paiement END
+                 WHERE id = $4 RETURNING *`,
+                [statut || null, methodePaiement || null, notes || null, req.params.id]
+            );
+            if (result.rows.length === 0) return res.status(404).json({ erreur: 'Facture introuvable.' });
+            await logAudit(req.db, { table: 'factures_saas', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: result.rows[0].tenant_id, details: req.body });
+            res.json(result.rows[0]);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la mise à jour de la facture.' });
         }
     });
 

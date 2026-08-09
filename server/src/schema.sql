@@ -385,6 +385,41 @@ CREATE TABLE audit_logs (
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- --------------------------------------------------------
+-- 8. FACTURATION SAAS (Massla facture les fermes clientes — pas leurs propres clients à elles,
+--    déjà géré par organisation_paydunya_config/paiements). Géré exclusivement depuis la vue
+--    plateforme (routes/plateforme.js, réservée au superviseur) : un admin de ferme normal n'a
+--    jamais accès à ces deux tables, voir rls-policies.sql (policies is_plateforme_admin()-only,
+--    aucun accès via tenant_id comme pour le reste du schéma).
+-- --------------------------------------------------------
+
+CREATE TABLE organisation_abonnement_saas (
+    tenant_id INT PRIMARY KEY REFERENCES organisations(id),
+    -- Purement descriptif (quoi afficher côté plateforme) — le montant réellement facturé chaque
+    -- mois est montant_mensuel, négocié au cas par cas, jamais recalculé automatiquement à partir
+    -- de cette liste : reflète la réalité commerciale (chaque ferme peut avoir un prix différent).
+    modules_actifs TEXT[] NOT NULL DEFAULT '{}',
+    montant_mensuel INT NOT NULL,
+    frais_configuration INT,
+    frais_configuration_facture BOOLEAN NOT NULL DEFAULT FALSE,
+    actif BOOLEAN NOT NULL DEFAULT TRUE,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE factures_saas (
+    id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
+    type VARCHAR(20) CHECK (type IN ('CONFIGURATION', 'ABONNEMENT')) NOT NULL,
+    periode VARCHAR(7), -- 'YYYY-MM' pour un abonnement mensuel, NULL pour une facture de configuration
+    montant INT NOT NULL,
+    statut VARCHAR(20) CHECK (statut IN ('A_PAYER', 'PAYEE', 'EN_RETARD', 'ANNULEE')) NOT NULL DEFAULT 'A_PAYER',
+    date_echeance DATE NOT NULL,
+    date_paiement TIMESTAMP,
+    methode_paiement VARCHAR(30), -- 'WAVE', 'VIREMENT', 'ESPECES', 'AUTRE' — collecte manuelle, pas de PayDunya ici
+    notes TEXT,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ==============================================================================
 -- INDEX POUR OPTIMISER LES PERFORMANCES DES REQUÊTES DU DASHBOARD
 -- ==============================================================================

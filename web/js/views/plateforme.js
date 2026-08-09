@@ -4,9 +4,17 @@ const PLATEFORME_STATUT_LABELS = { OUVERT: 'Ouvert', EN_COURS: 'En cours', RESOL
 const PLATEFORME_STATUT_BADGE = { OUVERT: 'warn', EN_COURS: 'info', RESOLU: 'ok', FERME: 'muted' };
 const PLATEFORME_PRIORITE_BADGE = { URGENTE: 'danger', HAUTE: 'warn', NORMALE: 'info', BASSE: 'muted' };
 
+const FACTURE_SAAS_STATUT_LABELS = { A_PAYER: 'À payer', PAYEE: 'Payée', EN_RETARD: 'En retard', ANNULEE: 'Annulée' };
+const FACTURE_SAAS_STATUT_BADGE = { A_PAYER: 'warn', PAYEE: 'ok', EN_RETARD: 'danger', ANNULEE: 'muted' };
+
 window.Views.plateforme = {
   async render(container) {
-    const [organisations, tickets] = await Promise.all([Api.get('/plateforme/organisations'), Api.get('/plateforme/tickets')]);
+    const [organisations, tickets, catalogue, facturesSaas] = await Promise.all([
+      Api.get('/plateforme/organisations'),
+      Api.get('/plateforme/tickets'),
+      Api.get('/plateforme/modules-saas'),
+      Api.get('/plateforme/factures-saas'),
+    ]);
 
     container.innerHTML = `
       <div class="panel">
@@ -23,10 +31,25 @@ window.Views.plateforme = {
                   <td>${o.utilisateurs_actifs}</td>
                   <td>${o.tickets_ouverts > 0 ? `<span class="badge warn">${o.tickets_ouverts}</span>` : '0'}</td>
                   <td>${o.tickets_total}</td>
-                  <td><button class="secondary" data-connecter="${o.id}">Se connecter en tant qu'administrateur</button></td>
+                  <td>
+                    <button class="secondary" data-abonnement="${o.id}">Abonnement SaaS</button>
+                    <button class="secondary" data-connecter="${o.id}">Se connecter en tant qu'administrateur</button>
+                  </td>
                 </tr>`
               )
               .join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h2>Facturation SaaS</h2>
+        <p class="desc">Collecte manuelle : le paiement de chaque ferme se fait par le moyen de votre choix (Wave, virement, espèces) — marquez la facture comme payée une fois reçue.</p>
+        <button id="btn-generer-factures-saas" style="margin-bottom: 1rem;">Générer les factures du mois</button>
+        <table>
+          <thead><tr><th>Ferme</th><th>Type</th><th>Période</th><th>Montant</th><th>Échéance</th><th>Statut</th><th></th></tr></thead>
+          <tbody id="factures-saas-body">
+            ${renderLignesFacturesSaas(facturesSaas)}
           </tbody>
         </table>
       </div>
@@ -53,6 +76,10 @@ window.Views.plateforme = {
     container.querySelectorAll('button[data-connecter]').forEach((btn) => {
       btn.addEventListener('click', () => seConnecterAdmin(btn.dataset.connecter));
     });
+    container.querySelectorAll('button[data-abonnement]').forEach((btn) => {
+      const org = organisations.find((o) => o.id === Number(btn.dataset.abonnement));
+      btn.addEventListener('click', () => ouvrirAbonnementSaas(container, org, catalogue));
+    });
 
     container.querySelector('#filtre-statut-plateforme').addEventListener('change', async (e) => {
       const statut = e.target.value;
@@ -62,7 +89,18 @@ window.Views.plateforme = {
       attacherOuvrirTicket(tbody, filtres);
     });
 
+    container.querySelector('#btn-generer-factures-saas').addEventListener('click', async () => {
+      try {
+        const resultat = await Api.post('/plateforme/factures-saas/generer', {});
+        showToast(`${resultat.creees} facture(s) générée(s) pour ${resultat.periode} (${resultat.deja_generees} déjà existante(s)).`, 'success');
+        window.Views.plateforme.render(container);
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
     attacherOuvrirTicket(container.querySelector('#plateforme-tickets-body'), tickets);
+    attacherActionsFactures(container.querySelector('#factures-saas-body'), facturesSaas, container);
   },
 };
 
@@ -129,4 +167,157 @@ async function seConnecterAdmin(tenantId) {
   } catch (err) {
     showToast(err.message, 'error');
   }
+}
+
+function renderLignesFacturesSaas(factures) {
+  if (factures.length === 0) return '<tr><td colspan="7" class="empty">Aucune facture SaaS.</td></tr>';
+  return factures
+    .map(
+      (f) => `<tr>
+        <td>${esc(f.organisation_nom)}</td>
+        <td>${f.type === 'CONFIGURATION' ? 'Configuration' : 'Abonnement'}</td>
+        <td>${esc(f.periode) || '-'}</td>
+        <td>${Number(f.montant).toLocaleString('fr-FR')} FCFA</td>
+        <td>${fmtDate(f.date_echeance)}</td>
+        <td><span class="badge ${FACTURE_SAAS_STATUT_BADGE[f.statut] || 'muted'}">${esc(FACTURE_SAAS_STATUT_LABELS[f.statut] || f.statut)}</span></td>
+        <td>${
+          f.statut === 'A_PAYER' || f.statut === 'EN_RETARD'
+            ? `<button class="secondary" data-marquer-payee="${f.id}">Marquer payée</button>`
+            : ''
+        }</td>
+      </tr>`
+    )
+    .join('');
+}
+
+function attacherActionsFactures(scope, factures, container) {
+  scope.querySelectorAll('button[data-marquer-payee]').forEach((btn) => {
+    btn.addEventListener('click', () => marquerFacturePayee(container, btn.dataset.marquerPayee));
+  });
+}
+
+async function marquerFacturePayee(container, factureId) {
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal-box">
+        <h3>Marquer la facture comme payée</h3>
+        <form id="form-paiement-saas" class="form-grid">
+          <label>Moyen de paiement reçu
+            <select name="methodePaiement" required>
+              <option value="WAVE">Wave</option>
+              <option value="VIREMENT">Virement</option>
+              <option value="ESPECES">Espèces</option>
+              <option value="AUTRE">Autre</option>
+            </select>
+          </label>
+          <label class="span-2">Notes (optionnel)<textarea name="notes" rows="2"></textarea></label>
+        </form>
+        <div class="modal-actions">
+          <button class="secondary" data-action="annuler">Annuler</button>
+          <button data-action="confirmer">Confirmer le paiement</button>
+        </div>
+      </div>
+    </div>
+  `);
+  document.body.appendChild(overlay);
+  const closeModal = () => overlay.remove();
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+  overlay.querySelector('[data-action="annuler"]').addEventListener('click', closeModal);
+  overlay.querySelector('[data-action="confirmer"]').addEventListener('click', async () => {
+    const fd = new FormData(overlay.querySelector('#form-paiement-saas'));
+    try {
+      await Api.put(`/plateforme/factures-saas/${factureId}`, {
+        statut: 'PAYEE',
+        methodePaiement: fd.get('methodePaiement'),
+        notes: fd.get('notes'),
+      });
+      showToast('Facture marquée comme payée.', 'success');
+      closeModal();
+      window.Views.plateforme.render(container);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+}
+
+async function ouvrirAbonnementSaas(container, org, catalogue) {
+  const abonnement = await Api.get(`/plateforme/organisations/${org.id}/abonnement-saas`);
+  const modulesActifs = abonnement?.modules_actifs || [];
+  const surPack = modulesActifs.includes(catalogue.packToutCompris.cle);
+  const dejaConfigure = !!abonnement;
+
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal-box">
+        <h3>Abonnement SaaS — ${esc(org.nom)}</h3>
+        <p class="desc">${esc(catalogue.socleEssentiel.label)} — ${catalogue.socleEssentiel.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois (toujours inclus)</p>
+        <form id="form-abonnement-saas" class="form-grid">
+          <label style="flex-direction: row; align-items: center; gap: 8px;">
+            <input type="checkbox" name="pack" style="width:auto" ${surPack ? 'checked' : ''} />
+            ${esc(catalogue.packToutCompris.label)} (${catalogue.packToutCompris.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois)
+          </label>
+          <div id="modules-a-la-carte" style="${surPack ? 'opacity: 0.4; pointer-events: none;' : ''}">
+            ${catalogue.modules
+              .map(
+                (m) => `<label style="flex-direction: row; align-items: center; gap: 8px;">
+                  <input type="checkbox" name="module" value="${m.cle}" style="width:auto" ${modulesActifs.includes(m.cle) ? 'checked' : ''} />
+                  ${esc(m.label)} (${m.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois)
+                </label>`
+              )
+              .join('')}
+          </div>
+          <label>Montant mensuel négocié (FCFA)
+            <input type="number" name="montantMensuel" min="1" required value="${abonnement?.montant_mensuel || ''}" />
+          </label>
+          ${
+            dejaConfigure
+              ? `<p class="desc">Frais de configuration : ${abonnement.frais_configuration_facture ? 'déjà facturé' : 'non facturé'}.</p>`
+              : `<label>Frais de configuration initiale (FCFA, facturé une seule fois)
+                   <input type="number" name="fraisConfiguration" min="0" value="${catalogue.fraisConfigurationDefaut}" />
+                 </label>`
+          }
+          <label style="flex-direction: row; align-items: center; gap: 8px;">
+            <input type="checkbox" name="actif" style="width:auto" ${abonnement?.actif !== false ? 'checked' : ''} />
+            Abonnement actif (décochez pour suspendre sans supprimer l'historique)
+          </label>
+        </form>
+        <div class="modal-actions">
+          <button class="secondary" data-action="annuler">Annuler</button>
+          <button data-action="enregistrer">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  `);
+  document.body.appendChild(overlay);
+  const closeModal = () => overlay.remove();
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+  overlay.querySelector('[data-action="annuler"]').addEventListener('click', closeModal);
+
+  overlay.querySelector('input[name="pack"]').addEventListener('change', (e) => {
+    overlay.querySelector('#modules-a-la-carte').style.opacity = e.target.checked ? '0.4' : '1';
+    overlay.querySelector('#modules-a-la-carte').style.pointerEvents = e.target.checked ? 'none' : 'auto';
+  });
+
+  overlay.querySelector('[data-action="enregistrer"]').addEventListener('click', async () => {
+    const fd = new FormData(overlay.querySelector('#form-abonnement-saas'));
+    const surPackCoche = fd.get('pack') === 'on';
+    const modules = surPackCoche ? [catalogue.packToutCompris.cle] : fd.getAll('module');
+    try {
+      await Api.put(`/plateforme/organisations/${org.id}/abonnement-saas`, {
+        modulesActifs: modules,
+        montantMensuel: Number(fd.get('montantMensuel')),
+        fraisConfiguration: dejaConfigure ? undefined : Number(fd.get('fraisConfiguration') || 0),
+        actif: fd.get('actif') === 'on',
+      });
+      showToast('Abonnement enregistré.', 'success');
+      closeModal();
+      window.Views.plateforme.render(container);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
 }

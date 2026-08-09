@@ -223,3 +223,23 @@ CREATE POLICY tenant_isolation_select ON ticket_messages FOR SELECT
     );
 CREATE POLICY tenant_isolation_write ON ticket_messages FOR INSERT
     WITH CHECK (EXISTS (SELECT 1 FROM tickets tk WHERE tk.id = ticket_messages.ticket_id AND tk.tenant_id = current_tenant_id()));
+
+-- ------------------------------------------------------------------------------
+-- Facturation SaaS (Massla facture les fermes, voir routes/plateforme.js) : contrairement à TOUTES
+-- les autres tables de ce fichier, l'accès n'est JAMAIS basé sur current_tenant_id() — un admin de
+-- ferme normal n'a aucune raison de voir ou modifier ces données, quelle que soit son organisation.
+-- Seul is_plateforme_admin() ouvre l'accès, en lecture ET en écriture (contrairement aux
+-- échappatoires ci-dessus, qui sont presque toutes lecture seule) : gérer un abonnement et générer
+-- des factures SaaS EST l'objet même de cette table, pas un cas particulier à l'intérieur d'un accès
+-- normalement tenant-scopé.
+-- ------------------------------------------------------------------------------
+
+DROP POLICY IF EXISTS plateforme_seulement ON organisation_abonnement_saas;
+CREATE POLICY plateforme_seulement ON organisation_abonnement_saas
+    USING (is_plateforme_admin())
+    WITH CHECK (is_plateforme_admin());
+
+DROP POLICY IF EXISTS plateforme_seulement ON factures_saas;
+CREATE POLICY plateforme_seulement ON factures_saas
+    USING (is_plateforme_admin())
+    WITH CHECK (is_plateforme_admin());

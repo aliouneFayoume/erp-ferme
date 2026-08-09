@@ -100,3 +100,121 @@ describe('plateforme — vue support multi-fermes', () => {
         expect(res.status).toBe(404);
     });
 });
+
+describe('plateforme — facturation SaaS', () => {
+    let pool;
+    let app;
+    let tenantA;
+    let tenantB;
+    let tokenSuperviseur;
+    let tokenAdminNormal;
+
+    beforeEach(async () => {
+        pool = createTestPool();
+        await seedRolesEtSecteurs(pool);
+        tenantA = await creerOrganisation(pool, 'Ferme A');
+        tenantB = await creerOrganisation(pool, 'Ferme B');
+        tokenSuperviseur = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantA, estSuperviseurPlateforme: true });
+        tokenAdminNormal = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantA, estSuperviseurPlateforme: false });
+        app = buildApp(pool, ['plateforme']);
+    });
+
+    afterEach(async () => {
+        await pool.end();
+    });
+
+    test('un admin sans le flag superviseur reçoit 403 sur les routes de facturation SaaS', async () => {
+        const res = await request(app).get('/api/plateforme/factures-saas').set('Authorization', `Bearer ${tokenAdminNormal}`);
+        expect(res.status).toBe(403);
+    });
+
+    test('configurer un abonnement pour la première fois génère automatiquement la facture de configuration', async () => {
+        const res = await request(app)
+            .put(`/api/plateforme/organisations/${tenantA}/abonnement-saas`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ modulesActifs: ['finance', 'logistique'], montantMensuel: 55000, fraisConfiguration: 75000 });
+
+        expect(res.status).toBe(200);
+        expect(res.body.frais_configuration_facture).toBe(true);
+
+        const factures = await pool.query(`SELECT * FROM factures_saas WHERE tenant_id = $1 AND type = 'CONFIGURATION'`, [tenantA]);
+        expect(factures.rows).toHaveLength(1);
+        expect(Number(factures.rows[0].montant)).toBe(75000);
+        expect(factures.rows[0].statut).toBe('A_PAYER');
+    });
+
+    test('reconfigurer un abonnement existant ne régénère jamais la facture de configuration', async () => {
+        await request(app)
+            .put(`/api/plateforme/organisations/${tenantA}/abonnement-saas`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ modulesActifs: ['finance'], montantMensuel: 40000, fraisConfiguration: 75000 });
+
+        const res2 = await request(app)
+            .put(`/api/plateforme/organisations/${tenantA}/abonnement-saas`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ modulesActifs: ['finance', 'support'], montantMensuel: 45000 });
+
+        expect(res2.status).toBe(200);
+        expect(Number(res2.body.montant_mensuel)).toBe(45000);
+
+        const factures = await pool.query(`SELECT * FROM factures_saas WHERE tenant_id = $1 AND type = 'CONFIGURATION'`, [tenantA]);
+        expect(factures.rows).toHaveLength(1);
+    });
+
+    test('générer les factures du mois crée une échéance par organisation active, jamais pour les inactives, et reste idempotent', async () => {
+        await request(app)
+            .put(`/api/plateforme/organisations/${tenantA}/abonnement-saas`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ modulesActifs: ['finance'], montantMensuel: 40000 });
+        await request(app)
+            .put(`/api/plateforme/organisations/${tenantB}/abonnement-saas`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ modulesActifs: ['support'], montantMensuel: 30000, actif: false });
+
+        const gen1 = await request(app).post('/api/plateforme/factures-saas/generer').set('Authorization', `Bearer ${tokenSuperviseur}`);
+        expect(gen1.status).toBe(200);
+        expect(gen1.body.creees).toBe(1);
+
+        const factures = await pool.query(`SELECT * FROM factures_saas WHERE type = 'ABONNEMENT'`);
+        expect(factures.rows).toHaveLength(1);
+        expect(factures.rows[0].tenant_id).toBe(tenantA);
+
+        const gen2 = await request(app).post('/api/plateforme/factures-saas/generer').set('Authorization', `Bearer ${tokenSuperviseur}`);
+        expect(gen2.body.creees).toBe(0);
+        expect(gen2.body.deja_generees).toBe(1);
+        const facturesApres = await pool.query(`SELECT * FROM factures_saas WHERE type = 'ABONNEMENT'`);
+        expect(facturesApres.rows).toHaveLength(1);
+    });
+
+    test('marquer une facture comme payée enregistre la date et le moyen de paiement', async () => {
+        await request(app)
+            .put(`/api/plateforme/organisations/${tenantA}/abonnement-saas`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ modulesActifs: ['finance'], montantMensuel: 40000, fraisConfiguration: 75000 });
+        const factures = await pool.query(`SELECT id FROM factures_saas WHERE tenant_id = $1`, [tenantA]);
+        const factureId = factures.rows[0].id;
+
+        const res = await request(app)
+            .put(`/api/plateforme/factures-saas/${factureId}`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ statut: 'PAYEE', methodePaiement: 'WAVE' });
+
+        expect(res.status).toBe(200);
+        expect(res.body.statut).toBe('PAYEE');
+        expect(res.body.methode_paiement).toBe('WAVE');
+        expect(res.body.date_paiement).toBeTruthy();
+    });
+
+    test('la liste des factures SaaS inclut le nom de la ferme', async () => {
+        await request(app)
+            .put(`/api/plateforme/organisations/${tenantA}/abonnement-saas`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ modulesActifs: ['finance'], montantMensuel: 40000, fraisConfiguration: 75000 });
+
+        const res = await request(app).get('/api/plateforme/factures-saas').set('Authorization', `Bearer ${tokenSuperviseur}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body).toHaveLength(1);
+        expect(res.body[0].organisation_nom).toBe('Ferme A');
+    });
+});
