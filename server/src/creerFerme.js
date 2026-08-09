@@ -35,6 +35,16 @@ async function creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, a
     try {
         await client.query('BEGIN');
 
+        // `INSERT ... RETURNING` exige EN PLUS que la ligne insérée passe la policy SELECT, pas
+        // seulement le WITH CHECK de l'INSERT (piège déjà rencontré pour audit_logs, voir
+        // rls-policies.sql) — et à cet instant précis, aucun tenant_id n'existe encore à poser en
+        // contexte. Créer une organisation est par nature une opération non scopée à un tenant
+        // existant ; poser is_plateforme_admin ici, sur cette connexion dédiée et de courte durée,
+        // est le même échappatoire déjà utilisé pour la vue plateforme — sans risque puisque cette
+        // connexion ne sert jamais à rien d'autre, et son contexte est remis à zéro avant d'être
+        // relâchée vers le pool (voir le `finally` plus bas).
+        await client.query("SELECT set_config('app.is_plateforme_admin', 'true', false)");
+
         const orgRes = await client.query(`INSERT INTO organisations (nom) VALUES ($1) RETURNING id`, [nomFerme.trim()]);
         const tenantId = orgRes.rows[0].id;
 
@@ -71,9 +81,13 @@ async function creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, a
         await client.query('COMMIT');
         return { tenantId, admin };
     } catch (err) {
-        await client.query('ROLLBACK');
+        await client.query('ROLLBACK').catch(() => {});
         throw err;
     } finally {
+        // Cette connexion retourne au pool et sera réutilisée par une requête sans rapport — jamais
+        // la laisser repartir avec un tenant_id ou un is_plateforme_admin résiduel (voir le
+        // commentaire équivalent dans attachTenantConnection, auth.js).
+        await client.query("SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_plateforme_admin', '', false)").catch(() => {});
         client.release();
     }
 }
