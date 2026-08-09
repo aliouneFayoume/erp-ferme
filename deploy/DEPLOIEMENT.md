@@ -188,6 +188,45 @@ sudo systemctl enable --now erp-ferme-renew.timer
 systemctl list-timers erp-ferme-renew.timer   # vérifier la prochaine exécution
 ```
 
+### Wildcard `*.massla.sn` (sous-domaines par ferme) — DNS-01 via OVH
+
+Un certificat wildcard ne peut PAS être validé par HTTP-01/webroot (méthode ci-dessus) — il faut
+prouver la possession du domaine via un enregistrement DNS temporaire (DNS-01), ce qui nécessite un
+accès à l'API du registrar. `massla.sn` est chez OVH (nameservers `dns106.ovh.net`), d'où l'usage du
+plugin `certbot-dns-ovh` (image Docker `certbot/dns-ovh`, pas `certbot/certbot`).
+
+Prérequis, une fois :
+1. Enregistrement DNS `A` `*.massla.sn` → IP du VPS (zone DNS OVH).
+2. Jeton API OVH ([api.ovh.com/createToken](https://api.ovh.com/createToken/), région Europe pour
+   ce compte) avec les droits `GET /domain/zone/*` (nécessaire pour que le plugin détecte la zone —
+   `GET /domain/zone/massla.sn/*` seul renvoie 403) et `POST`/`PUT`/`DELETE` sur
+   `/domain/zone/massla.sn/*`, validité "Unlimited".
+3. `deploy/certbot/ovh.ini` (jamais versionné — `deploy/certbot/` est dans `.gitignore`, permissions
+   `600`) :
+   ```ini
+   dns_ovh_endpoint = ovh-eu
+   dns_ovh_application_key = ...
+   dns_ovh_application_secret = ...
+   dns_ovh_consumer_key = ...
+   ```
+
+Obtention initiale (étend la lineage `massla.sn` existante en place, mêmes chemins que le certificat
+webroot précédent — `*.massla.sn` couvre déjà `www.massla.sn`, ne pas le lister en plus, Let's
+Encrypt refuse la redondance) :
+```bash
+docker run --rm \
+  -v "$(pwd)/deploy/certbot/conf:/etc/letsencrypt" \
+  -v "$(pwd)/deploy/certbot/ovh.ini:/etc/ovh.ini:ro" \
+  certbot/dns-ovh \
+  certonly --dns-ovh --dns-ovh-credentials /etc/ovh.ini --dns-ovh-propagation-seconds 30 \
+  --cert-name massla.sn -d massla.sn -d '*.massla.sn' \
+  --agree-tos --non-interactive --expand
+```
+Le renouvellement automatique (`deploy/certbot-renew.sh`) utilise déjà `certbot/dns-ovh renew`
+(l'authenticator `dns-ovh` et le chemin des identifiants sont mémorisés dans
+`deploy/certbot/conf/renewal/massla.sn.conf` après l'obtention initiale) — rien à reconfigurer côté
+timer systemd, juste s'assurer que `ovh.ini` reste présent sur le VPS.
+
 ## Sauvegardes toutes les 6h
 
 ```bash
