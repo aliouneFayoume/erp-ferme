@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAuth, requireSuperviseurPlateforme, signToken } = require('../auth');
 const { logAudit } = require('../audit');
 const { SOCLE_ESSENTIEL, MODULES_SAAS, PACK_TOUT_COMPRIS, FRAIS_CONFIGURATION_DEFAUT } = require('../modulesSaas');
+const { creerNouvelleFerme } = require('../creerFerme');
 
 function dansNJours(n) {
     const d = new Date();
@@ -21,6 +22,32 @@ function dansNJours(n) {
 module.exports = function plateformeRoutes(pool) {
     const router = express.Router();
     const garde = [requireAuth(pool), requireSuperviseurPlateforme];
+
+    /**
+     * Création directe d'une ferme depuis la vue plateforme — même logique que l'inscription
+     * self-service (routes/inscription.js), sans code d'invitation puisque l'appelant est déjà
+     * authentifié comme superviseur. Pratique quand Alioune configure lui-même un nouveau client au
+     * téléphone plutôt que de lui faire remplir le formulaire public.
+     */
+    router.post('/organisations', ...garde, async (req, res) => {
+        try {
+            const { nomFerme, secteurs, adminNomComplet, adminEmail, adminPassword } = req.body;
+            const { tenantId, admin } = await creerNouvelleFerme(pool, {
+                nomFerme,
+                secteurs,
+                adminNomComplet,
+                adminEmail,
+                adminPassword,
+                auditUserId: req.user.id,
+            });
+            res.status(201).json({ tenantId, admin: { id: admin.id, nom_complet: admin.nom_complet, email: admin.email } });
+        } catch (err) {
+            if (err.statut) return res.status(err.statut).json({ erreur: err.message });
+            if (err.code === '23505') return res.status(409).json({ erreur: 'Cette adresse email est déjà utilisée.' });
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la création de la ferme.' });
+        }
+    });
 
     router.get('/organisations', ...garde, async (req, res) => {
         try {

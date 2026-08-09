@@ -20,6 +20,7 @@ window.Views.plateforme = {
       <div class="panel">
         <h2>Fermes (${organisations.length})</h2>
         <p class="desc">Vue lecture seule sur toutes les organisations — pour répondre à un ticket, connectez-vous en tant qu'administrateur de la ferme concernée.</p>
+        <button id="btn-creer-ferme" style="margin-bottom: 1rem;">Créer une nouvelle ferme</button>
         <table>
           <thead><tr><th>Ferme</th><th>Créée le</th><th>Utilisateurs actifs</th><th>Tickets ouverts</th><th>Tickets (total)</th><th></th></tr></thead>
           <tbody>
@@ -73,6 +74,7 @@ window.Views.plateforme = {
       </div>
     `;
 
+    container.querySelector('#btn-creer-ferme').addEventListener('click', () => ouvrirCreationFerme(container));
     container.querySelectorAll('button[data-connecter]').forEach((btn) => {
       btn.addEventListener('click', () => seConnecterAdmin(btn.dataset.connecter));
     });
@@ -157,6 +159,79 @@ async function voirEchangesTicket(ticket) {
     if (e.target === overlay) closeModal();
   });
   overlay.querySelector('[data-action="fermer"]').addEventListener('click', closeModal);
+}
+
+function ouvrirCreationFerme(container) {
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal-box">
+        <h3>Créer une nouvelle ferme</h3>
+        <p class="desc">Même création que l'inscription self-service, sans code d'invitation — pratique pour configurer un client vous-même.</p>
+        <form id="form-creation-ferme" class="form-grid">
+          <label>Nom de la ferme<input type="text" name="nomFerme" required autocomplete="off" /></label>
+
+          <div>
+            <p class="sub" style="margin:0 0 8px;">Secteur(s) d'activité (au moins un)</p>
+            <label style="flex-direction: row; align-items: center; gap: 8px;">
+              <input type="checkbox" name="secteur-avicole" style="width:auto" /> Avicole
+            </label>
+            <label style="flex-direction: row; align-items: center; gap: 8px;">
+              <input type="checkbox" name="secteur-piscicole" style="width:auto" /> Piscicole
+            </label>
+            <label style="flex-direction: row; align-items: center; gap: 8px;">
+              <input type="checkbox" name="secteur-maraicher" style="width:auto" /> Maraîcher
+            </label>
+            <label>Autre secteur (optionnel)<input type="text" name="secteurAutreNom" autocomplete="off" placeholder="ex: Élevage bovin" /></label>
+            <label style="flex-direction: row; align-items: center; gap: 8px;">
+              <input type="checkbox" name="secteurAutreRecolte" style="width:auto" /> Suivre une date de récolte prévue pour ce secteur
+            </label>
+          </div>
+
+          <label>Nom complet de l'administrateur<input type="text" name="adminNomComplet" required autocomplete="off" /></label>
+          <label>Email<input type="email" name="adminEmail" required autocomplete="off" /></label>
+          <label>Mot de passe (8 caractères minimum)<input type="password" name="adminPassword" required minlength="8" autocomplete="new-password" /></label>
+        </form>
+        <div class="modal-actions">
+          <button class="secondary" data-action="annuler">Annuler</button>
+          <button data-action="creer">Créer la ferme</button>
+        </div>
+      </div>
+    </div>
+  `);
+  document.body.appendChild(overlay);
+  const closeModal = () => overlay.remove();
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+  overlay.querySelector('[data-action="annuler"]').addEventListener('click', closeModal);
+
+  overlay.querySelector('[data-action="creer"]').addEventListener('click', async () => {
+    const fd = new FormData(overlay.querySelector('#form-creation-ferme'));
+    const secteurs = [];
+    if (fd.get('secteur-avicole')) secteurs.push({ nom: 'Avicole', suiviRecolte: false });
+    if (fd.get('secteur-piscicole')) secteurs.push({ nom: 'Piscicole', suiviRecolte: false });
+    if (fd.get('secteur-maraicher')) secteurs.push({ nom: 'Maraîcher', suiviRecolte: true });
+    const autreNom = (fd.get('secteurAutreNom') || '').trim();
+    if (autreNom) secteurs.push({ nom: autreNom, suiviRecolte: !!fd.get('secteurAutreRecolte') });
+    if (secteurs.length === 0) {
+      showToast("Sélectionnez au moins un secteur d'activité.", 'error');
+      return;
+    }
+    try {
+      await Api.post('/plateforme/organisations', {
+        nomFerme: fd.get('nomFerme'),
+        secteurs,
+        adminNomComplet: fd.get('adminNomComplet'),
+        adminEmail: fd.get('adminEmail'),
+        adminPassword: fd.get('adminPassword'),
+      });
+      showToast('Ferme créée.', 'success');
+      closeModal();
+      window.Views.plateforme.render(container);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
 }
 
 async function seConnecterAdmin(tenantId) {

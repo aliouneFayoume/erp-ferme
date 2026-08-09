@@ -101,6 +101,88 @@ describe('plateforme — vue support multi-fermes', () => {
     });
 });
 
+describe('plateforme — création directe de ferme', () => {
+    let pool;
+    let app;
+    let tenantA;
+    let tokenSuperviseur;
+    let tokenAdminNormal;
+
+    beforeEach(async () => {
+        pool = createTestPool();
+        await seedRolesEtSecteurs(pool);
+        tenantA = await creerOrganisation(pool, 'Ferme A');
+        tokenSuperviseur = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantA, estSuperviseurPlateforme: true });
+        tokenAdminNormal = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantA, estSuperviseurPlateforme: false });
+        app = buildApp(pool, ['plateforme']);
+    });
+
+    afterEach(async () => {
+        await pool.end();
+    });
+
+    function payloadValide(overrides = {}) {
+        return {
+            nomFerme: 'Ferme Créée Directement',
+            secteurs: [{ nom: 'Avicole', suiviRecolte: false }],
+            adminNomComplet: 'Nouvel Admin',
+            adminEmail: `nouvel-admin-${Date.now()}@test.sn`,
+            adminPassword: 'motdepasse123',
+            ...overrides,
+        };
+    }
+
+    test('le superviseur peut créer une ferme directement, sans code d\'invitation', async () => {
+        const res = await request(app)
+            .post('/api/plateforme/organisations')
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send(payloadValide());
+
+        expect(res.status).toBe(201);
+        expect(res.body.tenantId).toBeTruthy();
+
+        const org = await pool.query(`SELECT * FROM organisations WHERE id = $1`, [res.body.tenantId]);
+        expect(org.rows[0].nom).toBe('Ferme Créée Directement');
+        const admin = await pool.query(`SELECT role_id FROM utilisateurs WHERE id = $1`, [res.body.admin.id]);
+        expect(admin.rows).toHaveLength(1);
+
+        // Attribué au superviseur qui a cliqué "créer", pas au nouvel admin (contrairement à
+        // l'inscription self-service, où personne d'autre n'a agi).
+        const audit = await pool.query(`SELECT utilisateur_id FROM audit_logs WHERE tenant_id = $1 AND action = 'CREATE'`, [res.body.tenantId]);
+        expect(audit.rows[0].utilisateur_id).not.toBe(res.body.admin.id);
+    });
+
+    test('un admin sans le flag superviseur ne peut pas créer de ferme directement', async () => {
+        const res = await request(app)
+            .post('/api/plateforme/organisations')
+            .set('Authorization', `Bearer ${tokenAdminNormal}`)
+            .send(payloadValide());
+
+        expect(res.status).toBe(403);
+    });
+
+    test('rejette une création sans secteur', async () => {
+        const res = await request(app)
+            .post('/api/plateforme/organisations')
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send(payloadValide({ secteurs: [] }));
+
+        expect(res.status).toBe(400);
+    });
+
+    test('rejette un email admin déjà utilisé', async () => {
+        const email = `doublon-plateforme-${Date.now()}@test.sn`;
+        await request(app).post('/api/plateforme/organisations').set('Authorization', `Bearer ${tokenSuperviseur}`).send(payloadValide({ adminEmail: email }));
+
+        const res2 = await request(app)
+            .post('/api/plateforme/organisations')
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send(payloadValide({ adminEmail: email, nomFerme: 'Autre Ferme' }));
+
+        expect(res2.status).toBe(409);
+    });
+});
+
 describe('plateforme — facturation SaaS', () => {
     let pool;
     let app;
