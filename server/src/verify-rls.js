@@ -24,6 +24,10 @@ async function poserContexte(client, tenantId) {
     await client.query('SELECT set_config($1, $2, false)', ['app.current_tenant_id', tenantId === null ? '' : String(tenantId)]);
 }
 
+async function poserPlateforme(client, actif) {
+    await client.query("SELECT set_config('app.is_plateforme_admin', $1, false)", [actif ? 'true' : '']);
+}
+
 async function main() {
     if (!process.env.DATABASE_URL || !process.env.ERP_APP_DATABASE_URL) {
         console.error('DATABASE_URL (rôle propriétaire) ET ERP_APP_DATABASE_URL (rôle erp_app) sont requis — jamais contre pg-mem.');
@@ -103,6 +107,40 @@ async function main() {
                 insertionRejetee = true;
             }
             verifier("clients : impossible d'insérer une ligne pour un autre tenant que celui du contexte courant", insertionRejetee);
+
+            // 6. Vue plateforme (is_plateforme_admin) : contexte A + flag actif voit AUSSI les
+            //    tickets de B — l'échappatoire de lecture cross-tenant fonctionne.
+            await poserContexte(client, tenantA);
+            await poserPlateforme(client, true);
+            const ticketsPlateforme = await client.query(`SELECT id FROM tickets WHERE id IN ($1, $2)`, [ticketA, ticketB]);
+            verifier('tickets : avec is_plateforme_admin, contexte A voit aussi le ticket de B', ticketsPlateforme.rows.length === 2);
+
+            // 7. Mais l'échappatoire est UNIQUEMENT en lecture : impossible de modifier le ticket de
+            //    B depuis le contexte de A, même avec is_plateforme_admin actif.
+            const updateTicketB = await client.query(`UPDATE tickets SET sujet = 'Modifié par erreur' WHERE id = $1 RETURNING id`, [ticketB]);
+            verifier("tickets : is_plateforme_admin ne permet jamais d'écrire sur le ticket d'un autre tenant", updateTicketB.rows.length === 0);
+
+            // 8. audit_logs a la seule échappatoire d'ÉCRITURE de tout le fichier (nécessaire pour
+            //    journaliser une connexion support dans le tenant CIBLE, pas celui du superviseur).
+            //    Jamais de RETURNING ici (ni dans le vrai code, audit.js:logAudit) : RETURNING
+            //    déclenche EN PLUS une vérification via la policy SELECT — stricte, sans échappatoire
+            //    — de la ligne qu'on vient d'insérer, ce qui ferait échouer ce test pour une raison
+            //    sans rapport avec ce qu'il vérifie réellement (déjà rencontré en vérifiant ceci).
+            let auditInsereSousAutreTenant = false;
+            try {
+                await client.query(`INSERT INTO audit_logs (tenant_id, table_name, action) VALUES ($1, 'utilisateurs', 'VERIFY_RLS_TEST')`, [tenantB]);
+                const verif = await admin.query(`SELECT id FROM audit_logs WHERE tenant_id = $1 AND action = 'VERIFY_RLS_TEST'`, [tenantB]);
+                auditInsereSousAutreTenant = verif.rows.length === 1;
+                await admin.query(`DELETE FROM audit_logs WHERE tenant_id = $1 AND action = 'VERIFY_RLS_TEST'`, [tenantB]);
+            } catch (err) {
+                auditInsereSousAutreTenant = false;
+            }
+            verifier('audit_logs : is_plateforme_admin permet de journaliser dans le tenant cible (connexion support)', auditInsereSousAutreTenant);
+
+            // 9. Une fois le flag retiré, plus aucun accès cross-tenant — pas de fuite résiduelle.
+            await poserPlateforme(client, false);
+            const ticketsSansPlateforme = await client.query(`SELECT id FROM tickets WHERE id IN ($1, $2)`, [ticketA, ticketB]);
+            verifier('tickets : is_plateforme_admin retiré, contexte A ne voit plus le ticket de B', ticketsSansPlateforme.rows.length === 1 && ticketsSansPlateforme.rows[0].id === ticketA);
         } finally {
             client.release();
         }

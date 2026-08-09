@@ -1,7 +1,7 @@
 // Service worker : cache l'app shell pour un fonctionnement installable et hors-ligne
 // (terrain PWA offline-first, cahier des charges §4). Les appels /api/* ne sont jamais
 // mis en cache : ils doivent toujours refléter l'état réel du serveur.
-const CACHE_NAME = 'erp-ferme-shell-v20';
+const CACHE_NAME = 'erp-ferme-shell-v21';
 
 const APP_SHELL = [
   '/',
@@ -26,6 +26,7 @@ const APP_SHELL = [
   '/js/views/audit.js',
   '/js/views/tickets.js',
   '/js/views/parametres-paiement.js',
+  '/js/views/plateforme.js',
 ];
 
 self.addEventListener('install', (event) => {

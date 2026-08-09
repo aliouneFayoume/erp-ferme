@@ -40,6 +40,11 @@ CREATE TABLE utilisateurs (
     role_id INT REFERENCES roles(id),
     secteur_id INT, -- pour un chef de prod : secteur unique auquel il a accès
     actif BOOLEAN DEFAULT TRUE,
+    -- Vue plateforme (routes/plateforme.js) : accès en lecture à toutes les organisations, réservé
+    -- à Alioune (support/vente multi-fermes) — sans rapport avec le rôle 'admin', qui reste
+    -- scopé à sa propre organisation comme pour tout le monde. Activé manuellement en base pour un
+    -- seul compte, jamais via l'inscription self-service ni l'API.
+    est_superviseur_plateforme BOOLEAN NOT NULL DEFAULT FALSE,
     deleted_at TIMESTAMP,
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

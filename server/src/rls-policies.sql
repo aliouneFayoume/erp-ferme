@@ -24,6 +24,15 @@ CREATE OR REPLACE FUNCTION current_tenant_id() RETURNS int LANGUAGE sql STABLE A
     SELECT NULLIF(current_setting('app.current_tenant_id', true), '')::int
 $$;
 
+-- Échappatoire de LECTURE cross-tenant pour la vue plateforme (routes/plateforme.js, réservée à un
+-- seul compte support — voir migration-04-superviseur-plateforme.sql). Posé par
+-- requireSuperviseurPlateforme (auth.js) UNIQUEMENT sur les routes qui en ont besoin, jamais par
+-- défaut. Volontairement absent de tout WITH CHECK : aucune policy d'écriture n'utilise cette
+-- fonction, la vue plateforme est lecture seule par conception (voir le commentaire dans auth.js).
+CREATE OR REPLACE FUNCTION is_plateforme_admin() RETURNS boolean LANGUAGE sql STABLE AS $$
+    SELECT COALESCE(NULLIF(current_setting('app.is_plateforme_admin', true), ''), 'false')::boolean
+$$;
+
 -- ------------------------------------------------------------------------------
 -- Tables globales, partagées par toutes les organisations (pas de notion de tenant)
 -- ------------------------------------------------------------------------------
@@ -46,7 +55,7 @@ DROP POLICY IF EXISTS tenant_isolation_insert ON organisations;
 DROP POLICY IF EXISTS tenant_isolation_update ON organisations;
 DROP POLICY IF EXISTS tenant_isolation_delete ON organisations;
 CREATE POLICY tenant_isolation_select ON organisations FOR SELECT
-    USING (id = current_tenant_id());
+    USING (id = current_tenant_id() OR is_plateforme_admin());
 CREATE POLICY tenant_isolation_insert ON organisations FOR INSERT
     WITH CHECK (true);
 CREATE POLICY tenant_isolation_update ON organisations FOR UPDATE
@@ -67,7 +76,7 @@ DROP POLICY IF EXISTS tenant_isolation_insert ON utilisateurs;
 DROP POLICY IF EXISTS tenant_isolation_update ON utilisateurs;
 DROP POLICY IF EXISTS tenant_isolation_delete ON utilisateurs;
 CREATE POLICY tenant_isolation_select ON utilisateurs FOR SELECT
-    USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
+    USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL OR is_plateforme_admin());
 CREATE POLICY tenant_isolation_insert ON utilisateurs FOR INSERT
     WITH CHECK (tenant_id = current_tenant_id());
 CREATE POLICY tenant_isolation_update ON utilisateurs FOR UPDATE
@@ -81,7 +90,7 @@ DROP POLICY IF EXISTS tenant_isolation_insert ON clients;
 DROP POLICY IF EXISTS tenant_isolation_update ON clients;
 DROP POLICY IF EXISTS tenant_isolation_delete ON clients;
 CREATE POLICY tenant_isolation_select ON clients FOR SELECT
-    USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL);
+    USING (tenant_id = current_tenant_id() OR current_tenant_id() IS NULL OR is_plateforme_admin());
 CREATE POLICY tenant_isolation_insert ON clients FOR INSERT
     WITH CHECK (tenant_id = current_tenant_id());
 CREATE POLICY tenant_isolation_update ON clients FOR UPDATE
@@ -116,7 +125,7 @@ BEGIN
     FOREACH t IN ARRAY ARRAY[
         'organisation_paydunya_config', 'abonnements', 'secteurs', 'lots_production', 'produits',
         'commandes', 'livraisons', 'factures', 'caisses_chauffeur', 'depenses', 'releves_bancaires',
-        'fournisseurs', 'commandes_fournisseurs', 'tickets', 'audit_logs'
+        'fournisseurs', 'commandes_fournisseurs'
     ]
     LOOP
         EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
@@ -128,8 +137,60 @@ BEGIN
 END $$;
 
 -- ------------------------------------------------------------------------------
+-- audit_logs : échappatoire d'ÉCRITURE, la seule de tout ce fichier — nécessaire pour que
+-- /se-connecter-admin (routes/plateforme.js) puisse journaliser l'action DANS le journal
+-- d'audit DE LA FERME CIBLE (pas celui du superviseur), pour que ça reste visible et compréhensible
+-- si cette ferme consulte un jour son propre journal. Champ tenant_id fourni explicitement par le
+-- code (jamais déduit du contexte de connexion), donc pas de risque qu'une écriture parte au hasard
+-- vers le mauvais tenant. Lecture/mise à jour/suppression restent strictes comme toutes les autres.
+--
+-- Piège PostgreSQL à connaître si on touche à ceci : `INSERT ... RETURNING` exige EN PLUS que la
+-- ligne insérée passe la policy SELECT (stricte, sans échappatoire, ici) — pas seulement le WITH
+-- CHECK de l'INSERT. logAudit() (audit.js) n'utilise jamais RETURNING, précisément pour ça ; si un
+-- jour un code l'ajoute pour cette table, l'insertion cross-tenant se remettra à échouer même si
+-- cette policy a l'air correcte (vécu en vérifiant cette policy avec verify-rls.js).
+-- ------------------------------------------------------------------------------
+
+DROP POLICY IF EXISTS tenant_isolation ON audit_logs;
+DROP POLICY IF EXISTS tenant_isolation_select ON audit_logs;
+DROP POLICY IF EXISTS tenant_isolation_insert ON audit_logs;
+DROP POLICY IF EXISTS tenant_isolation_update ON audit_logs;
+DROP POLICY IF EXISTS tenant_isolation_delete ON audit_logs;
+CREATE POLICY tenant_isolation_select ON audit_logs FOR SELECT
+    USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON audit_logs FOR INSERT
+    WITH CHECK (tenant_id = current_tenant_id() OR is_plateforme_admin());
+CREATE POLICY tenant_isolation_update ON audit_logs FOR UPDATE
+    USING (tenant_id = current_tenant_id())
+    WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON audit_logs FOR DELETE
+    USING (tenant_id = current_tenant_id());
+
+-- ------------------------------------------------------------------------------
+-- tickets : échappatoire de LECTURE (contrairement à audit_logs ci-dessus, qui est en écriture),
+-- pour la vue plateforme (routes/plateforme.js). Écriture (création de ticket, statut, etc.) reste
+-- stricte : la vue plateforme ne peut jamais créer/modifier un ticket d'une autre organisation.
+-- ------------------------------------------------------------------------------
+
+DROP POLICY IF EXISTS tenant_isolation ON tickets;
+DROP POLICY IF EXISTS tenant_isolation_select ON tickets;
+DROP POLICY IF EXISTS tenant_isolation_insert ON tickets;
+DROP POLICY IF EXISTS tenant_isolation_update ON tickets;
+DROP POLICY IF EXISTS tenant_isolation_delete ON tickets;
+CREATE POLICY tenant_isolation_select ON tickets FOR SELECT
+    USING (tenant_id = current_tenant_id() OR is_plateforme_admin());
+CREATE POLICY tenant_isolation_insert ON tickets FOR INSERT
+    WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON tickets FOR UPDATE
+    USING (tenant_id = current_tenant_id())
+    WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON tickets FOR DELETE
+    USING (tenant_id = current_tenant_id());
+
+-- ------------------------------------------------------------------------------
 -- Tables enfants sans tenant_id propre : filtrage par sous-requête vers le parent qui, lui, porte
--- tenant_id. Même filet strict, pas d'échappatoire (aucune de ces tables n'est lue pré-tenant).
+-- tenant_id. Même filet strict, pas d'échappatoire — SAUF ticket_messages en lecture, pour la même
+-- raison que tickets ci-dessus (la vue plateforme doit pouvoir lire les échanges d'un ticket).
 -- ------------------------------------------------------------------------------
 
 DROP POLICY IF EXISTS tenant_isolation ON releves_journaliers;
@@ -153,6 +214,12 @@ CREATE POLICY tenant_isolation ON lignes_commande_fournisseur
     WITH CHECK (EXISTS (SELECT 1 FROM commandes_fournisseurs cf WHERE cf.id = lignes_commande_fournisseur.commande_fournisseur_id AND cf.tenant_id = current_tenant_id()));
 
 DROP POLICY IF EXISTS tenant_isolation ON ticket_messages;
-CREATE POLICY tenant_isolation ON ticket_messages
-    USING (EXISTS (SELECT 1 FROM tickets tk WHERE tk.id = ticket_messages.ticket_id AND tk.tenant_id = current_tenant_id()))
+DROP POLICY IF EXISTS tenant_isolation_select ON ticket_messages;
+DROP POLICY IF EXISTS tenant_isolation_write ON ticket_messages;
+CREATE POLICY tenant_isolation_select ON ticket_messages FOR SELECT
+    USING (
+        EXISTS (SELECT 1 FROM tickets tk WHERE tk.id = ticket_messages.ticket_id AND tk.tenant_id = current_tenant_id())
+        OR is_plateforme_admin()
+    );
+CREATE POLICY tenant_isolation_write ON ticket_messages FOR INSERT
     WITH CHECK (EXISTS (SELECT 1 FROM tickets tk WHERE tk.id = ticket_messages.ticket_id AND tk.tenant_id = current_tenant_id()));

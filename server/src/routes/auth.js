@@ -25,7 +25,8 @@ module.exports = function authRoutes(pool) {
 
         try {
             const result = await pool.query(
-                `SELECT u.id, u.nom_complet, u.email, u.mot_de_passe_hash, u.secteur_id, u.tenant_id, u.actif, r.nom as role_nom
+                `SELECT u.id, u.nom_complet, u.email, u.mot_de_passe_hash, u.secteur_id, u.tenant_id, u.actif,
+                        u.est_superviseur_plateforme, r.nom as role_nom
                  FROM utilisateurs u JOIN roles r ON u.role_id = r.id
                  WHERE u.email = $1 AND u.deleted_at IS NULL`,
                 [email]
@@ -53,6 +54,7 @@ module.exports = function authRoutes(pool) {
                     role: user.role_nom,
                     secteur_id: user.secteur_id,
                     tenant_id: user.tenant_id,
+                    superviseurPlateforme: !!user.est_superviseur_plateforme,
                 },
             });
         } catch (err) {

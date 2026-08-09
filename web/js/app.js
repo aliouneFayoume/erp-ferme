@@ -15,6 +15,9 @@ const TAB_DEFS = [
   { key: 'parametres-paiement', label: 'Paiements (réglages)', roles: ['admin'] },
   { key: 'utilisateurs', label: 'Utilisateurs', roles: ['admin'] },
   { key: 'audit', label: "Journal d'audit", roles: ['admin'] },
+  // Réservé à un seul compte (voir migration-04-superviseur-plateforme.sql) — jamais visible pour
+  // un admin normal, même si `roles` incluait 'admin' : voir tabsForRole ci-dessous.
+  { key: 'plateforme', label: 'Support plateforme', roles: [], superviseurSeulement: true },
 ];
 
 // Icônes minimalistes (trait fin, 18x18) pour la sidebar — pas de dépendance à une librairie externe.
@@ -33,6 +36,7 @@ const TAB_ICONS = {
   'parametres-paiement': '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20"/><path d="M6 14h4"/>',
   utilisateurs: '<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="18" cy="9" r="2.6"/><path d="M15.5 14a5.5 5.5 0 0 1 6.5 5.4"/>',
   audit: '<path d="M9 3h6a1 1 0 0 1 1 1v1h1a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h1V4a1 1 0 0 1 1-1Z"/><path d="M9 11h6M9 15h6"/>',
+  plateforme: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
 };
 
 let currentTab = null;
@@ -249,8 +253,13 @@ function el(html) {
 }
 window.el = el;
 
-function tabsForRole(role) {
-  return TAB_DEFS.filter((t) => t.roles.includes(role) || role === 'admin');
+function tabsForRole(user) {
+  return TAB_DEFS.filter((t) => {
+    // Ne suit jamais le raccourci "admin voit tout" — n'est vrai que pour ce seul compte, quel que
+    // soit son rôle (voir migration-04-superviseur-plateforme.sql).
+    if (t.superviseurSeulement) return !!user.superviseurPlateforme;
+    return t.roles.includes(user.role) || user.role === 'admin';
+  });
 }
 
 async function selectTab(key) {
@@ -304,7 +313,7 @@ function buildShell(user) {
   document.getElementById('who-name').textContent = user.nom_complet || user.email;
   document.getElementById('who-role').textContent = roleLabel(user.role);
 
-  const tabs = tabsForRole(user.role);
+  const tabs = tabsForRole(user);
   const nav = document.getElementById('tabs');
   nav.innerHTML = '';
   tabs.forEach((t) => {

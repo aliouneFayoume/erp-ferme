@@ -15,7 +15,16 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-simulation-ferme-massla
 
 function signToken(user) {
     return jwt.sign(
-        { id: user.id, role: user.role_nom, nom: user.nom_complet, secteur_id: user.secteur_id, tenant_id: user.tenant_id },
+        {
+            id: user.id,
+            role: user.role_nom,
+            nom: user.nom_complet,
+            secteur_id: user.secteur_id,
+            tenant_id: user.tenant_id,
+            // Vue plateforme (routes/plateforme.js) : indépendant du rôle, réservé à un seul compte
+            // en pratique — voir migration-04-superviseur-plateforme.sql.
+            superviseurPlateforme: !!user.est_superviseur_plateforme,
+        },
         JWT_SECRET,
         { expiresIn: '12h' }
     );
@@ -50,7 +59,7 @@ async function attachTenantConnection(req, res, pool, tenantId) {
         if (released) return;
         released = true;
         req.db
-            .query("SELECT set_config('app.current_tenant_id', '', false)")
+            .query("SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_plateforme_admin', '', false)")
             .catch(() => {})
             .finally(() => req.db.release());
     };
@@ -113,6 +122,26 @@ function requireAuth(pool) {
     };
 }
 
+/**
+ * Réservé à la vue plateforme (routes/plateforme.js) : à utiliser APRÈS requireAuth (a besoin de
+ * req.user et req.db déjà posés). Pose `app.is_plateforme_admin` sur la connexion déjà attachée à
+ * la requête pour que les policies RLS avec échappatoire (voir `is_plateforme_admin()` dans
+ * rls-policies.sql) laissent passer une lecture cross-tenant — en LECTURE SEULE : aucune policy
+ * d'écriture n'a cette échappatoire, une organisation ne peut jamais être modifiée depuis ici.
+ */
+function requireSuperviseurPlateforme(req, res, next) {
+    if (!req.user?.superviseurPlateforme) {
+        return res.status(403).json({ erreur: 'Accès réservé à la supervision plateforme.' });
+    }
+    req.db
+        .query("SELECT set_config('app.is_plateforme_admin', 'true', false)")
+        .then(() => next())
+        .catch((err) => {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur interne.' });
+        });
+}
+
 /** RBAC : restreint l'accès à une liste de rôles. 'admin' passe toujours. */
 function checkRole(rolesAutorises) {
     return (req, res, next) => {
@@ -128,4 +157,13 @@ function checkRole(rolesAutorises) {
     };
 }
 
-module.exports = { signToken, requireAuth, checkRole, signClientToken, requireClientAuth, attachTenantConnection, JWT_SECRET };
+module.exports = {
+    signToken,
+    requireAuth,
+    checkRole,
+    signClientToken,
+    requireClientAuth,
+    attachTenantConnection,
+    requireSuperviseurPlateforme,
+    JWT_SECRET,
+};

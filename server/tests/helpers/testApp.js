@@ -100,14 +100,14 @@ function tokenPour({ id = 1, role = 'admin', nom_complet = 'Testeur', secteur_id
  * token correspondant à son id réel — nécessaire dès qu'une route appelle logAudit avec ce userId,
  * sous peine de violer la FK audit_logs.utilisateur_id -> utilisateurs.id.
  */
-async function creerUtilisateurEtToken(pool, { role = 'admin', nom_complet = 'Testeur', secteur_id = null, tenant_id = null } = {}) {
+async function creerUtilisateurEtToken(pool, { role = 'admin', nom_complet = 'Testeur', secteur_id = null, tenant_id = null, estSuperviseurPlateforme = false } = {}) {
     const roleRes = await pool.query(`SELECT id FROM roles WHERE nom = $1`, [role]);
     const email = `${role}-${Date.now()}-${Math.floor(Math.random() * 100000)}@test.sn`;
     const res = await pool.query(
-        `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, secteur_id) VALUES ($1, $2, $3, 'x', $4, $5) RETURNING id`,
-        [tenant_id, nom_complet, email, roleRes.rows[0].id, secteur_id]
+        `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, secteur_id, est_superviseur_plateforme) VALUES ($1, $2, $3, 'x', $4, $5, $6) RETURNING id`,
+        [tenant_id, nom_complet, email, roleRes.rows[0].id, secteur_id, estSuperviseurPlateforme]
     );
-    return signToken({ id: res.rows[0].id, role_nom: role, nom_complet, secteur_id, tenant_id });
+    return signToken({ id: res.rows[0].id, role_nom: role, nom_complet, secteur_id, tenant_id, est_superviseur_plateforme: estSuperviseurPlateforme });
 }
 
 module.exports = {
