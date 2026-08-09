@@ -137,6 +137,28 @@ async function main() {
             }
             verifier('audit_logs : is_plateforme_admin permet de journaliser dans le tenant cible (connexion support)', auditInsereSousAutreTenant);
 
+            // 8bis. Facturation SaaS (organisation_abonnement_saas / factures_saas) : accès
+            //    UNIQUEMENT via is_plateforme_admin(), jamais via current_tenant_id() — même son
+            //    PROPRE abonnement doit rester invisible à un admin de ferme normal.
+            await poserContexte(client, tenantA);
+            await poserPlateforme(client, false);
+            let ecritureAbonnementRejetee = false;
+            try {
+                await client.query(`INSERT INTO organisation_abonnement_saas (tenant_id, montant_mensuel) VALUES ($1, 10000)`, [tenantA]);
+            } catch (err) {
+                ecritureAbonnementRejetee = true;
+            }
+            verifier("organisation_abonnement_saas : un admin de ferme (sans is_plateforme_admin) ne peut pas écrire, même pour SA PROPRE organisation", ecritureAbonnementRejetee);
+
+            await admin.query(`INSERT INTO organisation_abonnement_saas (tenant_id, montant_mensuel) VALUES ($1, 10000)`, [tenantA]);
+            const abonnementLectureSansFlag = await client.query(`SELECT tenant_id FROM organisation_abonnement_saas WHERE tenant_id = $1`, [tenantA]);
+            verifier("organisation_abonnement_saas : un admin de ferme (sans is_plateforme_admin) ne peut pas lire SON PROPRE abonnement", abonnementLectureSansFlag.rows.length === 0);
+
+            await poserPlateforme(client, true);
+            const abonnementLectureAvecFlag = await client.query(`SELECT tenant_id FROM organisation_abonnement_saas WHERE tenant_id = $1`, [tenantA]);
+            verifier('organisation_abonnement_saas : is_plateforme_admin donne accès normalement', abonnementLectureAvecFlag.rows.length === 1);
+            await poserPlateforme(client, false);
+
             // 9. Une fois le flag retiré, plus aucun accès cross-tenant — pas de fuite résiduelle.
             await poserPlateforme(client, false);
             const ticketsSansPlateforme = await client.query(`SELECT id FROM tickets WHERE id IN ($1, $2)`, [ticketA, ticketB]);
@@ -146,6 +168,8 @@ async function main() {
         }
     } finally {
         // --- Nettoyage (rôle propriétaire, ordre inverse des FK). ---
+        await admin.query(`DELETE FROM factures_saas WHERE tenant_id IN ($1, $2)`, [tenantA, tenantB]).catch(() => {});
+        await admin.query(`DELETE FROM organisation_abonnement_saas WHERE tenant_id IN ($1, $2)`, [tenantA, tenantB]).catch(() => {});
         await admin.query(`DELETE FROM ticket_messages WHERE ticket_id IN ($1, $2)`, [ticketA, ticketB]).catch(() => {});
         await admin.query(`DELETE FROM tickets WHERE id IN ($1, $2)`, [ticketA, ticketB]).catch(() => {});
         await admin.query(`DELETE FROM clients WHERE id IN ($1, $2)`, [clientA, clientB]).catch(() => {});
