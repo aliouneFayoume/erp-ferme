@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
-const { signToken, requireAuth } = require('../auth');
+const { signToken, requireAuth, attachTenantConnection } = require('../auth');
 const { logAudit } = require('../audit');
 
 // Limite le brute-force sur les mots de passe : 10 tentatives / 15 min par IP, au-delà d'un usage
@@ -43,7 +43,13 @@ module.exports = function authRoutes(pool) {
             }
 
             const token = signToken(user);
-            await logAudit(pool, { table: 'utilisateurs', rowId: user.id, action: 'LOGIN', userId: user.id, tenantId: user.tenant_id });
+            // Le tenant vient d'être découvert (aucun contexte au démarrage de cette requête,
+            // pré-authentification) : on pose maintenant le contexte RLS, sans quoi l'écriture dans
+            // audit_logs (stricte : tenant_id = current_tenant_id() OR is_plateforme_admin(), voir
+            // rls-policies.sql) est rejetée pour CHAQUE connexion réussie — même comportement que
+            // l'IPN PayDunya (finance.js) une fois le tenant résolu.
+            await attachTenantConnection(req, res, pool, user.tenant_id);
+            await logAudit(req.db, { table: 'utilisateurs', rowId: user.id, action: 'LOGIN', userId: user.id, tenantId: user.tenant_id });
 
             res.json({
                 token,
