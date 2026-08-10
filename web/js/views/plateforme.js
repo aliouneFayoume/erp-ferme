@@ -379,7 +379,7 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
             ${catalogue.modules
               .map(
                 (m) => `<label style="flex-direction: row; align-items: center; gap: 8px;">
-                  <input type="checkbox" name="module" value="${m.cle}" style="width:auto" ${modulesActifs.includes(m.cle) ? 'checked' : ''} />
+                  <input type="checkbox" name="module" value="${m.cle}" style="width:auto" ${surPack || modulesActifs.includes(m.cle) ? 'checked' : ''} />
                   ${esc(m.label)} (${m.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois)
                 </label>`
               )
@@ -417,6 +417,12 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
   overlay.querySelector('input[name="pack"]').addEventListener('change', (e) => {
     overlay.querySelector('#modules-a-la-carte').style.opacity = e.target.checked ? '0.4' : '1';
     overlay.querySelector('#modules-a-la-carte').style.pointerEvents = e.target.checked ? 'none' : 'auto';
+    // Coche/décoche visuellement chaque module pour que "Pack tout compris" se lise vraiment comme
+    // "tout est inclus" — jusqu'ici les cases restaient grisées mais décochées, ce qui donnait
+    // l'impression trompeuse que rien n'était sélectionné alors que l'enregistrement était correct.
+    overlay.querySelectorAll('#modules-a-la-carte input[name="module"]').forEach((cb) => {
+      cb.checked = e.target.checked;
+    });
   });
 
   overlay.querySelector('[data-action="enregistrer"]').addEventListener('click', async () => {
