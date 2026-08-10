@@ -130,7 +130,7 @@ DECLARE
     t text;
 BEGIN
     FOREACH t IN ARRAY ARRAY[
-        'organisation_paydunya_config', 'abonnements', 'secteurs', 'lots_production', 'produits',
+        'organisation_paydunya_config', 'abonnements', 'lots_production', 'produits',
         'commandes', 'livraisons', 'factures', 'caisses_chauffeur', 'depenses', 'releves_bancaires',
         'fournisseurs', 'commandes_fournisseurs'
     ]
@@ -144,7 +144,32 @@ BEGIN
 END $$;
 
 -- ------------------------------------------------------------------------------
--- audit_logs : échappatoire d'ÉCRITURE, la seule de tout ce fichier — nécessaire pour que
+-- secteurs : échappatoires de LECTURE et d'ÉCRITURE (INSERT uniquement) pour la vue plateforme —
+-- jusqu'ici, un secteur ne pouvait être créé qu'à la création de la ferme (creerFerme.js) ; ceci
+-- permet à Alioune d'ajouter un secteur à une ferme existante (ex: un client qui n'avait pris
+-- qu'Avicole veut ajouter Piscicole), typiquement au moment de renégocier son abonnement SaaS. Lire
+-- ET créer un secteur pour une AUTRE organisation reste réservé à is_plateforme_admin() ; modifier
+-- ou supprimer un secteur existant reste strictement réservé au tenant lui-même — la vue plateforme
+-- ne renomme/supprime jamais un secteur d'une autre ferme, seulement en ajouter un nouveau.
+-- ------------------------------------------------------------------------------
+
+DROP POLICY IF EXISTS tenant_isolation ON secteurs;
+DROP POLICY IF EXISTS tenant_isolation_select ON secteurs;
+DROP POLICY IF EXISTS tenant_isolation_insert ON secteurs;
+DROP POLICY IF EXISTS tenant_isolation_update ON secteurs;
+DROP POLICY IF EXISTS tenant_isolation_delete ON secteurs;
+CREATE POLICY tenant_isolation_select ON secteurs FOR SELECT
+    USING (tenant_id = current_tenant_id() OR is_plateforme_admin());
+CREATE POLICY tenant_isolation_insert ON secteurs FOR INSERT
+    WITH CHECK (tenant_id = current_tenant_id() OR is_plateforme_admin());
+CREATE POLICY tenant_isolation_update ON secteurs FOR UPDATE
+    USING (tenant_id = current_tenant_id())
+    WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON secteurs FOR DELETE
+    USING (tenant_id = current_tenant_id());
+
+-- ------------------------------------------------------------------------------
+-- audit_logs : échappatoire d'ÉCRITURE — nécessaire pour que
 -- /se-connecter-admin (routes/plateforme.js) puisse journaliser l'action DANS le journal
 -- d'audit DE LA FERME CIBLE (pas celui du superviseur), pour que ça reste visible et compréhensible
 -- si cette ferme consulte un jour son propre journal. Champ tenant_id fourni explicitement par le

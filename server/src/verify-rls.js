@@ -201,6 +201,40 @@ async function main() {
             await admin.query(`UPDATE organisations SET deleted_at = NULL WHERE id = $1`, [tenantB]);
             await poserPlateforme(client, false);
 
+            // 8quater. secteurs : ajout d'un secteur à une AUTRE organisation depuis la vue plateforme
+            //    (routes/plateforme.js, POST /organisations/:id/secteurs) — lecture ET création via
+            //    is_plateforme_admin(), mais toujours pas de modification/suppression cross-tenant.
+            await poserContexte(client, tenantA);
+            await poserPlateforme(client, false);
+            const secteursAutreSansFlag = await client.query(`SELECT id FROM secteurs WHERE tenant_id = $1`, [tenantB]);
+            verifier("secteurs : sans is_plateforme_admin, impossible de lire les secteurs d'une AUTRE organisation", secteursAutreSansFlag.rows.length === 0);
+
+            let secteurInsereSansFlagRejete = false;
+            try {
+                await client.query(`INSERT INTO secteurs (tenant_id, nom) VALUES ($1, 'Secteur Suspect')`, [tenantB]);
+            } catch (err) {
+                secteurInsereSansFlagRejete = true;
+            }
+            verifier("secteurs : sans is_plateforme_admin, impossible de créer un secteur pour une AUTRE organisation", secteurInsereSansFlagRejete);
+
+            await poserPlateforme(client, true);
+            const secteursAutreAvecFlag = await client.query(`SELECT id FROM secteurs WHERE tenant_id = $1`, [tenantB]);
+            verifier('secteurs : is_plateforme_admin permet de lire les secteurs d\'une AUTRE organisation', secteursAutreAvecFlag.rows.length === 1);
+
+            const nouveauSecteur = await client.query(`INSERT INTO secteurs (tenant_id, nom) VALUES ($1, 'Secteur Ajouté Plateforme') RETURNING id`, [tenantB]);
+            verifier("secteurs : is_plateforme_admin permet de créer un secteur pour une AUTRE organisation", nouveauSecteur.rows.length === 1);
+            await admin.query(`DELETE FROM secteurs WHERE id = $1`, [nouveauSecteur.rows[0].id]);
+
+            let secteurMajAutreRejetee = false;
+            try {
+                const maj = await client.query(`UPDATE secteurs SET nom = 'Modifié par erreur' WHERE tenant_id = $1 RETURNING id`, [tenantB]);
+                secteurMajAutreRejetee = maj.rows.length === 0;
+            } catch (err) {
+                secteurMajAutreRejetee = true;
+            }
+            verifier("secteurs : is_plateforme_admin ne permet jamais de MODIFIER un secteur d'une AUTRE organisation", secteurMajAutreRejetee);
+            await poserPlateforme(client, false);
+
             // 9. Une fois le flag retiré, plus aucun accès cross-tenant — pas de fuite résiduelle.
             await poserPlateforme(client, false);
             const ticketsSansPlateforme = await client.query(`SELECT id FROM tickets WHERE id IN ($1, $2)`, [ticketA, ticketB]);

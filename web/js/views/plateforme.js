@@ -360,7 +360,10 @@ async function marquerFacturePayee(container, factureId) {
 }
 
 async function ouvrirAbonnementSaas(container, org, catalogue) {
-  const abonnement = await Api.get(`/plateforme/organisations/${org.id}/abonnement-saas`);
+  const [abonnement, secteurs] = await Promise.all([
+    Api.get(`/plateforme/organisations/${org.id}/abonnement-saas`),
+    Api.get(`/plateforme/organisations/${org.id}/secteurs`),
+  ]);
   const modulesActifs = abonnement?.modules_actifs || [];
   const surPack = modulesActifs.includes(catalogue.packToutCompris.cle);
   const dejaConfigure = !!abonnement;
@@ -369,6 +372,19 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
     <div class="modal-overlay">
       <div class="modal-box">
         <h3>Abonnement SaaS — ${esc(org.nom)}</h3>
+
+        <div class="panel" style="margin-bottom: 1rem;">
+          <h4 style="margin-top:0;">Secteurs de production</h4>
+          <p class="desc" id="liste-secteurs">${secteurs.length ? secteurs.map((s) => esc(s.nom)).join(', ') : 'Aucun secteur.'}</p>
+          <form id="form-ajout-secteur" class="form-grid" style="margin-bottom:0;">
+            <label>Nouveau secteur<input type="text" name="nom" autocomplete="off" placeholder="ex: Élevage bovin" /></label>
+            <label style="flex-direction: row; align-items: center; gap: 8px;">
+              <input type="checkbox" name="suiviRecolte" style="width:auto" /> Suivre une date de récolte prévue
+            </label>
+            <button type="submit" class="secondary">Ajouter le secteur</button>
+          </form>
+        </div>
+
         <p class="desc">${esc(catalogue.socleEssentiel.label)} — ${catalogue.socleEssentiel.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois (toujours inclus)</p>
         <form id="form-abonnement-saas" class="form-grid">
           <label style="flex-direction: row; align-items: center; gap: 8px;">
@@ -413,6 +429,25 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
     if (e.target === overlay) closeModal();
   });
   overlay.querySelector('[data-action="annuler"]').addEventListener('click', closeModal);
+
+  overlay.querySelector('#form-ajout-secteur').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const nom = (fd.get('nom') || '').trim();
+    if (!nom) return;
+    try {
+      const nouveau = await Api.post(`/plateforme/organisations/${org.id}/secteurs`, {
+        nom,
+        suiviRecolte: fd.get('suiviRecolte') === 'on',
+      });
+      secteurs.push(nouveau);
+      overlay.querySelector('#liste-secteurs').textContent = secteurs.map((s) => s.nom).join(', ');
+      e.target.reset();
+      showToast('Secteur ajouté.', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
 
   overlay.querySelector('input[name="pack"]').addEventListener('change', (e) => {
     overlay.querySelector('#modules-a-la-carte').style.opacity = e.target.checked ? '0.4' : '1';

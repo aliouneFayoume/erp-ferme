@@ -246,6 +246,44 @@ module.exports = function plateformeRoutes(pool) {
         }
     });
 
+    /**
+     * Secteurs de production d'une ferme (Avicole/Piscicole/Maraîcher/autre) — jusqu'ici choisis
+     * une fois pour toutes à la création (creerFerme.js), sans moyen d'en ajouter un ensuite. Ces
+     * deux routes permettent à la vue plateforme de lister les secteurs actuels d'une ferme et d'en
+     * ajouter un nouveau, typiquement quand un client upgrade son abonnement pour un secteur
+     * supplémentaire — voir l'échappatoire SELECT/INSERT dédiée dans rls-policies.sql.
+     */
+    router.get('/organisations/:id/secteurs', ...garde, async (req, res) => {
+        try {
+            const result = await req.db.query(`SELECT id, nom, suivi_recolte FROM secteurs WHERE tenant_id = $1 ORDER BY id`, [req.params.id]);
+            res.json(result.rows);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la récupération des secteurs.' });
+        }
+    });
+
+    router.post('/organisations/:id/secteurs', ...garde, async (req, res) => {
+        try {
+            const tenantId = req.params.id;
+            const nom = String(req.body.nom || '').trim();
+            if (!nom) return res.status(400).json({ erreur: 'Le nom du secteur est requis.' });
+
+            const existant = await req.db.query(`SELECT id FROM secteurs WHERE tenant_id = $1 AND lower(nom) = lower($2)`, [tenantId, nom]);
+            if (existant.rows.length > 0) return res.status(409).json({ erreur: 'Ce secteur existe déjà pour cette ferme.' });
+
+            const result = await req.db.query(
+                `INSERT INTO secteurs (tenant_id, nom, suivi_recolte) VALUES ($1, $2, $3) RETURNING id, nom, suivi_recolte`,
+                [tenantId, nom, !!req.body.suiviRecolte]
+            );
+            await logAudit(req.db, { table: 'secteurs', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: { nom, superviseur: req.user.nom } });
+            res.status(201).json(result.rows[0]);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la création du secteur.' });
+        }
+    });
+
     router.get('/modules-saas', ...garde, async (req, res) => {
         res.json({ socleEssentiel: SOCLE_ESSENTIEL, modules: MODULES_SAAS, packToutCompris: PACK_TOUT_COMPRIS, fraisConfigurationDefaut: FRAIS_CONFIGURATION_DEFAUT });
     });

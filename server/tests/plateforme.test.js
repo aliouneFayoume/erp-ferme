@@ -423,3 +423,73 @@ describe('plateforme — sous-domaines (slug)', () => {
         expect(res.status).toBe(404);
     });
 });
+
+describe('plateforme — ajout de secteur à une ferme existante', () => {
+    let pool;
+    let app;
+    let tenantA;
+    let tenantB;
+    let tokenSuperviseur;
+    let tokenAdminNormal;
+
+    beforeEach(async () => {
+        pool = createTestPool();
+        await seedRolesEtSecteurs(pool);
+        tenantA = await creerOrganisation(pool, 'Ferme A');
+        tenantB = await creerOrganisation(pool, 'Ferme B');
+        await pool.query(`INSERT INTO secteurs (tenant_id, nom) VALUES ($1, 'Avicole')`, [tenantB]);
+        tokenSuperviseur = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantA, estSuperviseurPlateforme: true });
+        tokenAdminNormal = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantA, estSuperviseurPlateforme: false });
+        app = buildApp(pool, ['plateforme']);
+    });
+
+    afterEach(async () => {
+        await pool.end();
+    });
+
+    test('le superviseur voit les secteurs existants d\'une autre organisation', async () => {
+        const res = await request(app).get(`/api/plateforme/organisations/${tenantB}/secteurs`).set('Authorization', `Bearer ${tokenSuperviseur}`);
+        expect(res.status).toBe(200);
+        expect(res.body.map((s) => s.nom)).toEqual(['Avicole']);
+    });
+
+    test('le superviseur peut ajouter un secteur à une autre organisation', async () => {
+        const res = await request(app)
+            .post(`/api/plateforme/organisations/${tenantB}/secteurs`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ nom: 'Piscicole', suiviRecolte: false });
+
+        expect(res.status).toBe(201);
+        expect(res.body.nom).toBe('Piscicole');
+
+        const secteurs = await pool.query(`SELECT nom FROM secteurs WHERE tenant_id = $1 ORDER BY nom`, [tenantB]);
+        expect(secteurs.rows.map((s) => s.nom)).toEqual(['Avicole', 'Piscicole']);
+    });
+
+    test('rejette un secteur en double (insensible à la casse)', async () => {
+        const res = await request(app)
+            .post(`/api/plateforme/organisations/${tenantB}/secteurs`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ nom: 'avicole' });
+        expect(res.status).toBe(409);
+    });
+
+    test('rejette un nom de secteur vide', async () => {
+        const res = await request(app)
+            .post(`/api/plateforme/organisations/${tenantB}/secteurs`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ nom: '   ' });
+        expect(res.status).toBe(400);
+    });
+
+    test('un admin sans le flag superviseur ne peut ni lire ni ajouter de secteur', async () => {
+        const resLecture = await request(app).get(`/api/plateforme/organisations/${tenantB}/secteurs`).set('Authorization', `Bearer ${tokenAdminNormal}`);
+        expect(resLecture.status).toBe(403);
+
+        const resAjout = await request(app)
+            .post(`/api/plateforme/organisations/${tenantB}/secteurs`)
+            .set('Authorization', `Bearer ${tokenAdminNormal}`)
+            .send({ nom: 'Piscicole' });
+        expect(resAjout.status).toBe(403);
+    });
+});
