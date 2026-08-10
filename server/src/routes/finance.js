@@ -4,6 +4,7 @@ const { logAudit } = require('../audit');
 const { genererFacturePDF } = require('../facturePdf');
 const { creerFacture, confirmerFacture } = require('../paydunya');
 const { getPaydunyaConfig } = require('../paymentConfig');
+const { envoyerMessageWhatsapp } = require('../whatsapp');
 
 module.exports = function financeRoutes(pool) {
     const router = express.Router();
@@ -21,7 +22,7 @@ module.exports = function financeRoutes(pool) {
             [req.user.tenant_id, aujourdhui]
         );
         const result = await req.db.query(
-            `SELECT f.*, c.numero_commande, cl.nom as client_nom, cl.type_client
+            `SELECT f.*, c.numero_commande, cl.nom as client_nom, cl.type_client, cl.telephone as client_telephone
              FROM factures f
              JOIN commandes c ON f.commande_id = c.id
              JOIN clients cl ON c.client_id = cl.id
@@ -30,6 +31,44 @@ module.exports = function financeRoutes(pool) {
             [req.user.tenant_id]
         );
         res.json(result.rows);
+    });
+
+    /**
+     * Relance de facture client (pas SaaS — voir routes/plateforme.js pour ça) par WhatsApp,
+     * réutilise le même module server/src/whatsapp.js. Contrairement à la relance SaaS, le numéro
+     * est déjà connu (clients.telephone, existant depuis le portail client) — pas de champ de
+     * contact séparé à configurer.
+     */
+    router.post('/factures/:id/rappel-whatsapp', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
+        try {
+            const factureRes = await req.db.query(
+                `SELECT f.id, f.montant_restant, cl.telephone as client_telephone
+                 FROM factures f
+                 JOIN commandes c ON f.commande_id = c.id
+                 JOIN clients cl ON c.client_id = cl.id
+                 WHERE f.id = $1 AND f.tenant_id = $2`,
+                [req.params.id, req.user.tenant_id]
+            );
+            if (factureRes.rows.length === 0) return res.status(404).json({ erreur: 'Facture introuvable.' });
+            const facture = factureRes.rows[0];
+            if (!facture.client_telephone) {
+                return res.status(400).json({ erreur: 'Ce client n\'a pas de numéro de téléphone enregistré.' });
+            }
+
+            await envoyerMessageWhatsapp(facture.client_telephone);
+            await logAudit(req.db, {
+                table: 'factures',
+                rowId: facture.id,
+                action: 'RAPPEL_WHATSAPP',
+                userId: req.user.id,
+                tenantId: req.user.tenant_id,
+                details: { montant_restant: facture.montant_restant, telephone: facture.client_telephone },
+            });
+            res.json({ envoye: true });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: err.message || "Erreur lors de l'envoi du rappel WhatsApp." });
+        }
     });
 
     /** Génère et télécharge la facture PDF correspondante (client, lignes, montants, échéance). */

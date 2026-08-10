@@ -1,10 +1,12 @@
 const request = require('supertest');
-const { createTestPool, buildApp, seedRolesEtSecteurs, creerOrganisation, creerClient } = require('./helpers/testApp');
+const { createTestPool, buildApp, seedRolesEtSecteurs, creerOrganisation, creerClient, creerUtilisateurEtToken } = require('./helpers/testApp');
 
 jest.mock('../src/paydunya');
 jest.mock('../src/paymentConfig');
+jest.mock('../src/whatsapp');
 const { confirmerFacture } = require('../src/paydunya');
 const { getPaydunyaConfig } = require('../src/paymentConfig');
+const { envoyerMessageWhatsapp } = require('../src/whatsapp');
 
 const CREDENTIALS_FACTICES = { mode: 'test', masterKey: 'mk', privateKey: 'pk', publicKey: 'pubk', token: 'tk' };
 
@@ -130,5 +132,94 @@ describe('finance — IPN PayDunya', () => {
         expect(confirmerFacture).not.toHaveBeenCalled();
         const paiement = await pool.query(`SELECT statut FROM paiements WHERE reference_transaction = $1`, [token]);
         expect(paiement.rows[0].statut).toBe('EN_ATTENTE');
+    });
+});
+
+describe('finance — relance de facture client par WhatsApp', () => {
+    let pool;
+    let app;
+    let tenantId;
+    let tokenComptable;
+
+    beforeEach(async () => {
+        jest.clearAllMocks();
+        pool = createTestPool();
+        await seedRolesEtSecteurs(pool);
+        tenantId = await creerOrganisation(pool);
+        tokenComptable = await creerUtilisateurEtToken(pool, { role: 'comptable', tenant_id: tenantId });
+        app = buildApp(pool, ['finance']);
+    });
+
+    afterEach(async () => {
+        await pool.end();
+    });
+
+    async function creerFactureAvecClient(overrides = {}) {
+        const client = await creerClient(pool, { tenant_id: tenantId, telephone: '+221771112233', ...overrides });
+        await pool.query(
+            `INSERT INTO commandes (tenant_id, numero_commande, client_id, statut, montant_total) VALUES ($1, 'CMD-WA', $2, 'EN_ATTENTE', 5000)`,
+            [tenantId, client.id]
+        );
+        const commande = (await pool.query(`SELECT id FROM commandes WHERE client_id = $1`, [client.id])).rows[0];
+        const facture = await pool.query(
+            `INSERT INTO factures (tenant_id, commande_id, date_echeance, statut, montant_restant) VALUES ($1, $2, CURRENT_DATE, 'A_PAYER', 5000) RETURNING id`,
+            [tenantId, commande.id]
+        );
+        return facture.rows[0].id;
+    }
+
+    test('envoie un rappel WhatsApp au numéro du client', async () => {
+        envoyerMessageWhatsapp.mockResolvedValue({ messages: [{ id: 'wamid.test' }] });
+        const factureId = await creerFactureAvecClient();
+
+        const res = await request(app)
+            .post(`/api/finance/factures/${factureId}/rappel-whatsapp`)
+            .set('Authorization', `Bearer ${tokenComptable}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.envoye).toBe(true);
+        expect(envoyerMessageWhatsapp).toHaveBeenCalledWith('+221771112233');
+
+        const audit = await pool.query(`SELECT * FROM audit_logs WHERE tenant_id = $1 AND action = 'RAPPEL_WHATSAPP'`, [tenantId]);
+        expect(audit.rows).toHaveLength(1);
+    });
+
+    test("rejette si le client n'a pas de numéro de téléphone", async () => {
+        const factureId = await creerFactureAvecClient({ telephone: '' });
+
+        const res = await request(app)
+            .post(`/api/finance/factures/${factureId}/rappel-whatsapp`)
+            .set('Authorization', `Bearer ${tokenComptable}`);
+
+        expect(res.status).toBe(400);
+        expect(envoyerMessageWhatsapp).not.toHaveBeenCalled();
+    });
+
+    test('renvoie 404 pour une facture inexistante', async () => {
+        const res = await request(app)
+            .post(`/api/finance/factures/999999/rappel-whatsapp`)
+            .set('Authorization', `Bearer ${tokenComptable}`);
+        expect(res.status).toBe(404);
+    });
+
+    test("une facture d'une AUTRE organisation n'est jamais accessible", async () => {
+        const autreTenant = await creerOrganisation(pool, 'Autre Ferme');
+        const autreClient = await creerClient(pool, { tenant_id: autreTenant, telephone: '+221799998877' });
+        await pool.query(
+            `INSERT INTO commandes (tenant_id, numero_commande, client_id, statut, montant_total) VALUES ($1, 'CMD-AUTRE', $2, 'EN_ATTENTE', 5000)`,
+            [autreTenant, autreClient.id]
+        );
+        const commande = (await pool.query(`SELECT id FROM commandes WHERE client_id = $1`, [autreClient.id])).rows[0];
+        const facture = await pool.query(
+            `INSERT INTO factures (tenant_id, commande_id, date_echeance, statut, montant_restant) VALUES ($1, $2, CURRENT_DATE, 'A_PAYER', 5000) RETURNING id`,
+            [autreTenant, commande.id]
+        );
+
+        const res = await request(app)
+            .post(`/api/finance/factures/${facture.rows[0].id}/rappel-whatsapp`)
+            .set('Authorization', `Bearer ${tokenComptable}`);
+
+        expect(res.status).toBe(404);
+        expect(envoyerMessageWhatsapp).not.toHaveBeenCalled();
     });
 });

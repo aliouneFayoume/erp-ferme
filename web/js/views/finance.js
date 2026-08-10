@@ -52,7 +52,10 @@ window.Views.finance = {
                   <td>${fmtDate(f.date_echeance)}</td>
                   <td class="num">${fmt(f.montant_restant)} FCFA</td>
                   <td>${factureBadge(f.statut)}</td>
-                  <td><button class="secondary" data-facture-pdf="${f.id}" data-numero="${esc(f.numero_commande)}">PDF</button></td>
+                  <td style="white-space:nowrap">
+                    <button class="secondary" data-facture-pdf="${f.id}" data-numero="${esc(f.numero_commande)}">PDF</button>
+                    ${Number(f.montant_restant) > 0 ? `<button class="secondary" data-rappel-whatsapp="${f.id}">Rappel WhatsApp</button>` : ''}
+                  </td>
                 </tr>`
               )
               .join('')}
@@ -99,6 +102,23 @@ window.Views.finance = {
           URL.revokeObjectURL(url);
         } catch (err) {
           showToast(err.message, 'error');
+        }
+      });
+    });
+
+    container.querySelectorAll('button[data-rappel-whatsapp]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const texteOriginal = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Envoi…';
+        try {
+          await Api.post(`/finance/factures/${btn.dataset.rappelWhatsapp}/rappel-whatsapp`, {});
+          showToast('Rappel WhatsApp envoyé.', 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = texteOriginal;
         }
       });
     });
