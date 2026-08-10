@@ -2,7 +2,10 @@ window.Views = window.Views || {};
 
 window.Views['parametres-paiement'] = {
   async render(container) {
-    const config = await Api.get('/parametres-paiement/paiement');
+    const [config, configWhatsapp] = await Promise.all([
+      Api.get('/parametres-paiement/paiement'),
+      Api.get('/parametres-whatsapp'),
+    ]);
 
     container.innerHTML = `
       <div class="panel">
@@ -35,6 +38,36 @@ window.Views['parametres-paiement'] = {
           <button type="submit">${config.configure ? 'Remplacer les identifiants' : 'Enregistrer'}</button>
         </form>
       </div>
+
+      <div class="panel">
+        <h2>Relances clients par WhatsApp</h2>
+        ${
+          configWhatsapp.estPlateforme
+            ? `<p class="desc">Ferme Massla utilise déjà son propre compte WhatsApp Business, configuré au niveau de la plateforme — rien à faire ici.</p>`
+            : `
+        <p class="desc">
+          Pour relancer VOS clients par WhatsApp (module Finances), votre organisation doit avoir son
+          propre compte WhatsApp Business (Meta) — ce n'est jamais celui de Massla. Créez une app sur
+          <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener">developers.facebook.com</a>,
+          ajoutez le produit WhatsApp, et renseignez ci-dessous le jeton d'accès et l'ID du numéro de
+          téléphone. Jamais réaffichés une fois enregistrés.
+        </p>
+        <p>
+          Statut :
+          ${
+            configWhatsapp.configure
+              ? `<span class="badge ok">Configuré</span>`
+              : `<span class="badge warn">Non configuré — les rappels WhatsApp sont désactivés pour vos clients</span>`
+          }
+        </p>
+        <form id="form-whatsapp" class="form-grid">
+          <label>Jeton d'accès (Access Token)<input type="password" name="access_token" autocomplete="off" required /></label>
+          <label>ID du numéro de téléphone (Phone Number ID)<input type="text" name="phone_number_id" autocomplete="off" required /></label>
+          <button type="submit">${configWhatsapp.configure ? 'Remplacer les identifiants' : 'Enregistrer'}</button>
+        </form>
+        `
+        }
+      </div>
     `;
 
     container.querySelector('#form-paiement').addEventListener('submit', async (e) => {
@@ -49,6 +82,21 @@ window.Views['parametres-paiement'] = {
           token: fd.get('token'),
         });
         showToast('Identifiants de paiement enregistrés.', 'success');
+        window.Views['parametres-paiement'].render(container);
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    container.querySelector('#form-whatsapp')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      try {
+        await Api.put('/parametres-whatsapp', {
+          access_token: fd.get('access_token'),
+          phone_number_id: fd.get('phone_number_id'),
+        });
+        showToast('Identifiants WhatsApp enregistrés.', 'success');
         window.Views['parametres-paiement'].render(container);
       } catch (err) {
         showToast(err.message, 'error');

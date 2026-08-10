@@ -130,7 +130,7 @@ DECLARE
     t text;
 BEGIN
     FOREACH t IN ARRAY ARRAY[
-        'organisation_paydunya_config', 'abonnements', 'lots_production', 'produits',
+        'organisation_paydunya_config', 'organisation_whatsapp_config', 'abonnements', 'lots_production', 'produits',
         'commandes', 'livraisons', 'factures', 'caisses_chauffeur', 'depenses', 'releves_bancaires',
         'fournisseurs', 'commandes_fournisseurs'
     ]

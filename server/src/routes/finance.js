@@ -5,6 +5,7 @@ const { genererFacturePDF } = require('../facturePdf');
 const { creerFacture, confirmerFacture } = require('../paydunya');
 const { getPaydunyaConfig } = require('../paymentConfig');
 const { envoyerMessageWhatsapp } = require('../whatsapp');
+const { getWhatsappConfig } = require('../whatsappConfig');
 
 module.exports = function financeRoutes(pool) {
     const router = express.Router();
@@ -35,17 +36,23 @@ module.exports = function financeRoutes(pool) {
 
     /**
      * Relance de facture client (pas SaaS — voir routes/plateforme.js pour ça) par WhatsApp,
-     * réutilise le même module server/src/whatsapp.js. Contrairement à la relance SaaS, le numéro
-     * est déjà connu (clients.telephone, existant depuis le portail client) — pas de champ de
-     * contact séparé à configurer.
+     * réutilise le même module server/src/whatsapp.js. Le numéro est déjà connu (clients.telephone,
+     * existant depuis le portail client) — pas de champ de contact séparé à configurer.
+     *
+     * Identifiants utilisés : Ferme Massla (organisations.est_plateforme) utilise les identifiants
+     * globaux (server/.env) — décision explicite de l'utilisateur de NE PAS partager son propre
+     * numéro WhatsApp Business avec les autres fermes clientes. Toute autre organisation doit
+     * configurer les siens (organisation_whatsapp_config, voir routes/parametres-whatsapp.js) ; sans
+     * ça, l'action échoue avec un message clair plutôt que d'envoyer silencieusement au nom de Massla.
      */
     router.post('/factures/:id/rappel-whatsapp', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
         try {
             const factureRes = await req.db.query(
-                `SELECT f.id, f.montant_restant, cl.telephone as client_telephone
+                `SELECT f.id, f.montant_restant, cl.telephone as client_telephone, o.est_plateforme
                  FROM factures f
                  JOIN commandes c ON f.commande_id = c.id
                  JOIN clients cl ON c.client_id = cl.id
+                 JOIN organisations o ON f.tenant_id = o.id
                  WHERE f.id = $1 AND f.tenant_id = $2`,
                 [req.params.id, req.user.tenant_id]
             );
@@ -55,7 +62,18 @@ module.exports = function financeRoutes(pool) {
                 return res.status(400).json({ erreur: 'Ce client n\'a pas de numéro de téléphone enregistré.' });
             }
 
-            await envoyerMessageWhatsapp(facture.client_telephone);
+            let config;
+            if (!facture.est_plateforme) {
+                const configFerme = await getWhatsappConfig(req.db, req.user.tenant_id);
+                if (!configFerme) {
+                    return res.status(400).json({
+                        erreur: "WhatsApp n'est pas configuré pour votre organisation — configurez vos propres identifiants dans Paiements (réglages).",
+                    });
+                }
+                config = configFerme;
+            }
+
+            await envoyerMessageWhatsapp(facture.client_telephone, { config });
             await logAudit(req.db, {
                 table: 'factures',
                 rowId: facture.id,

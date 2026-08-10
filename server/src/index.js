@@ -66,6 +66,7 @@ async function main() {
     app.use('/api/portail', require('./routes/portail')(pool));
     app.use('/api/fournisseurs', require('./routes/fournisseurs')(pool));
     app.use('/api/parametres-paiement', require('./routes/parametres-paiement')(pool));
+    app.use('/api/parametres-whatsapp', require('./routes/parametres-whatsapp')(pool));
     app.use('/api/plateforme', require('./routes/plateforme')(pool));
 
     app.get('/api/health', (req, res) => {

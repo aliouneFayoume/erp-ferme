@@ -29,7 +29,14 @@ CREATE TABLE organisations (
     -- Soft delete : une ferme qui n'est plus cliente disparaît de la vue plateforme (voir
     -- routes/plateforme.js) et son accès est bloqué (requireAuth, auth.js), mais ses données
     -- restent intactes — jamais de suppression physique, même logique qu'ailleurs dans ce schéma.
-    deleted_at TIMESTAMP
+    deleted_at TIMESTAMP,
+    -- Identifie l'organisation de la plateforme elle-même (Ferme Massla) — jamais une seconde
+    -- organisation. Sert à décider quels identifiants WhatsApp utiliser pour les relances de
+    -- facturation client (routes/finance.js) : Massla utilise les identifiants globaux
+    -- (WHATSAPP_ACCESS_TOKEN, server/.env), toute autre ferme doit configurer les siens
+    -- (organisation_whatsapp_config, réglages self-service) — voir la demande explicite de
+    -- l'utilisateur de ne pas partager le numéro WhatsApp de Massla avec les autres clients.
+    est_plateforme BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- --------------------------------------------------------
@@ -72,6 +79,21 @@ CREATE TABLE organisation_paydunya_config (
     private_key_chiffre TEXT NOT NULL,
     public_key_chiffre TEXT NOT NULL,
     token_chiffre TEXT NOT NULL,
+    mis_a_jour_par INT REFERENCES utilisateurs(id),
+    mis_a_jour_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Identifiants WhatsApp Business Cloud API propres à une organisation (server/src/whatsapp.js),
+-- même logique que organisation_paydunya_config ci-dessus : chaque ferme (hors Massla elle-même,
+-- voir organisations.est_plateforme) doit utiliser son propre compte WhatsApp Business pour
+-- relancer SES clients, pas celui de Massla — configuré en self-service, voir
+-- routes/parametres-whatsapp.js.
+CREATE TABLE organisation_whatsapp_config (
+    tenant_id INT PRIMARY KEY REFERENCES organisations(id),
+    access_token_chiffre TEXT NOT NULL,
+    phone_number_id_chiffre TEXT NOT NULL,
+    template_nom VARCHAR(100) NOT NULL DEFAULT 'hello_world',
+    template_langue VARCHAR(10) NOT NULL DEFAULT 'en_US',
     mis_a_jour_par INT REFERENCES utilisateurs(id),
     mis_a_jour_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

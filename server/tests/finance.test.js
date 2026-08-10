@@ -135,7 +135,7 @@ describe('finance — IPN PayDunya', () => {
     });
 });
 
-describe('finance — relance de facture client par WhatsApp', () => {
+describe('finance — relance de facture client par WhatsApp (Ferme Massla, identifiants globaux)', () => {
     let pool;
     let app;
     let tenantId;
@@ -146,6 +146,10 @@ describe('finance — relance de facture client par WhatsApp', () => {
         pool = createTestPool();
         await seedRolesEtSecteurs(pool);
         tenantId = await creerOrganisation(pool);
+        // est_plateforme = TRUE : seule Ferme Massla utilise les identifiants globaux
+        // (WHATSAPP_ACCESS_TOKEN) sans avoir besoin de sa propre organisation_whatsapp_config —
+        // voir la nouvelle description ci-dessous pour le cas d'une ferme cliente normale.
+        await pool.query(`UPDATE organisations SET est_plateforme = TRUE WHERE id = $1`, [tenantId]);
         tokenComptable = await creerUtilisateurEtToken(pool, { role: 'comptable', tenant_id: tenantId });
         app = buildApp(pool, ['finance']);
     });
@@ -178,7 +182,9 @@ describe('finance — relance de facture client par WhatsApp', () => {
 
         expect(res.status).toBe(200);
         expect(res.body.envoye).toBe(true);
-        expect(envoyerMessageWhatsapp).toHaveBeenCalledWith('+221771112233');
+        // config: undefined -> whatsapp.js retombe sur les identifiants globaux (server/.env),
+        // jamais une configuration par ferme pour Ferme Massla elle-même.
+        expect(envoyerMessageWhatsapp).toHaveBeenCalledWith('+221771112233', { config: undefined });
 
         const audit = await pool.query(`SELECT * FROM audit_logs WHERE tenant_id = $1 AND action = 'RAPPEL_WHATSAPP'`, [tenantId]);
         expect(audit.rows).toHaveLength(1);
@@ -221,5 +227,68 @@ describe('finance — relance de facture client par WhatsApp', () => {
 
         expect(res.status).toBe(404);
         expect(envoyerMessageWhatsapp).not.toHaveBeenCalled();
+    });
+});
+
+describe('finance — relance de facture client par WhatsApp (ferme cliente normale)', () => {
+    let pool;
+    let app;
+    let tenantId;
+    let tokenComptable;
+
+    beforeEach(async () => {
+        jest.clearAllMocks();
+        pool = createTestPool();
+        await seedRolesEtSecteurs(pool);
+        tenantId = await creerOrganisation(pool); // est_plateforme reste FALSE par défaut
+        tokenComptable = await creerUtilisateurEtToken(pool, { role: 'comptable', tenant_id: tenantId });
+        app = buildApp(pool, ['finance']);
+    });
+
+    afterEach(async () => {
+        await pool.end();
+    });
+
+    async function creerFactureAvecClient() {
+        const client = await creerClient(pool, { tenant_id: tenantId, telephone: '+221771112233' });
+        await pool.query(
+            `INSERT INTO commandes (tenant_id, numero_commande, client_id, statut, montant_total) VALUES ($1, 'CMD-WA', $2, 'EN_ATTENTE', 5000)`,
+            [tenantId, client.id]
+        );
+        const commande = (await pool.query(`SELECT id FROM commandes WHERE client_id = $1`, [client.id])).rows[0];
+        const facture = await pool.query(
+            `INSERT INTO factures (tenant_id, commande_id, date_echeance, statut, montant_restant) VALUES ($1, $2, CURRENT_DATE, 'A_PAYER', 5000) RETURNING id`,
+            [tenantId, commande.id]
+        );
+        return facture.rows[0].id;
+    }
+
+    test("sans sa propre configuration WhatsApp, la relance échoue avec un message clair (pas les identifiants de Massla)", async () => {
+        const factureId = await creerFactureAvecClient();
+
+        const res = await request(app)
+            .post(`/api/finance/factures/${factureId}/rappel-whatsapp`)
+            .set('Authorization', `Bearer ${tokenComptable}`);
+
+        expect(res.status).toBe(400);
+        expect(res.body.erreur).toMatch(/pas configuré/i);
+        expect(envoyerMessageWhatsapp).not.toHaveBeenCalled();
+    });
+
+    test('avec sa propre configuration WhatsApp, la relance utilise ces identifiants (pas ceux de Massla)', async () => {
+        envoyerMessageWhatsapp.mockResolvedValue({ messages: [{ id: 'wamid.test' }] });
+        const { setWhatsappConfig } = require('../src/whatsappConfig');
+        await setWhatsappConfig(pool, tenantId, { accessToken: 'jeton-de-cette-ferme', phoneNumberId: '999888777' }, null);
+        const factureId = await creerFactureAvecClient();
+
+        const res = await request(app)
+            .post(`/api/finance/factures/${factureId}/rappel-whatsapp`)
+            .set('Authorization', `Bearer ${tokenComptable}`);
+
+        expect(res.status).toBe(200);
+        expect(envoyerMessageWhatsapp).toHaveBeenCalledWith(
+            '+221771112233',
+            expect.objectContaining({ config: expect.objectContaining({ accessToken: 'jeton-de-cette-ferme', phoneNumberId: '999888777' }) })
+        );
     });
 });

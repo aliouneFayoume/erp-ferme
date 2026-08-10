@@ -4,7 +4,12 @@
 // d'échouer silencieusement ou de simuler un envoi.
 const WHATSAPP_API_VERSION = 'v21.0';
 
-function lireConfig() {
+/**
+ * Identifiants globaux (server/.env) — ceux de Ferme Massla elle-même (organisations.est_plateforme,
+ * voir routes/finance.js). Toute AUTRE organisation doit fournir sa PROPRE config (voir
+ * whatsappConfig.js / routes/parametres-whatsapp.js), jamais ce fallback.
+ */
+function lireConfigGlobale() {
     return {
         accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
         phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
@@ -18,7 +23,7 @@ function lireConfig() {
 }
 
 function estConfigure() {
-    const { accessToken, phoneNumberId } = lireConfig();
+    const { accessToken, phoneNumberId } = lireConfigGlobale();
     return !!(accessToken && phoneNumberId);
 }
 
@@ -27,10 +32,13 @@ function estConfigure() {
  * initié par l'entreprise (hors de la fenêtre de service client de 24h), ce qui est toujours le cas
  * pour une relance de facturation. `composants` (optionnel) correspond aux paramètres du modèle une
  * fois qu'un vrai modèle personnalisé (avec variables : nom de la ferme, montant, échéance) est
- * approuvé — voir la documentation Meta sur les "template components".
+ * approuvé — voir la documentation Meta sur les "template components". `config` (optionnel) permet
+ * à l'appelant de fournir les identifiants d'UNE organisation précise (déjà déchiffrés via
+ * whatsappConfig.js) au lieu des identifiants globaux de Massla — c'est l'appelant qui décide
+ * lesquels utiliser, ce module ne fait aucune hypothèse sur le tenant.
  */
-async function envoyerMessageWhatsapp(telephone, { composants } = {}) {
-    const config = lireConfig();
+async function envoyerMessageWhatsapp(telephone, { composants, config: configFournie } = {}) {
+    const config = configFournie || lireConfigGlobale();
     if (!config.accessToken || !config.phoneNumberId) {
         throw new Error("Intégration WhatsApp non configurée (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID manquants).");
     }
