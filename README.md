@@ -45,6 +45,16 @@ PUBLIC_URL=https://massla.sn   # sert à construire les URLs de callback/retour 
 # Distances/durées routières réelles pour l'optimisation de tournées (facultatif — repli
 # automatique sur la distance à vol d'oiseau si absent).
 ORS_API_KEY=...
+
+# Relances de facturation SaaS par WhatsApp (vue plateforme, facultatif — sans ces clés, l'envoi
+# échoue proprement avec un message clair plutôt que d'être ignoré silencieusement).
+WHATSAPP_ACCESS_TOKEN=...
+WHATSAPP_PHONE_NUMBER_ID=...
+# "hello_world"/"en_US" par défaut (seul modèle disponible avant l'approbation par Meta d'un modèle
+# personnalisé) — changer ces deux valeurs une fois le vrai modèle de relance approuvé, sans
+# toucher au code (voir server/src/whatsapp.js).
+WHATSAPP_TEMPLATE_NOM=hello_world
+WHATSAPP_TEMPLATE_LANGUE=en_US
 ```
 
 ⚠️ Utiliser la chaîne de connexion **pooler** (`*.pooler.supabase.com`), pas la connexion directe

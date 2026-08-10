@@ -413,6 +413,10 @@ CREATE TABLE organisation_abonnement_saas (
     frais_configuration INT,
     frais_configuration_facture BOOLEAN NOT NULL DEFAULT FALSE,
     actif BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Numéro WhatsApp à contacter pour les relances de facturation (voir routes/plateforme.js,
+    -- POST .../factures-saas/:id/rappel-whatsapp) — pas forcément le numéro personnel de l'admin,
+    -- peut être celui d'un comptable ou autre contact désigné par la ferme pour la facturation.
+    telephone_contact VARCHAR(20),
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

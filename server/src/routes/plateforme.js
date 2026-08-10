@@ -3,6 +3,7 @@ const { requireAuth, requireSuperviseurPlateforme, signToken } = require('../aut
 const { logAudit } = require('../audit');
 const { SOCLE_ESSENTIEL, MODULES_SAAS, PACK_TOUT_COMPRIS, FRAIS_CONFIGURATION_DEFAUT } = require('../modulesSaas');
 const { creerNouvelleFerme } = require('../creerFerme');
+const { envoyerMessageWhatsapp } = require('../whatsapp');
 
 function dansNJours(n) {
     const d = new Date();
@@ -307,7 +308,7 @@ module.exports = function plateformeRoutes(pool) {
     router.put('/organisations/:id/abonnement-saas', ...garde, async (req, res) => {
         try {
             const tenantId = req.params.id;
-            const { modulesActifs, montantMensuel, fraisConfiguration, actif } = req.body;
+            const { modulesActifs, montantMensuel, fraisConfiguration, actif, telephoneContact } = req.body;
             if (!Array.isArray(modulesActifs) || !(Number(montantMensuel) > 0)) {
                 return res.status(400).json({ erreur: 'Modules actifs et montant mensuel (positif) sont requis.' });
             }
@@ -317,9 +318,9 @@ module.exports = function plateformeRoutes(pool) {
             let result;
             if (existant.rows.length === 0) {
                 result = await req.db.query(
-                    `INSERT INTO organisation_abonnement_saas (tenant_id, modules_actifs, montant_mensuel, frais_configuration, actif)
-                     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-                    [tenantId, modulesActifs, montantMensuel, fraisConfiguration || null, actif !== false]
+                    `INSERT INTO organisation_abonnement_saas (tenant_id, modules_actifs, montant_mensuel, frais_configuration, actif, telephone_contact)
+                     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+                    [tenantId, modulesActifs, montantMensuel, fraisConfiguration || null, actif !== false, telephoneContact || null]
                 );
                 if (Number(fraisConfiguration) > 0) {
                     await req.db.query(
@@ -333,8 +334,8 @@ module.exports = function plateformeRoutes(pool) {
                 }
             } else {
                 result = await req.db.query(
-                    `UPDATE organisation_abonnement_saas SET modules_actifs = $1, montant_mensuel = $2, actif = $3 WHERE tenant_id = $4 RETURNING *`,
-                    [modulesActifs, montantMensuel, actif !== false, tenantId]
+                    `UPDATE organisation_abonnement_saas SET modules_actifs = $1, montant_mensuel = $2, actif = $3, telephone_contact = $4 WHERE tenant_id = $5 RETURNING *`,
+                    [modulesActifs, montantMensuel, actif !== false, telephoneContact || null, tenantId]
                 );
             }
 
@@ -427,6 +428,45 @@ module.exports = function plateformeRoutes(pool) {
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: 'Erreur lors de la mise à jour de la facture.' });
+        }
+    });
+
+    /**
+     * Relance de facture SaaS en retard/à payer via WhatsApp (server/src/whatsapp.js) — déclenchée
+     * manuellement, pas automatique, même philosophie que "Générer les factures du mois". Le
+     * message renvoyé en cas d'échec (err.message, exposé ici contrairement au reste de ce fichier)
+     * est volontairement précis : réservé au superviseur, c'est un diagnostic opérationnel utile
+     * (jeton WhatsApp expiré, numéro non configuré...), pas une fuite d'information sensible.
+     */
+    router.post('/factures-saas/:id/rappel-whatsapp', ...garde, async (req, res) => {
+        try {
+            const factureRes = await req.db.query(
+                `SELECT f.id, f.montant, f.tenant_id, o.nom as organisation_nom, a.telephone_contact
+                 FROM factures_saas f
+                 JOIN organisations o ON f.tenant_id = o.id
+                 LEFT JOIN organisation_abonnement_saas a ON a.tenant_id = f.tenant_id
+                 WHERE f.id = $1`,
+                [req.params.id]
+            );
+            if (factureRes.rows.length === 0) return res.status(404).json({ erreur: 'Facture introuvable.' });
+            const facture = factureRes.rows[0];
+            if (!facture.telephone_contact) {
+                return res.status(400).json({ erreur: "Aucun numéro WhatsApp configuré pour cette ferme (voir la fenêtre Abonnement SaaS)." });
+            }
+
+            await envoyerMessageWhatsapp(facture.telephone_contact);
+            await logAudit(req.db, {
+                table: 'factures_saas',
+                rowId: facture.id,
+                action: 'RAPPEL_WHATSAPP',
+                userId: req.user.id,
+                tenantId: facture.tenant_id,
+                details: { montant: facture.montant, telephone: facture.telephone_contact, superviseur: req.user.nom },
+            });
+            res.json({ envoye: true });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: err.message || "Erreur lors de l'envoi du rappel WhatsApp." });
         }
     });
 

@@ -1,6 +1,9 @@
 const request = require('supertest');
 const { createTestPool, buildApp, seedRolesEtSecteurs, creerOrganisation, creerUtilisateurEtToken, creerClient } = require('./helpers/testApp');
 
+jest.mock('../src/whatsapp');
+const { envoyerMessageWhatsapp } = require('../src/whatsapp');
+
 async function creerTicket(pool, tenantId, clientId, overrides = {}) {
     const t = { sujet: 'Ticket Test', statut: 'OUVERT', ...overrides };
     const res = await pool.query(
@@ -491,5 +494,108 @@ describe('plateforme — ajout de secteur à une ferme existante', () => {
             .set('Authorization', `Bearer ${tokenAdminNormal}`)
             .send({ nom: 'Piscicole' });
         expect(resAjout.status).toBe(403);
+    });
+});
+
+describe('plateforme — relance de facture SaaS par WhatsApp', () => {
+    let pool;
+    let app;
+    let tenantA;
+    let tokenSuperviseur;
+    let tokenAdminNormal;
+
+    beforeEach(async () => {
+        jest.clearAllMocks();
+        pool = createTestPool();
+        await seedRolesEtSecteurs(pool);
+        tenantA = await creerOrganisation(pool, 'Ferme A');
+        tokenSuperviseur = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantA, estSuperviseurPlateforme: true });
+        tokenAdminNormal = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantA, estSuperviseurPlateforme: false });
+        app = buildApp(pool, ['plateforme']);
+    });
+
+    afterEach(async () => {
+        await pool.end();
+    });
+
+    async function creerFactureAvecTelephone(telephone) {
+        await pool.query(
+            `INSERT INTO organisation_abonnement_saas (tenant_id, montant_mensuel, telephone_contact) VALUES ($1, 40000, $2)`,
+            [tenantA, telephone]
+        );
+        const facture = await pool.query(
+            `INSERT INTO factures_saas (tenant_id, type, montant, statut, date_echeance) VALUES ($1, 'ABONNEMENT', 40000, 'EN_RETARD', CURRENT_DATE) RETURNING id`,
+            [tenantA]
+        );
+        return facture.rows[0].id;
+    }
+
+    test('envoie un rappel WhatsApp au numéro de contact configuré', async () => {
+        envoyerMessageWhatsapp.mockResolvedValue({ messages: [{ id: 'wamid.test' }] });
+        const factureId = await creerFactureAvecTelephone('+221771234567');
+
+        const res = await request(app)
+            .post(`/api/plateforme/factures-saas/${factureId}/rappel-whatsapp`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.envoye).toBe(true);
+        expect(envoyerMessageWhatsapp).toHaveBeenCalledWith('+221771234567');
+
+        const audit = await pool.query(`SELECT * FROM audit_logs WHERE tenant_id = $1 AND action = 'RAPPEL_WHATSAPP'`, [tenantA]);
+        expect(audit.rows).toHaveLength(1);
+    });
+
+    test("rejette si aucun numéro de contact n'est configuré", async () => {
+        await pool.query(`INSERT INTO organisation_abonnement_saas (tenant_id, montant_mensuel) VALUES ($1, 40000)`, [tenantA]);
+        const facture = await pool.query(
+            `INSERT INTO factures_saas (tenant_id, type, montant, statut, date_echeance) VALUES ($1, 'ABONNEMENT', 40000, 'A_PAYER', CURRENT_DATE) RETURNING id`,
+            [tenantA]
+        );
+
+        const res = await request(app)
+            .post(`/api/plateforme/factures-saas/${facture.rows[0].id}/rappel-whatsapp`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`);
+
+        expect(res.status).toBe(400);
+        expect(envoyerMessageWhatsapp).not.toHaveBeenCalled();
+    });
+
+    test('renvoie 404 pour une facture inexistante', async () => {
+        const res = await request(app)
+            .post(`/api/plateforme/factures-saas/999999/rappel-whatsapp`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`);
+        expect(res.status).toBe(404);
+    });
+
+    test("propage un message d'erreur clair si l'envoi WhatsApp échoue", async () => {
+        envoyerMessageWhatsapp.mockRejectedValue(new Error('Jeton invalide ou expiré'));
+        const factureId = await creerFactureAvecTelephone('+221771234567');
+
+        const res = await request(app)
+            .post(`/api/plateforme/factures-saas/${factureId}/rappel-whatsapp`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`);
+
+        expect(res.status).toBe(500);
+        expect(res.body.erreur).toBe('Jeton invalide ou expiré');
+    });
+
+    test('un admin sans le flag superviseur ne peut pas envoyer de rappel', async () => {
+        const factureId = await creerFactureAvecTelephone('+221771234567');
+        const res = await request(app)
+            .post(`/api/plateforme/factures-saas/${factureId}/rappel-whatsapp`)
+            .set('Authorization', `Bearer ${tokenAdminNormal}`);
+        expect(res.status).toBe(403);
+        expect(envoyerMessageWhatsapp).not.toHaveBeenCalled();
+    });
+
+    test('le numéro de contact WhatsApp est bien enregistré via PUT abonnement-saas', async () => {
+        const res = await request(app)
+            .put(`/api/plateforme/organisations/${tenantA}/abonnement-saas`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ modulesActifs: ['finance'], montantMensuel: 40000, telephoneContact: '+221781112233' });
+
+        expect(res.status).toBe(200);
+        expect(res.body.telephone_contact).toBe('+221781112233');
     });
 });

@@ -297,9 +297,10 @@ function renderLignesFacturesSaas(factures) {
         <td>${Number(f.montant).toLocaleString('fr-FR')} FCFA</td>
         <td>${fmtDate(f.date_echeance)}</td>
         <td><span class="badge ${FACTURE_SAAS_STATUT_BADGE[f.statut] || 'muted'}">${esc(FACTURE_SAAS_STATUT_LABELS[f.statut] || f.statut)}</span></td>
-        <td>${
+        <td style="white-space:nowrap">${
           f.statut === 'A_PAYER' || f.statut === 'EN_RETARD'
-            ? `<button class="secondary" data-marquer-payee="${f.id}">Marquer payée</button>`
+            ? `<button class="secondary" data-marquer-payee="${f.id}">Marquer payée</button>
+               <button class="secondary" data-rappel-whatsapp="${f.id}">Envoyer un rappel WhatsApp</button>`
             : ''
         }</td>
       </tr>`
@@ -311,6 +312,25 @@ function attacherActionsFactures(scope, factures, container) {
   scope.querySelectorAll('button[data-marquer-payee]').forEach((btn) => {
     btn.addEventListener('click', () => marquerFacturePayee(container, btn.dataset.marquerPayee));
   });
+  scope.querySelectorAll('button[data-rappel-whatsapp]').forEach((btn) => {
+    btn.addEventListener('click', () => envoyerRappelWhatsapp(btn));
+  });
+}
+
+async function envoyerRappelWhatsapp(btn) {
+  const factureId = btn.dataset.rappelWhatsapp;
+  btn.disabled = true;
+  const texteOriginal = btn.textContent;
+  btn.textContent = 'Envoi…';
+  try {
+    await Api.post(`/plateforme/factures-saas/${factureId}/rappel-whatsapp`, {});
+    showToast('Rappel WhatsApp envoyé.', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = texteOriginal;
+  }
 }
 
 async function marquerFacturePayee(container, factureId) {
@@ -415,6 +435,9 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
             <input type="checkbox" name="actif" style="width:auto" ${abonnement?.actif !== false ? 'checked' : ''} />
             Abonnement actif (décochez pour suspendre sans supprimer l'historique)
           </label>
+          <label>Numéro WhatsApp (relances de facturation)
+            <input type="tel" name="telephoneContact" placeholder="ex: +221771234567" value="${esc(abonnement?.telephone_contact || '')}" />
+          </label>
         </form>
         <div class="modal-actions">
           <button class="secondary" data-action="annuler">Annuler</button>
@@ -470,6 +493,7 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
         montantMensuel: Number(fd.get('montantMensuel')),
         fraisConfiguration: dejaConfigure ? undefined : Number(fd.get('fraisConfiguration') || 0),
         actif: fd.get('actif') === 'on',
+        telephoneContact: (fd.get('telephoneContact') || '').trim() || null,
       });
       showToast('Abonnement enregistré.', 'success');
       closeModal();
