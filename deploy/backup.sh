@@ -28,7 +28,14 @@ fi
 mkdir -p "$BACKUP_DIR"
 FICHIER="$BACKUP_DIR/erp-ferme-$HORODATAGE.dump"
 
-pg_dump "$DATABASE_URL" --format=custom --file="$FICHIER"
+# --schema=public : DATABASE_URL utilise le rôle applicatif erp_app (durci pour RLS,
+# provision-role.sql), qui n'a de droits QUE sur le schéma public — le seul qui contient nos
+# données. Sans cette restriction, pg_dump tente par défaut de verrouiller TOUS les schémas de la
+# base Supabase, y compris auth/storage/realtime (internes à Supabase, hors de notre périmètre),
+# et échoue avec "permission denied for schema auth". BUG RÉEL TROUVÉ EN PRODUCTION 2026-08-11 :
+# ce script échouait ainsi à CHAQUE exécution depuis le 2026-08-09 (passage à RLS réel, commit
+# ffd689b) — aucune sauvegarde utilisable pendant ~77h, jusqu'à ce test manuel qui l'a révélé.
+pg_dump "$DATABASE_URL" --schema=public --format=custom --file="$FICHIER"
 echo "Sauvegarde créée : $FICHIER"
 
 # --- Secrets du serveur applicatif (audit systèmes 2026-08-11) --------------------------------
