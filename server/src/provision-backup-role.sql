@@ -23,7 +23,12 @@ CREATE ROLE erp_backup LOGIN PASSWORD '<MOT_DE_PASSE_A_GENERER>' BYPASSRLS;
 
 GRANT USAGE ON SCHEMA public TO erp_backup;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO erp_backup;
+-- pg_dump lit aussi la valeur courante de chaque séquence (SELECT last_value, is_called FROM ...) :
+-- sans ce GRANT, distinct de celui sur les tables, pg_dump échoue avec "permission denied for
+-- sequence ..." dès la première table à colonne SERIAL. Trouvé en production 2026-08-11.
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO erp_backup;
 
--- Pour que les tables créées par de futures migrations héritent automatiquement du même droit de
--- lecture, sans avoir à relancer ce script.
+-- Pour que les tables/séquences créées par de futures migrations héritent automatiquement du même
+-- droit de lecture, sans avoir à relancer ce script.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO erp_backup;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO erp_backup;
