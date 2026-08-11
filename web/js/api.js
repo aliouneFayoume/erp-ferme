@@ -101,7 +101,12 @@ const Api = (() => {
 
     if (!res.ok) {
       const message = (data && data.erreur) || `Erreur ${res.status}`;
-      throw new Error(message);
+      const erreurHttp = new Error(message);
+      // Exposé pour OfflineQueue.synchroniser() : distinguer un refus définitif (400/409/422 —
+      // "commande déjà annulée") d'une session expirée (401/403) ou d'une panne serveur passagère
+      // (5xx), qui ne doivent jamais faire perdre une action en attente. Audit systèmes 2026-08-11.
+      erreurHttp.statut = res.status;
+      throw erreurHttp;
     }
 
     if (method === 'GET') cacheSet(path, data);

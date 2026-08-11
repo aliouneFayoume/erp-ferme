@@ -64,16 +64,28 @@ module.exports = function clientsRoutes(pool) {
      * journalisé ; pin_version incrémenté invalide immédiatement toute session portail existante.
      */
     router.post('/:id/pin', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
-        const pin = String(Math.floor(100000 + Math.random() * 900000));
-        const pinHash = await bcrypt.hash(pin, 10);
-        const result = await req.db.query(
-            `UPDATE clients SET pin_hash = $1, pin_version = pin_version + 1
-             WHERE id = $2 AND deleted_at IS NULL RETURNING id, nom, telephone`,
-            [pinHash, req.params.id]
-        );
-        if (result.rows.length === 0) return res.status(404).json({ erreur: 'Client introuvable.' });
-        await logAudit(req.db, { table: 'clients', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, details: { action: 'regeneration_pin_portail' } });
-        res.json({ client: result.rows[0], pin });
+        try {
+            const pin = String(Math.floor(100000 + Math.random() * 900000));
+            const pinHash = await bcrypt.hash(pin, 10);
+            const result = await req.db.query(
+                `UPDATE clients SET pin_hash = $1, pin_version = pin_version + 1
+                 WHERE id = $2 AND tenant_id = $3 AND deleted_at IS NULL RETURNING id, nom, telephone`,
+                [pinHash, req.params.id, req.user.tenant_id]
+            );
+            if (result.rows.length === 0) return res.status(404).json({ erreur: 'Client introuvable.' });
+            await logAudit(req.db, {
+                table: 'clients',
+                rowId: req.params.id,
+                action: 'UPDATE',
+                userId: req.user.id,
+                tenantId: req.user.tenant_id,
+                details: { action: 'regeneration_pin_portail' },
+            });
+            res.json({ client: result.rows[0], pin });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la régénération du PIN.' });
+        }
     });
 
     router.delete('/:id', requireAuth(pool), checkRole(['admin']), async (req, res) => {

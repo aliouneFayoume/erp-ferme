@@ -24,11 +24,14 @@ CREATE OR REPLACE FUNCTION current_tenant_id() RETURNS int LANGUAGE sql STABLE A
     SELECT NULLIF(current_setting('app.current_tenant_id', true), '')::int
 $$;
 
--- Échappatoire de LECTURE cross-tenant pour la vue plateforme (routes/plateforme.js, réservée à un
--- seul compte support — voir migration-04-superviseur-plateforme.sql). Posé par
--- requireSuperviseurPlateforme (auth.js) UNIQUEMENT sur les routes qui en ont besoin, jamais par
--- défaut. Volontairement absent de tout WITH CHECK : aucune policy d'écriture n'utilise cette
--- fonction, la vue plateforme est lecture seule par conception (voir le commentaire dans auth.js).
+-- Échappatoire cross-tenant pour la vue plateforme (routes/plateforme.js, réservée à un seul compte
+-- support — voir migration-04-superviseur-plateforme.sql). Posé par requireSuperviseurPlateforme
+-- (auth.js) UNIQUEMENT sur les routes qui en ont besoin, jamais par défaut.
+-- CORRECTIF 2026-08-11 (audit sécurité) : contrairement à ce qu'affirmait ce commentaire, ce N'EST
+-- PAS une échappatoire lecture seule — plusieurs policies WITH CHECK ci-dessous s'appuient dessus
+-- (organisations, secteurs, audit_logs, organisation_abonnement_saas, factures_saas). Voir le
+-- commentaire de requireSuperviseurPlateforme dans auth.js pour la liste exacte des écritures
+-- autorisées.
 CREATE OR REPLACE FUNCTION is_plateforme_admin() RETURNS boolean LANGUAGE sql STABLE AS $$
     SELECT COALESCE(NULLIF(current_setting('app.is_plateforme_admin', true), ''), 'false')::boolean
 $$;

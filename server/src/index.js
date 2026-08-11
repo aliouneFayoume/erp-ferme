@@ -1,5 +1,12 @@
 require('dotenv').config();
 const express = require('express');
+// Doit être require() juste après express et AVANT toute déclaration de route : patche
+// Router.prototype pour que le rejet d'une promesse dans un handler async soit transmis à next(err)
+// au lieu de rester "unhandled" (Express 4 ne le fait pas nativement, contrairement à Express 5).
+// Sans ça, un handler async qui rejette (ex: erreur base de données) fait planter tout le process
+// Node — donc coupe TOUTES les fermes clientes — pour une seule requête HTTP malformée. Constat
+// audit sécurité 2026-08-11 : reproduit avec /api/portail/login sur un body malformé.
+require('express-async-errors');
 const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
@@ -39,7 +46,26 @@ app.use(
     })
 );
 
+// Filet de dernier recours : attrape ce qu'express-async-errors ne peut pas voir (une promesse
+// rejetée en dehors du cycle requête/réponse — setInterval, callback fire-and-forget, etc.).
+// Sans lui, Node 15+ tue le process sur un rejet non intercepté : on préfère journaliser et
+// continuer plutôt que de couper toutes les fermes pour une erreur qui n'était pas fatale.
+process.on('unhandledRejection', (err) => {
+    console.error('Rejet de promesse non géré :', err);
+});
+
 async function main() {
+    // Sans DATABASE_URL, createPool() bascule silencieusement sur pg-mem (base en mémoire, données
+    // de démo, secret JWT par défaut — voir auth.js). Acceptable en développement local, mais servir
+    // massla.sn dans cet état exposerait un secret public et des comptes de démo actifs pendant que
+    // le déploiement se déclarerait "réussi" (le healthcheck ci-dessous répondait 200 dans les deux
+    // cas). Constat audit développement 2026-08-11.
+    if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
+        throw new Error(
+            "DATABASE_URL doit être définie en production. Sans elle, le serveur démarrerait sur une base pg-mem en mémoire avec des données de démonstration et des secrets par défaut."
+        );
+    }
+
     const { pool, mode } = createPool();
     console.log(`Mode base de données : ${mode}`);
 
@@ -69,8 +95,19 @@ async function main() {
     app.use('/api/parametres-whatsapp', require('./routes/parametres-whatsapp')(pool));
     app.use('/api/plateforme', require('./routes/plateforme')(pool));
 
-    app.get('/api/health', (req, res) => {
-        res.json({ statut: 'En ligne', version: '1.0.0', mode, environnement: process.env.NODE_ENV || 'development' });
+    // Interroge réellement la base plutôt que de renvoyer un texte statique : c'est cette route
+    // qu'utilisent deploy/monitor.sh et l'étape de vérification post-déploiement (GitHub Actions).
+    // Un pool épuisé, un mot de passe applicatif rejeté ou une base injoignable doivent se voir ici
+    // en 503 — sinon la supervision reste verte pendant que chaque écran métier renvoie une erreur.
+    // Constat audit systèmes 2026-08-11.
+    app.get('/api/health', async (req, res) => {
+        try {
+            await pool.query('SELECT 1');
+            res.json({ statut: 'En ligne', version: '1.0.0', mode, environnement: process.env.NODE_ENV || 'development' });
+        } catch (err) {
+            console.error('Health check : base de données injoignable.', err);
+            res.status(503).json({ statut: 'Dégradé', erreur: 'Base de données injoignable.', mode });
+        }
     });
 
     // Page publique de référencement local (pas de trailing slash requis, URL propre pour le partage).
@@ -79,6 +116,17 @@ async function main() {
     });
 
     app.use(express.static(path.join(__dirname, '..', '..', 'web')));
+
+    // Doit être le DERNIER app.use() : Express reconnaît un middleware d'erreur à sa signature à 4
+    // arguments. Reçoit tout ce que next(err) transmet — donc, grâce à express-async-errors, tout
+    // rejet d'un handler async. Sans ce filet, la même erreur ferait planter le process (voir plus
+    // haut). Message générique côté client : jamais err.message brut (peut contenir des détails
+    // internes — base de données, API tierces).
+    app.use((err, req, res, next) => {
+        console.error('Erreur non interceptée sur', req.method, req.originalUrl, ':', err);
+        if (res.headersSent) return next(err);
+        res.status(500).json({ erreur: 'Erreur interne du serveur.' });
+    });
 
     app.listen(PORT, () => {
         console.log('=========================================');

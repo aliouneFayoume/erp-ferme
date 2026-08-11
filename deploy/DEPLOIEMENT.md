@@ -277,6 +277,44 @@ cycle suivant, sans configuration de lifecycle côté R2 à maintenir séparéme
 Une synchronisation qui échoue déclenche la même alerte ntfy qu'un `pg_dump` en échec (`trap ERR`
 dans `backup.sh`) — pas de mode dégradé silencieux.
 
+### Secrets (server/.env, ovh.ini) — sauvegarde chiffrée hors du VPS
+
+**Constat (audit systèmes 2026-08-11) : sans ce qui suit, `CREDENTIALS_ENCRYPTION_KEY` — la clé qui
+chiffre les identifiants PayDunya/WhatsApp de CHAQUE ferme cliente — n'existe qu'en un seul
+exemplaire sur ce VPS, jamais sauvegardée.** Perdre le VPS rendrait ces identifiants de paiement
+définitivement indéchiffrables pour toutes les fermes, même avec la base restaurée par ailleurs.
+Même remarque, moins grave, pour `JWT_SECRET` et pour `deploy/certbot/ovh.ini` (identifiants OVH du
+renouvellement TLS).
+
+`deploy/backup.sh` chiffre désormais `server/.env` et `deploy/certbot/ovh.ini` (GPG symétrique,
+AES-256) et les inclut dans la synchronisation R2, **si et seulement si** `BACKUP_SECRETS_PASSPHRASE`
+est défini. Étape manuelle, à faire une fois, sur le VPS :
+
+```bash
+# 1. Générer une passphrase forte (à noter ailleurs, voir étape 2 — jamais dans le dépôt) :
+openssl rand -base64 32
+
+# 2. L'ajouter à server/.env sur le VPS :
+echo 'BACKUP_SECRETS_PASSPHRASE=<la valeur générée ci-dessus>' >> /home/ubuntu/erp-ferme/server/.env
+
+# 3. Vérifier qu'un cycle de sauvegarde chiffre bien les secrets :
+set -a; source /home/ubuntu/erp-ferme/server/.env; set +a
+/home/ubuntu/erp-ferme/deploy/backup.sh
+ls /home/ubuntu/erp-ferme/backups/secrets/
+```
+
+**La passphrase elle-même ne doit JAMAIS finir sur le VPS seul ni dans R2** — sinon on a juste
+déplacé le point de défaillance unique. Elle doit vivre dans un endroit que la perte du VPS
+n'affecte pas : un gestionnaire de mots de passe personnel (Bitwarden, 1Password...), ou à défaut
+une note conservée hors ligne. C'est cette passphrase, gardée séparément, qui rend la sauvegarde
+chiffrée réellement utile en cas de reconstruction complète.
+
+Pour déchiffrer un fichier lors d'une restauration :
+
+```bash
+gpg --batch --yes --passphrase "<passphrase>" --decrypt secrets/.env-<horodatage>.gpg > .env
+```
+
 ## Surveillance de disponibilité (toutes les 2h)
 
 `deploy/monitor.sh` vérifie `https://massla.sn/api/health` et envoie une notification push via

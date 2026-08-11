@@ -63,12 +63,34 @@ async function rafraichirBadgeSync(queue) {
 }
 OfflineQueue.surChangement(rafraichirBadgeSync);
 
+// Évite de répéter le même toast à chaque tentative de sync (toutes les 30s) tant que la situation
+// n'a pas changé — sinon un livreur dont la session a expiré verrait le message en boucle.
+let sessionExpireeToastShown = false;
+let dernierNombreEchecs = 0;
+
 async function tenterSyncHorsLigne() {
-  const { reussies } = await OfflineQueue.synchroniser();
+  const { reussies, sessionExpiree } = await OfflineQueue.synchroniser();
   if (reussies > 0) {
     showToast(`${reussies} action(s) hors-ligne envoyée(s) au serveur.`, 'success');
     if (currentTab === 'logistique') selectTab('logistique');
   }
+  if (sessionExpiree) {
+    if (!sessionExpireeToastShown) {
+      sessionExpireeToastShown = true;
+      showToast("Session expirée : reconnectez-vous pour envoyer les actions en attente (rien n'est perdu).", 'error');
+    }
+  } else {
+    sessionExpireeToastShown = false;
+  }
+  // Alerte seulement quand le nombre d'échecs augmente (nouvel item mort), pas à chaque intervalle.
+  const echecs = await OfflineQueue.lireEchecs();
+  if (echecs.length > dernierNombreEchecs) {
+    showToast(
+      `${echecs.length} action(s) n'ont pas pu être envoyées après plusieurs tentatives. Contactez le support.`,
+      'error'
+    );
+  }
+  dernierNombreEchecs = echecs.length;
 }
 window.addEventListener('online', tenterSyncHorsLigne);
 setInterval(tenterSyncHorsLigne, 30000);

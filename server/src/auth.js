@@ -57,7 +57,17 @@ function signClientToken(client) {
  */
 async function attachTenantConnection(req, res, pool, tenantId) {
     req.db = await pool.connect();
-    await req.db.query('SELECT set_config($1, $2, false)', ['app.current_tenant_id', String(tenantId)]);
+    // Les deux GUC sont réinitialisés ICI, à l'acquisition — pas seulement au relâchement en fin de
+    // requête (voir release() ci-dessous). Une connexion réutilisée par le pool peut porter un
+    // app.is_plateforme_admin='true' résiduel d'une requête précédente (même mécanisme que le
+    // app.current_tenant_id résiduel documenté sur queryPreTenant) : sans cette remise à zéro
+    // explicite, une requête tenant ordinaire hériterait silencieusement de l'échappatoire RLS
+    // cross-tenant. Constat 2026-08-11 (audit sécurité) : le relâchement seul ne suffit pas car il
+    // est best-effort (.catch(() => {})) et n'est jamais garanti avant la prochaine acquisition.
+    await req.db.query(
+        "SELECT set_config('app.current_tenant_id', $1, false), set_config('app.is_plateforme_admin', '', false)",
+        [String(tenantId)]
+    );
     let released = false;
     const release = () => {
         if (released) return;
@@ -178,8 +188,12 @@ function requireAuth(pool) {
  * Réservé à la vue plateforme (routes/plateforme.js) : à utiliser APRÈS requireAuth (a besoin de
  * req.user et req.db déjà posés). Pose `app.is_plateforme_admin` sur la connexion déjà attachée à
  * la requête pour que les policies RLS avec échappatoire (voir `is_plateforme_admin()` dans
- * rls-policies.sql) laissent passer une lecture cross-tenant — en LECTURE SEULE : aucune policy
- * d'écriture n'a cette échappatoire, une organisation ne peut jamais être modifiée depuis ici.
+ * rls-policies.sql) laissent passer un accès cross-tenant.
+ * ATTENTION (corrigé 2026-08-11, audit sécurité) : ce n'est PAS en lecture seule. rls-policies.sql
+ * accorde à cette échappatoire, entre autres : UPDATE sur organisations (soft-delete d'une ferme),
+ * INSERT/UPDATE/DELETE sur organisation_abonnement_saas et factures_saas, INSERT sur secteurs et
+ * audit_logs. Toute route utilisant ce middleware doit être considérée comme pouvant écrire
+ * cross-tenant si elle appelle une INSERT/UPDATE/DELETE sur l'une de ces tables.
  */
 function requireSuperviseurPlateforme(req, res, next) {
     if (!req.user?.superviseurPlateforme) {
