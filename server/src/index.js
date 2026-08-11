@@ -73,6 +73,11 @@ async function main() {
         res.json({ statut: 'En ligne', version: '1.0.0', mode, environnement: process.env.NODE_ENV || 'development' });
     });
 
+    // Page publique de référencement local (pas de trailing slash requis, URL propre pour le partage).
+    app.get('/decouvrir', (req, res) => {
+        res.sendFile(path.join(__dirname, '..', '..', 'web', 'decouvrir.html'));
+    });
+
     app.use(express.static(path.join(__dirname, '..', '..', 'web')));
 
     app.listen(PORT, () => {
