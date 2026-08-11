@@ -243,6 +243,33 @@ sudo systemctl enable --now erp-ferme-backup.timer
 systemctl list-timers erp-ferme-backup.timer   # vérifier la prochaine exécution
 ```
 
+### Rôle dédié aux sauvegardes (`erp_backup`) — requis depuis le passage à RLS réel
+
+**Constat production 2026-08-11 : sans ce rôle, `pg_dump` échoue à chaque exécution une fois RLS
+actif**, avec `"query would be affected by row-level security policy"` — Postgres refuse par défaut
+qu'un rôle non propriétaire et soumis à RLS fasse un `COPY` complet d'une table à policies, plutôt
+que de produire silencieusement un dump partiel. `DATABASE_URL` (rôle `erp_app`, durci pour RLS —
+voir `provision-role.sql`) ne convient donc pas pour les sauvegardes, et ne doit **jamais** recevoir
+`BYPASSRLS` (ce serait désactiver RLS pour l'application elle-même).
+
+Étape unique, à faire une fois via l'éditeur SQL Supabase :
+
+```bash
+# 1. Générer un mot de passe :
+openssl rand -base64 32
+
+# 2. Coller server/src/provision-backup-role.sql dans l'éditeur SQL Supabase, après avoir
+#    remplacé <MOT_DE_PASSE_A_GENERER> par la valeur ci-dessus.
+
+# 3. Sur le VPS, ajouter BACKUP_DATABASE_URL à server/.env — même hôte/port/base que
+#    DATABASE_URL, utilisateur "erp_backup.<project_ref>" et le mot de passe généré :
+echo 'BACKUP_DATABASE_URL=postgresql://erp_backup.<project_ref>:<mot_de_passe>@<host_pooler>:5432/postgres' \
+  >> /home/ubuntu/erp-ferme/server/.env
+```
+
+Sans `BACKUP_DATABASE_URL`, `backup.sh` retente avec `DATABASE_URL` (fonctionne uniquement si RLS
+n'est pas actif sur la base — jamais le cas en production depuis le 2026-08-09).
+
 ### Externalisation (Cloudflare R2)
 
 `deploy/backup.sh` fait un `pg_dump` local puis `rclone sync` vers un bucket Cloudflare R2 —

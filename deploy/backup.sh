@@ -28,14 +28,25 @@ fi
 mkdir -p "$BACKUP_DIR"
 FICHIER="$BACKUP_DIR/erp-ferme-$HORODATAGE.dump"
 
-# --schema=public : DATABASE_URL utilise le rôle applicatif erp_app (durci pour RLS,
-# provision-role.sql), qui n'a de droits QUE sur le schéma public — le seul qui contient nos
-# données. Sans cette restriction, pg_dump tente par défaut de verrouiller TOUS les schémas de la
-# base Supabase, y compris auth/storage/realtime (internes à Supabase, hors de notre périmètre),
-# et échoue avec "permission denied for schema auth". BUG RÉEL TROUVÉ EN PRODUCTION 2026-08-11 :
-# ce script échouait ainsi à CHAQUE exécution depuis le 2026-08-09 (passage à RLS réel, commit
-# ffd689b) — aucune sauvegarde utilisable pendant ~77h, jusqu'à ce test manuel qui l'a révélé.
-pg_dump "$DATABASE_URL" --schema=public --format=custom --file="$FICHIER"
+# BACKUP_DATABASE_URL (rôle erp_backup, BYPASSRLS, lecture seule — voir provision-backup-role.sql)
+# de préférence à DATABASE_URL (rôle applicatif erp_app, durci pour RLS — provision-role.sql).
+# --schema=public dans les deux cas : ni l'un ni l'autre n'a de droits sur auth/storage/realtime,
+# internes à Supabase, hors de notre périmètre de sauvegarde.
+#
+# BUGS RÉELS TROUVÉS EN PRODUCTION 2026-08-11, tous les deux depuis le passage à RLS réel
+# (2026-08-09, commit ffd689b), tous les deux invisibles avant un test manuel : (1) pg_dump avec
+# DATABASE_URL essayait par défaut TOUS les schémas de la base → "permission denied for schema
+# auth" ; (2) même avec --schema=public, Postgres refuse par défaut qu'un rôle non propriétaire ET
+# soumis à RLS fasse un COPY complet d'une table à policies ("query would be affected by row-level
+# security policy"), plutôt que de produire silencieusement un dump partiel. Résultat cumulé :
+# aucune sauvegarde utilisable pendant ~77h avant détection. erp_app ne doit JAMAIS avoir
+# BYPASSRLS (ce serait désactiver RLS pour l'application elle-même) — d'où le second rôle, dédié
+# uniquement à pg_dump, jamais référencé par le code applicatif.
+DUMP_URL="${BACKUP_DATABASE_URL:-$DATABASE_URL}"
+if [ -z "${BACKUP_DATABASE_URL:-}" ]; then
+  echo "BACKUP_DATABASE_URL non défini : tentative avec DATABASE_URL (échouera si RLS est actif sur la base — voir provision-backup-role.sql)." >&2
+fi
+pg_dump "$DUMP_URL" --schema=public --format=custom --file="$FICHIER"
 echo "Sauvegarde créée : $FICHIER"
 
 # --- Secrets du serveur applicatif (audit systèmes 2026-08-11) --------------------------------
