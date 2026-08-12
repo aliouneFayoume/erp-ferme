@@ -226,13 +226,42 @@ dédiés).
 
 ## Plan d'action restant
 
+### ✅ Secret ntfy régénéré + découverte : la supervision était en panne silencieuse (2026-08-12)
+
+Le topic ntfy était toujours la valeur historique committée en clair (jamais tournée depuis le
+correctif qui l'avait rendue paramétrable). Régénéré (nouveau topic imprévisible dans
+`server/.env` sur le VPS, testé — notification reçue) et le repli codé en dur retiré de
+`backup.sh` **et** `monitor.sh` (ce dernier n'avait même pas de lecture d'environnement avant
+aujourd'hui — entièrement codé en dur).
+
+**Découverte en cours de route, sans rapport avec l'audit initial** : `deploy/monitor.sh` n'a
+jamais eu le bit exécutable dans le dépôt (`-rw-rw-r--` au lieu de `-rwxrwxr-x`). Conséquence
+vérifiée dans les journaux du VPS : `erp-ferme-monitor.service` échouait avec `status=203/EXEC` à
+**chaque** exécution depuis son installation, toutes les 2h, sans qu'aucune alerte ne signale
+cette panne — la supervision censée détecter les pannes de l'application était elle-même en panne
+silencieuse depuis le début. Exactement le même schéma que l'incident de sauvegarde du
+2026-08-09 (§ plus haut) : un mécanisme de sécurité qui échoue sans bruit. Corrigé (bit exécutable
+tracké dans git + copie live du VPS mise à jour immédiatement), vérifié : le service s'exécute
+maintenant avec succès (`status=0/SUCCESS`).
+
+`erp-ferme-monitor.service` charge désormais `server/.env` via `EnvironmentFile` (même mécanisme
+que `erp-ferme-backup.service`), copie systemd installée mise à jour sur le VPS.
+
+### ✅ Durée des sessions d'impersonation superviseur réduite (2026-08-12)
+
+Un jeton d'impersonation (accès complet à une ferme cible, sans les contrôles de suspension
+d'abonnement) était valable aussi longtemps qu'une session staff normale (12h) — alors qu'il sert
+un dépannage ponctuel. Réduit à 45 min (`signToken`, `viaImpersonation`). Testé (226/226, +1 test
+dédié comparant les deux durées). Restent ouverts (non traités, changements plus larges) : la
+propagation du marqueur d'impersonation dans le journal d'audit et une entrée de fin de session
+côté frontend — voir la note de suivi E4 dans `01-securite.md`.
+
+## Plan d'action restant
+
 Toute la liste « cette semaine » et « ce mois-ci » de l'audit du 2026-08-11 est terminée (items
-#1 à #13). De la liste « Ensuite », non urgente, reste :
-
-### Ensuite
-
-- Régénérer le secret ntfy (paramétrable depuis aujourd'hui, mais toujours la valeur historique)
-- Réduire la durée des sessions d'impersonation superviseur (12h → 30-60 min)
+#1 à #13). La liste « Ensuite » (non urgente) est également close, à l'exception des deux points
+E4 mentionnés ci-dessus (propagation du marqueur d'impersonation, entrée de fin de session), qui
+restent volontairement ouverts.
 
 ## Verdict global des trois experts
 

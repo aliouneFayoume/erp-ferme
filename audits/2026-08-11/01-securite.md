@@ -213,6 +213,13 @@ router.post('/:id/pin', requireAuth(pool), checkRole(['admin','comptable']), asy
 
 **Recommandation.** Réduire l'expiration à 30-60 min pour `viaImpersonation`. Propager le marqueur `impersonation` (et l'identité du superviseur) dans chaque écriture d'`audit_logs` de la session. Journaliser une entrée de fin de session côté frontend au retour à la session superviseur.
 
+> **Note de suivi (2026-08-12) :** premier point corrigé — `signToken` émet désormais un jeton de
+> 45 min pour `viaImpersonation` (au lieu de 12h, identique à une session staff normale). Testé
+> (226/226, +1 test dédié comparant les deux durées). Restent ouverts, non traités ici : la
+> propagation du marqueur `impersonation`/identité superviseur dans `audit_logs`, et une entrée de
+> fin de session côté frontend — des changements plus larges (schéma + plusieurs points d'écriture)
+> que la réduction de durée elle-même, volontairement scindés.
+
 ---
 
 #### E5 — IPN PayDunya : la vérification croisée documentée n'est pas implémentée

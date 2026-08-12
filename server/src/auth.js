@@ -37,7 +37,12 @@ function signToken(user, { viaImpersonation = false } = {}) {
             tokenVersion: user.token_version ?? 1,
         },
         JWT_SECRET,
-        { expiresIn: '12h' }
+        // Audit sécurité 2026-08-11 (E4) : une session d'impersonation était valable aussi
+        // longtemps qu'une session staff normale (12h), alors qu'elle sert à un dépannage ponctuel
+        // et embarque un accès complet à la ferme cible sans même les contrôles de suspension
+        // d'abonnement (voir requireAuth ci-dessous) — 45 min borne l'exposition en cas de jeton
+        // oublié ouvert ou exfiltré, largement suffisant pour une intervention de support.
+        { expiresIn: viaImpersonation ? '45m' : '12h' }
     );
 }
 

@@ -439,6 +439,17 @@ lui-même, donc si le VPS entier est injoignable (réseau/panne matérielle), le
 pas et aucune alerte n'est envoyée — seule une panne applicative (conteneur planté, etc.) est
 couverte.
 
+**`NTFY_TOPIC` requis dans `server/.env`** (audit sécurité 2026-08-11 : l'ancien topic était codé
+en dur, committé en clair dans l'historique du dépôt — quiconque l'ayant vu pouvait s'y abonner ou
+y publier de fausses alertes ; régénéré et retiré du code le 2026-08-12). Sans cette variable,
+`monitor.sh` et `backup.sh` échouent explicitement au lieu de se rabattre sur l'ancienne valeur
+compromise :
+
+```bash
+# Une fois : générer un nouveau topic imprévisible et l'ajouter à server/.env sur le VPS.
+echo "NTFY_TOPIC=erp-massla-alertes-$(openssl rand -hex 16)" >> /home/ubuntu/erp-ferme/server/.env
+```
+
 ```bash
 sudo cp deploy/erp-ferme-monitor.service deploy/erp-ferme-monitor.timer /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -446,9 +457,14 @@ sudo systemctl enable --now erp-ferme-monitor.timer
 systemctl list-timers erp-ferme-monitor.timer   # vérifier la prochaine exécution
 ```
 
+`erp-ferme-monitor.service` charge `server/.env` via `EnvironmentFile` (même mécanisme que
+`erp-ferme-backup.service`) — après toute modification de `server/.env`, `sudo systemctl
+daemon-reload` n'est nécessaire que si le fichier `.service` lui-même a changé, pas pour une
+simple mise à jour de `NTFY_TOPIC`.
+
 Pour recevoir les alertes : installer l'app **ntfy** (iOS/Android) ou ouvrir
-`https://ntfy.sh/<topic>` dans un navigateur, et s'abonner au topic configuré dans
-`deploy/monitor.sh` (`NTFY_TOPIC`).
+`https://ntfy.sh/<topic>` dans un navigateur, et s'abonner au topic défini dans `server/.env`
+(`NTFY_TOPIC`).
 
 ## Supervision externe (audit systèmes 2026-08-11, item #11)
 

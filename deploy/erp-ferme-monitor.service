@@ -4,4 +4,5 @@ Description=Vérifie la disponibilité d'ERP Ferme Massla et alerte en cas de pa
 [Service]
 Type=oneshot
 User=ubuntu
+EnvironmentFile=/home/ubuntu/erp-ferme/server/.env
 ExecStart=/home/ubuntu/erp-ferme/deploy/monitor.sh

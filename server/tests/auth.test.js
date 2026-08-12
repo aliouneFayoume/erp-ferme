@@ -187,6 +187,19 @@ describe('auth — middlewares requireAuth / checkRole', () => {
         expect(res.status).toBe(200);
     });
 
+    // Audit sécurité 2026-08-11 (E4) : une session d'impersonation était valable aussi longtemps
+    // qu'une session staff normale (12h) alors qu'elle sert à un dépannage ponctuel.
+    test("un token d'impersonation expire en 45 minutes, pas 12h comme une session normale", () => {
+        const tokenNormal = signToken({ id: 1, role_nom: 'admin', nom_complet: 'Admin', tenant_id: 1, token_version: 1 }, {});
+        const tokenImpersonation = signToken({ id: 1, role_nom: 'admin', nom_complet: 'Admin', tenant_id: 1, token_version: 1 }, { viaImpersonation: true });
+
+        const dureeNormale = jwt.decode(tokenNormal).exp - jwt.decode(tokenNormal).iat;
+        const dureeImpersonation = jwt.decode(tokenImpersonation).exp - jwt.decode(tokenImpersonation).iat;
+
+        expect(dureeNormale).toBe(12 * 60 * 60);
+        expect(dureeImpersonation).toBe(45 * 60);
+    });
+
     test('un token est rejeté après un changement de mot de passe (token_version incrémenté)', async () => {
         const token = await creerUtilisateurEtToken(pool, { role: 'admin' });
         const avant = await request(app).get('/protegee').set('Authorization', `Bearer ${token}`);

@@ -7,11 +7,14 @@
 set -euo pipefail
 
 # Anciennement en clair ici (committé dans le dépôt) — un topic ntfy.sh est public par défaut :
-# quiconque lit le dépôt pouvait s'abonner aux alertes d'exploitation (savoir quand attaquer) et en
-# publier de fausses. Renseigner NTFY_TOPIC dans server/.env (non versionné) ; la valeur ci-dessous
-# n'est qu'un repli pour ne pas casser un VPS pas encore mis à jour — à régénérer et à retirer d'ici
-# peu. Constat audit sécurité 2026-08-11.
-NTFY_TOPIC="${NTFY_TOPIC:-erp-massla-alertes-97963866109cd7138fe636fb}"
+# quiconque lit l'historique du dépôt pouvait s'abonner aux alertes d'exploitation (savoir quand
+# attaquer) et en publier de fausses. Constat audit sécurité 2026-08-11 ; secret régénéré et repli
+# retiré le 2026-08-12 — NTFY_TOPIC doit désormais être défini dans server/.env (non versionné),
+# sans quoi ce script échoue explicitement plutôt que de retomber sur l'ancienne valeur compromise.
+if [ -z "${NTFY_TOPIC:-}" ]; then
+  echo "NTFY_TOPIC doit être défini dans server/.env (voir DEPLOIEMENT.md)." >&2
+  exit 1
+fi
 # Alerte identique au monitoring (deploy/monitor.sh) : une sauvegarde qui échoue en silence est aussi
 # dangereuse qu'une panne, on ne le découvre juste que le jour d'une restauration nécessaire.
 #
