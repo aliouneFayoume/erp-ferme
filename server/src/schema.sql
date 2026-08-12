@@ -454,6 +454,12 @@ CREATE TABLE audit_logs (
     action VARCHAR(20) NOT NULL, -- 'CREATE', 'UPDATE', 'DELETE', 'LOGIN'
     utilisateur_id INT REFERENCES utilisateurs(id),
     details JSONB,
+    -- Distingue une action de support (superviseur en impersonation) d'une action normale de
+    -- l'admin de la ferme, sans quoi les deux sont indiscernables dans le journal de la ferme
+    -- cible — audit sécurité 2026-08-11 (E4). Propagées automatiquement par logAudit() (audit.js)
+    -- depuis le jeton en cours, jamais renseignées à la main par un appelant.
+    impersonation BOOLEAN NOT NULL DEFAULT FALSE,
+    superviseur_id INT REFERENCES utilisateurs(id),
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

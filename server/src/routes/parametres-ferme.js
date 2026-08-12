@@ -49,7 +49,7 @@ module.exports = function parametresFermeRoutes(pool) {
              WHERE id = $5 RETURNING nom, adresse, telephone, gps_lat, gps_lng`,
             [adresse || null, telephone || null, lat, lng, req.user.tenant_id]
         );
-        await logAudit(req.db, {
+        await logAudit(req.db, { req,
             table: 'organisations',
             rowId: req.user.tenant_id,
             action: 'UPDATE',

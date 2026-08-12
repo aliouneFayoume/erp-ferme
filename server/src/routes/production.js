@@ -61,7 +61,7 @@ module.exports = function productionRoutes(pool) {
                  VALUES ($1, $2, $3, $4, $5, 'EN_COURS', $6, $7, $8) RETURNING *`,
                 [req.user.tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, culture || null, duree_maturite_jours || null, req.user.id]
             );
-            await logAudit(req.db, { table: 'lots_production', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
+            await logAudit(req.db, { req, table: 'lots_production', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.status(201).json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -85,7 +85,7 @@ module.exports = function productionRoutes(pool) {
                 [statut, req.params.id, req.user.tenant_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Lot introuvable.' });
-            await logAudit(req.db, { table: 'lots_production', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { statut } });
+            await logAudit(req.db, { req, table: 'lots_production', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { statut } });
             res.json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -173,7 +173,7 @@ module.exports = function productionRoutes(pool) {
             }
 
             await client.query('COMMIT');
-            await logAudit(req.db, { table: 'releves_journaliers', action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { count: releves.length } });
+            await logAudit(req.db, { req, table: 'releves_journaliers', action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { count: releves.length } });
             res.status(200).json({ message: `${releves.length} relevé(s) synchronisé(s) avec succès.` });
         } catch (err) {
             await client.query('ROLLBACK');

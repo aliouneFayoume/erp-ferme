@@ -13,7 +13,7 @@ if (!process.env.JWT_SECRET) {
 }
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-simulation-ferme-massla';
 
-function signToken(user, { viaImpersonation = false } = {}) {
+function signToken(user, { viaImpersonation = false, supervisorId = null } = {}) {
     return jwt.sign(
         {
             id: user.id,
@@ -28,6 +28,12 @@ function signToken(user, { viaImpersonation = false } = {}) {
             // même si son abonnement SaaS est suspendu (requireAuth ci-dessous), pour pouvoir la
             // dépanner ou la réactiver.
             impersonation: viaImpersonation,
+            // Identité du superviseur qui a ouvert CETTE session — audit sécurité 2026-08-11 (E4).
+            // logAudit (audit.js) la reporte dans chaque écriture d'audit de la session, pour que le
+            // journal de la ferme cible distingue une action de support d'une action normale de son
+            // propre admin. Jamais significatif hors impersonation (null sinon), même si un appelant
+            // fournissait la valeur par erreur.
+            supervisorId: viaImpersonation ? supervisorId : null,
             // Révocation de session (audit sécurité 2026-08-11, E2) : requireAuth compare cette
             // valeur à utilisateurs.token_version à chaque requête ; un mot de passe changé, un
             // compte désactivé/supprimé ou un rôle modifié incrémente la colonne, ce qui invalide

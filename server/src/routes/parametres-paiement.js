@@ -46,7 +46,7 @@ module.exports = function parametresPaiementRoutes(pool) {
                 { mode, masterKey: master_key, privateKey: private_key, publicKey: public_key, token },
                 req.user.id
             );
-            await logAudit(req.db, {
+            await logAudit(req.db, { req,
                 table: 'organisation_paydunya_config',
                 rowId: req.user.tenant_id,
                 action: 'UPDATE',

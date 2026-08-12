@@ -68,7 +68,7 @@ module.exports = function fournisseursRoutes(pool) {
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
                 [tenantId, nom, categorie || null, telephone || null, email || null, adresse || null, notes || null, req.user.id]
             );
-            await logAudit(req.db, { table: 'fournisseurs', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: req.body });
+            await logAudit(req.db, { req, table: 'fournisseurs', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: req.body });
             res.status(201).json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -88,7 +88,7 @@ module.exports = function fournisseursRoutes(pool) {
                 [nom, categorie, telephone, email, adresse, notes, req.params.id, tenantId]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Fournisseur introuvable.' });
-            await logAudit(req.db, { table: 'fournisseurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: req.body });
+            await logAudit(req.db, { req, table: 'fournisseurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: req.body });
             res.json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -99,7 +99,7 @@ module.exports = function fournisseursRoutes(pool) {
     router.delete('/:id', requireAuth(pool), checkRole(['admin']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         await req.db.query(`UPDATE fournisseurs SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [req.params.id, tenantId]);
-        await logAudit(req.db, { table: 'fournisseurs', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId });
+        await logAudit(req.db, { req, table: 'fournisseurs', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId });
         res.status(204).end();
     });
 
@@ -200,7 +200,7 @@ module.exports = function fournisseursRoutes(pool) {
             }
 
             await client.query('COMMIT');
-            await logAudit(req.db, { table: 'commandes_fournisseurs', rowId: commande.id, action: 'CREATE', userId: req.user.id, tenantId, details: { montantTotal, fournisseur_id } });
+            await logAudit(req.db, { req, table: 'commandes_fournisseurs', rowId: commande.id, action: 'CREATE', userId: req.user.id, tenantId, details: { montantTotal, fournisseur_id } });
             res.status(201).json({ ...commande, lignes: lignesPreparees });
         } catch (err) {
             await client.query('ROLLBACK');
@@ -258,7 +258,7 @@ module.exports = function fournisseursRoutes(pool) {
             );
 
             await client.query('COMMIT');
-            await logAudit(req.db, {
+            await logAudit(req.db, { req,
                 table: 'commandes_fournisseurs',
                 rowId: commande.id,
                 action: 'UPDATE',
@@ -285,7 +285,7 @@ module.exports = function fournisseursRoutes(pool) {
         if (result.rows.length === 0) {
             return res.status(400).json({ erreur: 'Seule une commande au statut "Commandée" peut être annulée.' });
         }
-        await logAudit(req.db, { table: 'commandes_fournisseurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: { statut: 'ANNULEE' } });
+        await logAudit(req.db, { req, table: 'commandes_fournisseurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: { statut: 'ANNULEE' } });
         res.json(result.rows[0]);
     });
 

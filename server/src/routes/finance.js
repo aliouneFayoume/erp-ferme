@@ -87,7 +87,7 @@ module.exports = function financeRoutes(pool) {
             }
 
             await envoyerMessageWhatsapp(facture.client_telephone, { config });
-            await logAudit(req.db, {
+            await logAudit(req.db, { req,
                 table: 'factures',
                 rowId: facture.id,
                 action: 'RAPPEL_WHATSAPP',
@@ -189,7 +189,7 @@ module.exports = function financeRoutes(pool) {
              VALUES ($1, $2, $3, $4, $5, $6, $7, 'EN_ATTENTE') RETURNING *`,
             [tenantId, commande_id, client_id, montant, provider || 'WAVE', facture.token, referenceInterne]
         );
-        await logAudit(req.db, { table: 'paiements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: { commande_id, montant, provider } });
+        await logAudit(req.db, { req, table: 'paiements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: { commande_id, montant, provider } });
         res.status(201).json({ ...result.rows[0], checkout_url: facture.url });
     });
 
@@ -285,7 +285,7 @@ module.exports = function financeRoutes(pool) {
                     `IPN PayDunya incohérente pour le paiement ${paiement.id} (tenant ${paiement.tenant_id}) : ` +
                     `montant attendu ${montantAttendu}, reçu ${montantRecu} ; référence attendue "${paiement.reference_interne}", reçue "${confirmation.referenceInterne}".`
                 );
-                await logAudit(req.db, {
+                await logAudit(req.db, { req,
                     table: 'paiements',
                     rowId: paiement.id,
                     action: 'ANOMALIE_IPN',
@@ -320,7 +320,7 @@ module.exports = function financeRoutes(pool) {
             }
 
             await client.query('COMMIT');
-            await logAudit(req.db, {
+            await logAudit(req.db, { req,
                 table: 'paiements',
                 rowId: paiement.id,
                 action: 'UPDATE',

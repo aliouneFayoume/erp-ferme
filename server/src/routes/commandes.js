@@ -131,7 +131,7 @@ module.exports = function commandesRoutes(pool) {
             }
 
             await client.query('COMMIT');
-            await logAudit(req.db, { table: 'commandes', rowId: commande.id, action: 'CREATE', userId: req.user.id, tenantId, details: { montantTotal, client_id } });
+            await logAudit(req.db, { req, table: 'commandes', rowId: commande.id, action: 'CREATE', userId: req.user.id, tenantId, details: { montantTotal, client_id } });
             res.status(201).json({ ...commande, lignes: lignesPreparees });
         } catch (err) {
             await client.query('ROLLBACK');
@@ -198,7 +198,7 @@ module.exports = function commandesRoutes(pool) {
             );
 
             await client.query('COMMIT');
-            await logAudit(req.db, { table: 'commandes', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: { statut } });
+            await logAudit(req.db, { req, table: 'commandes', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: { statut } });
             res.json(result.rows[0]);
         } catch (err) {
             await client.query('ROLLBACK');

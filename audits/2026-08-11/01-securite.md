@@ -228,9 +228,20 @@ router.post('/:id/pin', requireAuth(pool), checkRole(['admin','comptable']), asy
 > `'FIN_CONNEXION_SUPPORT'` (22 caractères) dépassait `audit_logs.action VARCHAR(20)` — renommé
 > `FIN_SUPPORT`.
 >
-> Reste ouvert, non traité : la propagation du marqueur `impersonation`/identité superviseur dans
-> **chaque** écriture d'`audit_logs` de la session (pas seulement début/fin) — refactor plus large
-> de `logAudit()`, qui a ~56 points d'appel dans `routes/*.js`.
+> **Troisième et dernier point corrigé (même jour)** : `logAudit()` (`audit.js`) dérive désormais
+> `impersonation`/`superviseur_id` du jeton en cours (`req.user.impersonation`/`.supervisorId`,
+> lui-même embarqué par `signToken` — voir plus haut), et écrit ces deux nouvelles colonnes
+> d'`audit_logs` (migration-16). Les ~57 points d'appel de `routes/*.js` passent désormais `req`
+> (transformation mécanique uniforme : les 57 sites suivaient le même schéma exact `logAudit(req.db,
+> { ...`, vérifié avant toute modification). `creerFerme.js` (le seul appelant hors `routes/`, sans
+> requête HTTP en cours lors de l'inscription self-service) omet simplement ce champ — jamais une
+> impersonation dans ce cas, comportement correct par construction. Testé (230/230, +2 tests
+> dédiés) **et vérifié en navigateur** avec de vraies requêtes HTTP (pas de mock) : impersonation
+> réelle, modification d'un compte de la ferme cible, relecture du journal d'audit — l'entrée
+> `CONNEXION_SUPPORT` (écrite avec le jeton superviseur d'origine) montre bien `impersonation:
+> false`, l'entrée `UPDATE` faite ensuite montre `impersonation: true, superviseur_id: 1`.
+>
+> Les 3 points de la recommandation E4 sont désormais tous traités.
 
 ---
 

@@ -48,7 +48,7 @@ module.exports = function utilisateursRoutes(pool) {
                  VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING id, nom_complet, email, secteur_id, actif, cree_le`,
                 [req.user.tenant_id, nom_complet, email, hash, roleRes.rows[0].id, role === 'chef_prod' ? secteur_id || null : null]
             );
-            await logAudit(req.db, {
+            await logAudit(req.db, { req,
                 table: 'utilisateurs',
                 rowId: result.rows[0].id,
                 action: 'CREATE',
@@ -96,7 +96,7 @@ module.exports = function utilisateursRoutes(pool) {
                 [nom_complet || null, email || null, roleId, role === 'chef_prod' ? secteur_id || null : null, actif, req.params.id, req.user.tenant_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Utilisateur introuvable.' });
-            await logAudit(req.db, { table: 'utilisateurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { nom_complet, email, role, secteur_id, actif } });
+            await logAudit(req.db, { req, table: 'utilisateurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { nom_complet, email, role, secteur_id, actif } });
             res.json({ ...result.rows[0], role });
         } catch (err) {
             console.error(err);
@@ -121,7 +121,7 @@ module.exports = function utilisateursRoutes(pool) {
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Utilisateur introuvable.' });
             // Ne jamais journaliser le mot de passe, même haché : seule l'action est tracée.
-            await logAudit(req.db, { table: 'utilisateurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { motDePasseModifie: true } });
+            await logAudit(req.db, { req, table: 'utilisateurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { motDePasseModifie: true } });
             res.json({ message: 'Mot de passe mis à jour.' });
         } catch (err) {
             console.error(err);
@@ -141,7 +141,7 @@ module.exports = function utilisateursRoutes(pool) {
             [req.params.id, req.user.tenant_id]
         );
         if (result.rows.length === 0) return res.status(404).json({ erreur: 'Utilisateur introuvable.' });
-        await logAudit(req.db, { table: 'utilisateurs', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
+        await logAudit(req.db, { req, table: 'utilisateurs', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
         res.status(204).end();
     });
 

@@ -36,7 +36,7 @@ module.exports = function catalogueRoutes(pool) {
                 [produit.rows[0].id, quantite_initiale || 0, seuil_alerte || 10]
             );
             await client.query('COMMIT');
-            await logAudit(req.db, { table: 'produits', rowId: produit.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
+            await logAudit(req.db, { req, table: 'produits', rowId: produit.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.status(201).json(produit.rows[0]);
         } catch (err) {
             await client.query('ROLLBACK');
@@ -58,7 +58,7 @@ module.exports = function catalogueRoutes(pool) {
                 [prix_unitaire_b2b, prix_unitaire_b2c, prix_unitaire_grossiste, req.params.id, req.user.tenant_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Produit introuvable.' });
-            await logAudit(req.db, { table: 'produits', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
+            await logAudit(req.db, { req, table: 'produits', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -76,7 +76,7 @@ module.exports = function catalogueRoutes(pool) {
                 [quantite_disponible, seuil_alerte, req.params.id, req.user.tenant_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Stock introuvable.' });
-            await logAudit(req.db, { table: 'stocks', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
+            await logAudit(req.db, { req, table: 'stocks', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -86,7 +86,7 @@ module.exports = function catalogueRoutes(pool) {
 
     router.delete('/produits/:id', requireAuth(pool), checkRole(['admin']), async (req, res) => {
         await req.db.query(`UPDATE produits SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);
-        await logAudit(req.db, { table: 'produits', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
+        await logAudit(req.db, { req, table: 'produits', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
         res.status(204).end();
     });
 

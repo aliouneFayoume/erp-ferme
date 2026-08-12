@@ -32,7 +32,7 @@ module.exports = function comptabiliteRoutes(pool) {
                  VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
                 [req.user.tenant_id, secteur_id || null, categorie, montant, description || null, date_depense, req.user.id]
             );
-            await logAudit(req.db, { table: 'depenses', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
+            await logAudit(req.db, { req, table: 'depenses', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.status(201).json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -42,7 +42,7 @@ module.exports = function comptabiliteRoutes(pool) {
 
     router.delete('/depenses/:id', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
         await req.db.query(`UPDATE depenses SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);
-        await logAudit(req.db, { table: 'depenses', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
+        await logAudit(req.db, { req, table: 'depenses', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
         res.status(204).end();
     });
 
@@ -181,7 +181,7 @@ module.exports = function comptabiliteRoutes(pool) {
             }
         }
 
-        await logAudit(req.db, {
+        await logAudit(req.db, { req,
             table: 'releves_bancaires',
             rowId: null,
             action: 'CREATE',
@@ -203,7 +203,7 @@ module.exports = function comptabiliteRoutes(pool) {
                  VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
                 [req.user.tenant_id, date_operation, libelle, montant, type_operation, req.user.id]
             );
-            await logAudit(req.db, { table: 'releves_bancaires', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
+            await logAudit(req.db, { req, table: 'releves_bancaires', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.status(201).json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -223,7 +223,7 @@ module.exports = function comptabiliteRoutes(pool) {
                 [paiement_id, req.user.id, req.params.id, req.user.tenant_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Opération introuvable.' });
-            await logAudit(req.db, { table: 'releves_bancaires', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { paiement_id, rapproche: true } });
+            await logAudit(req.db, { req, table: 'releves_bancaires', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { paiement_id, rapproche: true } });
             res.json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -237,7 +237,7 @@ module.exports = function comptabiliteRoutes(pool) {
             [req.params.id, req.user.tenant_id]
         );
         if (result.rows.length === 0) return res.status(404).json({ erreur: 'Opération introuvable.' });
-        await logAudit(req.db, { table: 'releves_bancaires', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { rapproche: false } });
+        await logAudit(req.db, { req, table: 'releves_bancaires', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { rapproche: false } });
         res.json(result.rows[0]);
     });
 

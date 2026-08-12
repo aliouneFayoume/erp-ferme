@@ -84,7 +84,7 @@ module.exports = function logistiqueRoutes(pool) {
             [req.user.tenant_id, commande_id, livreur_id, date_prevue]
         );
         await req.db.query(`UPDATE commandes SET statut = 'EN_LIVRAISON' WHERE id = $1 AND tenant_id = $2`, [commande_id, req.user.tenant_id]);
-        await logAudit(req.db, { table: 'livraisons', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { commande_id, livreur_id } });
+        await logAudit(req.db, { req, table: 'livraisons', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { commande_id, livreur_id } });
         res.status(201).json(result.rows[0]);
     });
 
@@ -174,7 +174,7 @@ module.exports = function logistiqueRoutes(pool) {
             }
 
             await client.query('COMMIT');
-            await logAudit(req.db, { table: 'livraisons', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: { statut } });
+            await logAudit(req.db, { req, table: 'livraisons', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: { statut } });
             res.json(updated.rows[0]);
         } catch (err) {
             await client.query('ROLLBACK');
@@ -193,7 +193,7 @@ module.exports = function logistiqueRoutes(pool) {
                  ON CONFLICT (livreur_id, date_caisse) DO UPDATE SET statut = caisses_chauffeur.statut RETURNING *`,
                 [req.user.tenant_id, req.user.id, aujourdhui]
             );
-            await logAudit(req.db, { table: 'caisses_chauffeur', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id });
+            await logAudit(req.db, { req, table: 'caisses_chauffeur', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id });
             res.status(201).json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -232,7 +232,7 @@ module.exports = function logistiqueRoutes(pool) {
                  WHERE id = $5 RETURNING *`,
                 [montant_depose, ecart, req.user.id, notes || null, req.params.id]
             );
-            await logAudit(req.db, { table: 'caisses_chauffeur', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { montant_depose, ecart } });
+            await logAudit(req.db, { req, table: 'caisses_chauffeur', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { montant_depose, ecart } });
             res.json(result.rows[0]);
         } catch (err) {
             console.error(err);

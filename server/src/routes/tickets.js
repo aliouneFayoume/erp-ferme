@@ -39,7 +39,7 @@ module.exports = function ticketsRoutes(pool) {
              VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
             [tenantId, client_id, sujet, description || null, priorite || 'NORMALE', req.user.id]
         );
-        await logAudit(req.db, { table: 'tickets', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: req.body });
+        await logAudit(req.db, { req, table: 'tickets', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: req.body });
         res.status(201).json(result.rows[0]);
     });
 
@@ -53,14 +53,14 @@ module.exports = function ticketsRoutes(pool) {
             [statut, priorite, assigne_a, req.params.id, tenantId]
         );
         if (result.rows.length === 0) return res.status(404).json({ erreur: 'Ticket introuvable.' });
-        await logAudit(req.db, { table: 'tickets', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: req.body });
+        await logAudit(req.db, { req, table: 'tickets', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId, details: req.body });
         res.json(result.rows[0]);
     });
 
     router.delete('/:id', requireAuth(pool), checkRole(['admin']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         await req.db.query(`UPDATE tickets SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [req.params.id, tenantId]);
-        await logAudit(req.db, { table: 'tickets', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId });
+        await logAudit(req.db, { req, table: 'tickets', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId });
         res.status(204).end();
     });
 

@@ -267,17 +267,28 @@ requête confirmée en `204`, session superviseur restaurée. Bug réel trouvé 
 route : `'FIN_CONNEXION_SUPPORT'` (22 caractères) dépassait `audit_logs.action VARCHAR(20)` —
 renommé `FIN_SUPPORT`.
 
-Reste ouvert (non traité, changement plus large) : la propagation du marqueur
-d'impersonation/identité superviseur dans **chaque** écriture d'`audit_logs` de la session (pas
-seulement début/fin) — refactor de `logAudit()`, qui a ~56 points d'appel dans `routes/*.js`. Voir
-la note de suivi E4 dans `01-securite.md`.
+### ✅ Marqueur d'impersonation propagé à chaque écriture d'audit (2026-08-12)
+
+Dernier point d'E4 : avant ceci, seules les entrées `CONNEXION_SUPPORT`/`FIN_SUPPORT`
+elles-mêmes montraient qu'une session de support avait eu lieu — toute action faite PENDANT la
+session était indiscernable d'une action normale de l'admin de la ferme cible. `logAudit()`
+(`audit.js`) dérive désormais `impersonation`/`superviseur_id` du jeton en cours et les écrit dans
+`audit_logs` (2 nouvelles colonnes, migration-16). Transformation mécanique des ~57 points d'appel
+de `routes/*.js` (tous suivaient exactement le même schéma, vérifié avant modification) ; le seul
+appelant hors `routes/` (`creerFerme.js`, inscription self-service) n'a simplement jamais accès à
+un jeton d'impersonation, comportement correct par construction. Testé (230/230, +2 tests dédiés)
+**et vérifié en navigateur** avec de vraies requêtes HTTP : impersonation réelle, modification d'un
+compte de la ferme cible, relecture du journal — l'entrée `CONNEXION_SUPPORT` montre bien
+`impersonation: false` (écrite avec le jeton superviseur d'origine), l'action faite ensuite montre
+`impersonation: true, superviseur_id: <id du superviseur>`.
+
+Les 3 points de la recommandation E4 sont désormais tous traités.
 
 ## Plan d'action restant
 
 Toute la liste « cette semaine » et « ce mois-ci » de l'audit du 2026-08-11 est terminée (items
-#1 à #13). La liste « Ensuite » (non urgente) est également close, à l'exception d'un seul point
-E4 mentionné ci-dessus (propagation du marqueur d'impersonation dans chaque écriture d'audit),
-volontairement laissé ouvert.
+#1 à #13), ainsi que la totalité de la liste « Ensuite ». Aucun point restant identifié par
+l'audit du 2026-08-11.
 
 ## Verdict global des trois experts
 

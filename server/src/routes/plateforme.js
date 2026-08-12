@@ -113,7 +113,7 @@ module.exports = function plateformeRoutes(pool) {
                 [tenantId]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Organisation introuvable.' });
-            await logAudit(req.db, { table: 'organisations', rowId: tenantId, action: 'DELETE', userId: req.user.id, tenantId, details: { superviseur: req.user.nom } });
+            await logAudit(req.db, { req, table: 'organisations', rowId: tenantId, action: 'DELETE', userId: req.user.id, tenantId, details: { superviseur: req.user.nom } });
             res.status(204).end();
         } catch (err) {
             console.error(err);
@@ -139,7 +139,7 @@ module.exports = function plateformeRoutes(pool) {
                 [slug, tenantId]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Organisation introuvable.' });
-            await logAudit(req.db, { table: 'organisations', rowId: tenantId, action: 'UPDATE', userId: req.user.id, tenantId, details: { slug } });
+            await logAudit(req.db, { req, table: 'organisations', rowId: tenantId, action: 'UPDATE', userId: req.user.id, tenantId, details: { slug } });
             res.json(result.rows[0]);
         } catch (err) {
             if (err.code === '23505') return res.status(409).json({ erreur: 'Ce sous-domaine est déjà utilisé par une autre ferme.' });
@@ -221,8 +221,8 @@ module.exports = function plateformeRoutes(pool) {
             // (auth.js) laisse passer même si l'abonnement SaaS de cette ferme est suspendu — le
             // superviseur doit pouvoir se connecter à une ferme bloquée pour la dépanner ou la
             // réactiver. Voir la vérification "actif" dans requireAuth.
-            const token = signToken({ ...admin, role_nom: 'admin' }, { viaImpersonation: true });
-            await logAudit(req.db, {
+            const token = signToken({ ...admin, role_nom: 'admin' }, { viaImpersonation: true, supervisorId: req.user.id });
+            await logAudit(req.db, { req,
                 table: 'utilisateurs',
                 rowId: admin.id,
                 action: 'CONNEXION_SUPPORT',
@@ -262,7 +262,7 @@ module.exports = function plateformeRoutes(pool) {
         if (!req.user.impersonation) {
             return res.status(400).json({ erreur: "Cette route ne s'applique qu'à une session d'impersonation." });
         }
-        await logAudit(req.db, {
+        await logAudit(req.db, { req,
             table: 'utilisateurs',
             rowId: req.user.id,
             action: 'FIN_SUPPORT', // audit_logs.action est VARCHAR(20) : 'FIN_CONNEXION_SUPPORT' (22) dépasse
@@ -307,7 +307,7 @@ module.exports = function plateformeRoutes(pool) {
                 `INSERT INTO secteurs (tenant_id, nom, suivi_recolte) VALUES ($1, $2, $3) RETURNING id, nom, suivi_recolte`,
                 [tenantId, nom, !!req.body.suiviRecolte]
             );
-            await logAudit(req.db, { table: 'secteurs', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: { nom, superviseur: req.user.nom } });
+            await logAudit(req.db, { req, table: 'secteurs', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: { nom, superviseur: req.user.nom } });
             res.status(201).json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -369,7 +369,7 @@ module.exports = function plateformeRoutes(pool) {
                 );
             }
 
-            await logAudit(req.db, { table: 'organisation_abonnement_saas', rowId: tenantId, action: 'UPDATE', userId: req.user.id, tenantId, details: req.body });
+            await logAudit(req.db, { req, table: 'organisation_abonnement_saas', rowId: tenantId, action: 'UPDATE', userId: req.user.id, tenantId, details: req.body });
             res.json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -428,7 +428,7 @@ module.exports = function plateformeRoutes(pool) {
                 resultats.creees += 1;
             }
 
-            await logAudit(req.db, { table: 'factures_saas', action: 'CREATE', userId: req.user.id, tenantId: null, details: { periode, ...resultats } });
+            await logAudit(req.db, { req, table: 'factures_saas', action: 'CREATE', userId: req.user.id, tenantId: null, details: { periode, ...resultats } });
             res.json({ periode, ...resultats });
         } catch (err) {
             console.error(err);
@@ -453,7 +453,7 @@ module.exports = function plateformeRoutes(pool) {
                 [statut || null, methodePaiement || null, notes || null, req.params.id]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Facture introuvable.' });
-            await logAudit(req.db, { table: 'factures_saas', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: result.rows[0].tenant_id, details: req.body });
+            await logAudit(req.db, { req, table: 'factures_saas', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: result.rows[0].tenant_id, details: req.body });
             res.json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -485,7 +485,7 @@ module.exports = function plateformeRoutes(pool) {
             }
 
             await envoyerMessageWhatsapp(facture.telephone_contact);
-            await logAudit(req.db, {
+            await logAudit(req.db, { req,
                 table: 'factures_saas',
                 rowId: facture.id,
                 action: 'RAPPEL_WHATSAPP',

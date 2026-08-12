@@ -38,7 +38,7 @@ module.exports = function parametresWhatsappRoutes(pool) {
                 { accessToken: access_token, phoneNumberId: phone_number_id, templateNom: template_nom, templateLangue: template_langue },
                 req.user.id
             );
-            await logAudit(req.db, {
+            await logAudit(req.db, { req,
                 table: 'organisation_whatsapp_config',
                 rowId: req.user.tenant_id,
                 action: 'UPDATE',

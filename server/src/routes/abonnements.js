@@ -30,7 +30,7 @@ module.exports = function abonnementsRoutes(pool) {
                 [req.user.tenant_id, client_id, produit_id, quantite || 1, frequence || 'HEBDOMADAIRE', jour_livraison]
             );
             await req.db.query(`UPDATE clients SET est_abonne = TRUE WHERE id = $1 AND tenant_id = $2`, [client_id, req.user.tenant_id]);
-            await logAudit(req.db, { table: 'abonnements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
+            await logAudit(req.db, { req, table: 'abonnements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.status(201).json(result.rows[0]);
         } catch (err) {
             console.error(err);
@@ -45,13 +45,13 @@ module.exports = function abonnementsRoutes(pool) {
             [!!actif, req.params.id, req.user.tenant_id]
         );
         if (result.rows.length === 0) return res.status(404).json({ erreur: 'Abonnement introuvable.' });
-        await logAudit(req.db, { table: 'abonnements', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { actif } });
+        await logAudit(req.db, { req, table: 'abonnements', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { actif } });
         res.json(result.rows[0]);
     });
 
     router.delete('/:id', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
         await req.db.query(`UPDATE abonnements SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);
-        await logAudit(req.db, { table: 'abonnements', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
+        await logAudit(req.db, { req, table: 'abonnements', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
         res.status(204).end();
     });
 
@@ -139,7 +139,7 @@ module.exports = function abonnementsRoutes(pool) {
             }
         }
 
-        await logAudit(req.db, { table: 'commandes', action: 'CREATE', userId: req.user.id, tenantId, details: { source: 'abonnements', ...resultats } });
+        await logAudit(req.db, { req, table: 'commandes', action: 'CREATE', userId: req.user.id, tenantId, details: { source: 'abonnements', ...resultats } });
         res.json({ jour: jourDuJour, ...resultats });
         } catch (err) {
             console.error(err);

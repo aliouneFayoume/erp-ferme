@@ -64,7 +64,7 @@ module.exports = function authRoutes(pool) {
                 return res.status(403).json({ erreur: 'Accès suspendu pour cette organisation. Contactez le support.' });
             }
 
-            await logAudit(req.db, { table: 'utilisateurs', rowId: user.id, action: 'LOGIN', userId: user.id, tenantId: user.tenant_id });
+            await logAudit(req.db, { req, table: 'utilisateurs', rowId: user.id, action: 'LOGIN', userId: user.id, tenantId: user.tenant_id });
 
             res.json({
                 token,
