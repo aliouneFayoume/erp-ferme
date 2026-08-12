@@ -183,6 +183,19 @@ jamais crédité) au lieu d'être appliqué aveuglément. `rateLimit` 100/min aj
 (oracle d'existence de token + amplification vers le quota API PayDunya). Testé (218/218, +3
 tests dédiés).
 
+### ✅ Contraintes UNIQUE par tenant + générateur de numero_commande (2026-08-12)
+
+Trouvé lors de l'audit sécurité (M3, `01-securite.md`). `code_lot` (lots_production) et
+`numero_commande` (commandes + commandes_fournisseurs) étaient `UNIQUE` globalement au lieu de
+`UNIQUE (tenant_id, ...)` — une ferme pouvait bloquer définitivement une autre en utilisant le même
+code. Pire : le générateur (`CMD-${Date.now().toString().slice(-6)}`) répétait les mêmes 6 chiffres
+toutes les ~16,7 minutes, un bug de collision réel avec plusieurs fermes actives (500 en pleine
+prise de commande). Corrigé : `UNIQUE (tenant_id, colonne)` (migration-14) + nouveau générateur
+`numero.js` (horodatage + aléa + vérification d'unicité par ferme, élimine la collision plutôt que
+de la rendre improbable). `utilisateurs.email`/`clients.telephone` restent volontairement globaux
+(résolution du tenant à la connexion en dépend — décision déjà actée, voir task #50). Testé
+(223/223, +3 tests dédiés).
+
 ## Plan d'action restant
 
 Toute la liste « cette semaine » et « ce mois-ci » de l'audit du 2026-08-11 est terminée (items

@@ -286,6 +286,17 @@ Ces contraintes sont globales, pas par tenant. Conséquences :
 
 **Recommandation.** Passer ces contraintes en `UNIQUE (tenant_id, colonne)`. Remplacer le générateur de `numero_commande` par une séquence par tenant ou un suffixe aléatoire suffisamment large.
 
+> **Note de suivi (2026-08-12) :** corrigé pour `code_lot`, `numero_commande` (2 tables) —
+> `UNIQUE (tenant_id, colonne)` (migration-14). Nouveau générateur `numero.js` (horodatage base36 +
+> suffixe aléatoire + boucle de vérification d'unicité par ferme, même modèle que
+> `genererSlugUnique`) : élimine la collision au lieu de la rendre seulement improbable.
+> `utilisateurs.email` et `clients.telephone` restent volontairement globaux : la résolution du
+> tenant à la connexion (staff par email, portail par téléphone) en dépend — voir le commentaire
+> déjà présent dans `schema.sql` et la décision prise pour le task #50. Les changer casserait le
+> flux de connexion actuel ; ce serait un projet séparé (résoudre le tenant autrement à la
+> connexion), pas une correction ponctuelle. Testé (223/223, +3 tests dédiés : collision cross-
+> tenant sur `numero_commande` et `code_lot`, génération de numéros distincts).
+
 ---
 
 #### M4 — Validation des entrées absente sur les quantités et les montants

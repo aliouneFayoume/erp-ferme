@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+const { genererNumeroUnique } = require('../numero');
 
 /**
  * Multitarification à 3 niveaux (cahier des charges §3.2) : standard (B2C), restaurant (B2B),
@@ -104,7 +105,7 @@ module.exports = function commandesRoutes(pool) {
                 }
             }
 
-            const numero = `CMD-${Date.now().toString().slice(-6)}`;
+            const numero = await genererNumeroUnique(client, 'commandes', 'CMD', tenantId);
             const commandeRes = await client.query(
                 `INSERT INTO commandes (tenant_id, numero_commande, client_id, statut, montant_total) VALUES ($1, $2, $3, 'EN_ATTENTE', $4) RETURNING *`,
                 [tenantId, numero, client_id, montantTotal]

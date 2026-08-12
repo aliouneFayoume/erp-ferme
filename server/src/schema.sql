@@ -164,14 +164,18 @@ CREATE TABLE lots_production (
     id SERIAL PRIMARY KEY,
     tenant_id INT REFERENCES organisations(id),
     secteur_id INT REFERENCES secteurs(id),
-    code_lot VARCHAR(50) UNIQUE NOT NULL, -- ex: 'A-45'
+    -- UNIQUE (tenant_id, code_lot) et non UNIQUE global (audit sécurité 2026-08-11, M3) : une
+    -- contrainte globale empêchait DÉFINITIVEMENT deux fermes différentes d'utiliser le même code
+    -- de lot (ex: 'A-45'), sans aucune raison métier de l'interdire entre fermes distinctes.
+    code_lot VARCHAR(50) NOT NULL, -- ex: 'A-45'
     quantite_initiale INT NOT NULL,
     date_demarrage DATE NOT NULL,
     statut VARCHAR(20) CHECK (statut IN ('EN_COURS', 'ABATTAGE', 'TERMINE', 'PERDU')),
     culture VARCHAR(100), -- Maraîcher : type de culture (tomate, chou, ...) — planification des cultures
     duree_maturite_jours INT, -- Maraîcher : durée avant récolte prévue, en jours depuis date_demarrage
     cree_par INT REFERENCES utilisateurs(id),
-    deleted_at TIMESTAMP
+    deleted_at TIMESTAMP,
+    UNIQUE (tenant_id, code_lot)
 );
 
 CREATE TABLE releves_journaliers (
@@ -228,12 +232,16 @@ CREATE TABLE stocks (
 CREATE TABLE commandes (
     id SERIAL PRIMARY KEY,
     tenant_id INT REFERENCES organisations(id),
-    numero_commande VARCHAR(20) UNIQUE NOT NULL, -- ex: 'CMD-8492'
+    -- UNIQUE (tenant_id, numero_commande) et non UNIQUE global (audit sécurité 2026-08-11, M3) :
+    -- voir numero.js pour le générateur (corrigé le même jour — l'ancien produisait de vraies
+    -- collisions en production, contrainte globale ou pas).
+    numero_commande VARCHAR(20) NOT NULL, -- ex: 'CMD-8492'
     client_id INT REFERENCES clients(id),
     statut VARCHAR(20) CHECK (statut IN ('EN_ATTENTE', 'PREPAREE', 'EN_LIVRAISON', 'LIVREE', 'ANNULEE')),
     montant_total NUMERIC NOT NULL,
     deleted_at TIMESTAMP,
-    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (tenant_id, numero_commande)
 );
 
 CREATE TABLE lignes_commande (
@@ -366,7 +374,9 @@ CREATE TABLE fournisseurs (
 CREATE TABLE commandes_fournisseurs (
     id SERIAL PRIMARY KEY,
     tenant_id INT REFERENCES organisations(id),
-    numero_commande VARCHAR(20) UNIQUE NOT NULL, -- ex: 'CMF-8492'
+    -- UNIQUE (tenant_id, numero_commande) et non UNIQUE global (audit sécurité 2026-08-11, M3) —
+    -- même raisonnement que commandes.numero_commande ci-dessus.
+    numero_commande VARCHAR(20) NOT NULL, -- ex: 'CMF-8492'
     fournisseur_id INT REFERENCES fournisseurs(id),
     statut VARCHAR(20) CHECK (statut IN ('COMMANDEE', 'RECUE', 'ANNULEE')) DEFAULT 'COMMANDEE',
     date_commande DATE NOT NULL DEFAULT CURRENT_DATE,
@@ -376,7 +386,8 @@ CREATE TABLE commandes_fournisseurs (
     notes TEXT,
     cree_par INT REFERENCES utilisateurs(id),
     deleted_at TIMESTAMP,
-    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (tenant_id, numero_commande)
 );
 
 CREATE TABLE lignes_commande_fournisseur (

@@ -434,6 +434,20 @@ describe('isolation multi-tenant — commandes.js', () => {
         const verif = await pool.query('SELECT statut FROM commandes WHERE id = $1', [commandeB.id]);
         expect(verif.rows[0].statut).toBe('EN_ATTENTE');
     });
+
+    // Audit sécurité 2026-08-11 (M3) : numero_commande était UNIQUE globalement, empêchant
+    // définitivement deux fermes différentes d'utiliser le même numéro — désormais UNIQUE (tenant_id,
+    // numero_commande), voir migration-14-unique-par-tenant.sql.
+    test('deux organisations différentes peuvent utiliser exactement le même numero_commande', async () => {
+        const clientA = await creerClientPourTenant(pool, tenantA, { telephone: '+221770000053' });
+        const clientB = await creerClientPourTenant(pool, tenantB, { telephone: '+221770000054' });
+
+        await expect(creerCommandePourTenant(pool, tenantA, clientA.id, 1000, 'CMD-MEME-NUMERO')).resolves.toBeDefined();
+        await expect(creerCommandePourTenant(pool, tenantB, clientB.id, 2000, 'CMD-MEME-NUMERO')).resolves.toBeDefined();
+
+        const compte = await pool.query(`SELECT count(*) FROM commandes WHERE numero_commande = 'CMD-MEME-NUMERO'`);
+        expect(Number(compte.rows[0].count)).toBe(2);
+    });
 });
 
 describe('isolation multi-tenant — comptabilite.js', () => {
@@ -667,6 +681,17 @@ describe('isolation multi-tenant — production.js', () => {
         expect(res.status).toBe(403);
         const verif = await pool.query('SELECT statut FROM lots_production WHERE id = $1', [lotB.id]);
         expect(verif.rows[0].statut).toBe('EN_COURS');
+    });
+
+    // Audit sécurité 2026-08-11 (M3) : code_lot était UNIQUE globalement, empêchant définitivement
+    // deux fermes différentes d'utiliser le même code de lot — désormais UNIQUE (tenant_id,
+    // code_lot), voir migration-14-unique-par-tenant.sql.
+    test('deux organisations différentes peuvent utiliser exactement le même code_lot', async () => {
+        await expect(creerLotPourTenant(pool, tenantA, secteurA, { code_lot: 'A-45' })).resolves.toBeDefined();
+        await expect(creerLotPourTenant(pool, tenantB, secteurB, { code_lot: 'A-45' })).resolves.toBeDefined();
+
+        const compte = await pool.query(`SELECT count(*) FROM lots_production WHERE code_lot = 'A-45'`);
+        expect(Number(compte.rows[0].count)).toBe(2);
     });
 });
 

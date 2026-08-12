@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+const { genererNumeroUnique } = require('../numero');
 
 const ROLES_APPRO = ['admin', 'comptable'];
 
@@ -176,7 +177,7 @@ module.exports = function fournisseursRoutes(pool) {
                 lignesPreparees.push({ designation, unite: ligne.unite || null, quantite, prixUnitaire, sousTotal });
             }
 
-            const numero = `CMF-${Date.now().toString().slice(-6)}`;
+            const numero = await genererNumeroUnique(client, 'commandes_fournisseurs', 'CMF', tenantId);
             // date_commande fixée explicitement en JS (plutôt que de laisser le DEFAULT CURRENT_DATE
             // de la colonne s'appliquer) : le calcul du délai de livraison compare cette date à
             // date_livraison_reelle, elle aussi calculée en JS (voir /recevoir plus bas) — mélanger une
