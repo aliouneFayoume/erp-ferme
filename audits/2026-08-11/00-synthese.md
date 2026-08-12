@@ -130,13 +130,23 @@ réellement exploitable, pas seulement présente. RTO base de données à ce vol
 secondes ; le facteur limitant en cas de sinistre total serait le reprovisionnement du VPS/de
 l'application, pas la restauration des données elles-mêmes.
 
+### ✅ Item #10 — Timeouts pool DB + appels externes (2026-08-12)
+
+Ni le pool `pg` ni `fetch` n'avaient de limite de temps par défaut : une base injoignable ou un
+PayDunya/WhatsApp/OpenRouteService muet gelait la requête entrante indéfiniment, jusqu'au timeout
+du reverse proxy en amont (jamais celui de l'application elle-même). Pool (`server/src/db.js`) :
+`connectionTimeoutMillis` 5s, `idleTimeoutMillis` 30s, `statement_timeout` 15s. Appels externes
+(`AbortSignal.timeout`, Node 20) : PayDunya 15s (`paydunya.js`), WhatsApp 10s (`whatsapp.js`),
+OpenRouteService 8s (`routing.js` — repli déjà en place vers le calcul à vol d'oiseau / ligne
+droite, le timeout ne fait qu'accélérer ce repli au lieu de le retarder). Testé (207/207, aucune
+régression), pas de surface UI observable — rien à vérifier au navigateur.
+
 ## Plan d'action restant
 
 ### Ce mois-ci
 
 | # | Action | Effort | Statut |
 |---|---|---|---|
-| 10 | Régler le pool DB (timeouts) + délai max sur les appels PayDunya/WhatsApp/ORS | ~0,5j | À faire |
 | 11 | Supervision externe (UptimeRobot + Healthchecks.io, gratuits) | ~2h | À faire — aurait détecté l'incident sauvegardes en 5 min au lieu de 77h |
 | 13 | Dépôt GPS et en-tête de facture PDF par ferme (au lieu de codés en dur sur Massla) | ~3h | À faire |
 
