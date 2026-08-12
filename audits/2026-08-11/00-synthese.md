@@ -112,6 +112,24 @@ ouverte, au lieu d'attendre l'expiration naturelle du JWT (jusqu'à 12h). Testé
 effet de bord attendu et accepté : toutes les sessions staff déjà ouvertes ont été déconnectées
 au moment du déploiement.
 
+### ✅ Item #12 — Test de restauration de sauvegarde, chronométré (2026-08-12)
+
+Restauration réelle testée dans un conteneur Postgres 17 jetable sur le VPS (port local
+uniquement, supprimé après coup — zéro risque pour la production). Deux dumps testés : le dernier
+cycle automatique (00h00 UTC, révélé antérieur aux migrations 10/11 exécutées un peu plus tard —
+comportement attendu, pas un bug) et un dump frais généré à la demande. Résultat détaillé et
+procédure reproductible documentés dans `deploy/DEPLOIEMENT.md` (§ « Test de restauration »).
+
+Chaîne complète validée : `pg_dump` direct = 4,3s ; téléchargement du dernier dump depuis
+Cloudflare R2 (stockage externalisé) = 0,7s pour 168 Ko ; `pg_restore` = 1,3s ; 28/28 tables
+restaurées avec les colonnes des migrations récentes présentes, comptages métier cohérents,
+intégrité référentielle vérifiée par jointure. Déchiffrement GPG du `.env` sauvegardé également
+vérifié : les 17 variables attendues sont présentes, y compris `CREDENTIALS_ENCRYPTION_KEY` et
+`JWT_SECRET` — la sauvegarde chiffrée des secrets (item lié à l'audit systèmes) est donc
+réellement exploitable, pas seulement présente. RTO base de données à ce volume : quelques
+secondes ; le facteur limitant en cas de sinistre total serait le reprovisionnement du VPS/de
+l'application, pas la restauration des données elles-mêmes.
+
 ## Plan d'action restant
 
 ### Ce mois-ci
@@ -120,7 +138,6 @@ au moment du déploiement.
 |---|---|---|---|
 | 10 | Régler le pool DB (timeouts) + délai max sur les appels PayDunya/WhatsApp/ORS | ~0,5j | À faire |
 | 11 | Supervision externe (UptimeRobot + Healthchecks.io, gratuits) | ~2h | À faire — aurait détecté l'incident sauvegardes en 5 min au lieu de 77h |
-| 12 | Tester une restauration de sauvegarde, chronométrée | ~0,5j | À faire — **priorité relevée**, voir ci-dessus |
 | 13 | Dépôt GPS et en-tête de facture PDF par ferme (au lieu de codés en dur sur Massla) | ~3h | À faire |
 
 ### Ensuite

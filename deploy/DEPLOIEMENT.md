@@ -342,6 +342,47 @@ Pour déchiffrer un fichier lors d'une restauration :
 gpg --batch --yes --passphrase "<passphrase>" --decrypt secrets/.env-<horodatage>.gpg > .env
 ```
 
+### Test de restauration (à refaire périodiquement)
+
+Une sauvegarde qui n'a jamais été restaurée n'est qu'une hypothèse — l'incident du 2026-08-09
+(§ ci-dessus, `backup.sh`) a montré qu'un `pg_dump` peut échouer silencieusement pendant des jours.
+Procédure de test, sans aucun risque pour la production (tout se passe dans un conteneur Postgres
+jetable sur le VPS, jamais exposé au réseau, supprimé à la fin) :
+
+```bash
+# 1. Récupérer le dernier dump depuis R2 (ou utiliser un fichier local dans backups/)
+DERNIER=$(rclone lsf r2:erp-ferme-backups --files-only | grep '\.dump$' | sort | tail -1)
+rclone copy "r2:erp-ferme-backups/$DERNIER" /tmp/
+
+# 2. Conteneur Postgres jetable, port local uniquement
+docker run -d --name erp-restore-test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=restore_test \
+  -p 127.0.0.1:55432:5432 postgres:17
+docker cp "/tmp/$DERNIER" erp-restore-test:/tmp/restore.dump
+
+# 3. Restauration chronométrée
+docker exec -e PGPASSWORD=test erp-restore-test \
+  pg_restore -U postgres -d restore_test --no-owner --no-privileges -j 2 /tmp/restore.dump
+
+# 4. Vérifications minimales : tables présentes, colonnes des migrations récentes, comptages
+docker exec -e PGPASSWORD=test erp-restore-test psql -U postgres -d restore_test -c "\dt"
+docker exec -e PGPASSWORD=test erp-restore-test psql -U postgres -d restore_test -c "
+  SELECT (SELECT count(*) FROM organisations) AS fermes, (SELECT count(*) FROM utilisateurs) AS users;"
+
+# 5. Nettoyage
+docker rm -f erp-restore-test
+rm -f "/tmp/$DERNIER"
+```
+
+**Résultat du test du 2026-08-12** : dump frais (`pg_dump` direct, hors cycle) = 4,3s ; téléchargement
+du dernier dump depuis R2 = 0,7s pour 168 Ko ; `pg_restore` (2 jobs parallèles) = 1,3s ; 28/28 tables
+restaurées, colonnes des migrations 10 et 11 présentes, comptages métier cohérents, jointure
+`utilisateurs → organisations` intègre. Déchiffrement du `.env` sauvegardé (GPG) vérifié : les 17
+variables attendues sont présentes, y compris `CREDENTIALS_ENCRYPTION_KEY` et `JWT_SECRET`. RTO
+base de données pur, à ce volume de données, de l'ordre de quelques secondes — le facteur limitant
+en cas de perte totale du VPS serait le temps de reprovisionner un serveur et l'application elle-même,
+pas la restauration des données. À refaire après toute croissance significative du volume de données
+ou changement de fournisseur de stockage (R2).
+
 ## Surveillance de disponibilité (toutes les 2h)
 
 `deploy/monitor.sh` vérifie `https://massla.sn/api/health` et envoie une notification push via
