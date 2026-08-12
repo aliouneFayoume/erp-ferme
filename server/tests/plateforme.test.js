@@ -485,6 +485,17 @@ describe('plateforme — ajout de secteur à une ferme existante', () => {
         expect(res.status).toBe(400);
     });
 
+    // Audit sécurité 2026-08-11 (M2) : voir le test équivalent dans inscription.test.js.
+    test('rejette un nom de secteur contenant des caractères HTML/script (XSS)', async () => {
+        const res = await request(app)
+            .post(`/api/plateforme/organisations/${tenantB}/secteurs`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ nom: '<script>alert(1)</script>' });
+        expect(res.status).toBe(400);
+        const secteurs = await pool.query(`SELECT nom FROM secteurs WHERE tenant_id = $1`, [tenantB]);
+        expect(secteurs.rows.map((s) => s.nom)).toEqual(['Avicole']);
+    });
+
     test('un admin sans le flag superviseur ne peut ni lire ni ajouter de secteur', async () => {
         const resLecture = await request(app).get(`/api/plateforme/organisations/${tenantB}/secteurs`).set('Authorization', `Bearer ${tokenAdminNormal}`);
         expect(resLecture.status).toBe(403);

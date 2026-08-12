@@ -13,7 +13,7 @@ window.Views.catalogue = {
               <p class="desc">Grille tarifaire à 3 niveaux : standard (B2C), restaurant (B2B), grossiste (B2B gros volumes).</p>
               <form id="form-produit" class="form-grid">
                 <label>Secteur
-                  <select name="secteur_id" required>${secteurs.map((s) => `<option value="${s.id}">${s.nom}</option>`).join('')}</select>
+                  <select name="secteur_id" required>${secteurs.map((s) => `<option value="${s.id}">${esc(s.nom)}</option>`).join('')}</select>
                 </label>
                 <label>Nom<input type="text" name="nom" required /></label>
                 <label>Unité

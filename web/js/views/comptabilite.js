@@ -131,7 +131,7 @@ window.Views.comptabilite = {
           <label>Pôle (optionnel)
             <select name="secteur_id">
               <option value="">Général</option>
-              ${secteurs.map((s) => `<option value="${s.id}">${s.nom}</option>`).join('')}
+              ${secteurs.map((s) => `<option value="${s.id}">${esc(s.nom)}</option>`).join('')}
             </select>
           </label>
           <label>Catégorie

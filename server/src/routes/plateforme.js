@@ -4,6 +4,7 @@ const { logAudit } = require('../audit');
 const { SOCLE_ESSENTIEL, MODULES_SAAS, PACK_TOUT_COMPRIS, FRAIS_CONFIGURATION_DEFAUT } = require('../modulesSaas');
 const { creerNouvelleFerme } = require('../creerFerme');
 const { envoyerMessageWhatsapp } = require('../whatsapp');
+const { nomSecteurValide } = require('../validation');
 
 function dansNJours(n) {
     const d = new Date();
@@ -269,6 +270,10 @@ module.exports = function plateformeRoutes(pool) {
             const tenantId = req.params.id;
             const nom = String(req.body.nom || '').trim();
             if (!nom) return res.status(400).json({ erreur: 'Le nom du secteur est requis.' });
+            // Audit sécurité 2026-08-11 (M2) : voir le commentaire équivalent dans creerFerme.js.
+            if (!nomSecteurValide(nom)) {
+                return res.status(400).json({ erreur: 'Le nom du secteur ne peut contenir que lettres, chiffres, espaces et tirets (50 caractères max).' });
+            }
 
             const existant = await req.db.query(`SELECT id FROM secteurs WHERE tenant_id = $1 AND lower(nom) = lower($2)`, [tenantId, nom]);
             if (existant.rows.length > 0) return res.status(409).json({ erreur: 'Ce secteur existe déjà pour cette ferme.' });

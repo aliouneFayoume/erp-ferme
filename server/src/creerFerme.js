@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const { logAudit } = require('./audit');
 const { genererSlugUnique } = require('./slug');
+const { nomSecteurValide } = require('./validation');
 
 /**
  * Crée une nouvelle organisation (ferme cliente) + ses secteurs + son premier compte admin, dans
@@ -24,6 +25,12 @@ async function creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, a
     }
     if (!Array.isArray(secteurs) || secteurs.length === 0 || secteurs.some((s) => !s.nom || !s.nom.trim())) {
         throw { statut: 400, message: "Au moins un secteur d'activité valide est requis." };
+    }
+    // Audit sécurité 2026-08-11 (M2) : le nom de secteur était entièrement libre et affiché sans
+    // échappement à deux endroits du frontend (corrigé le même jour) — restreindre le format ici
+    // retire la possibilité même d'y injecter des caractères dangereux, en défense en profondeur.
+    if (secteurs.some((s) => !nomSecteurValide(s.nom.trim()))) {
+        throw { statut: 400, message: 'Les noms de secteur ne peuvent contenir que lettres, chiffres, espaces et tirets (50 caractères max).' };
     }
     if (!adminNomComplet || !adminEmail || !adminPassword) {
         throw { statut: 400, message: "Nom, email et mot de passe de l'administrateur sont requis." };

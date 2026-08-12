@@ -71,6 +71,18 @@ describe('inscription — création self-service d\'une nouvelle ferme', () => {
         expect(res.status).toBe(400);
     });
 
+    // Audit sécurité 2026-08-11 (M2) : un nom de secteur contenant du HTML/JS s'exécutait sans
+    // échappement dans Catalogue et Comptabilité (corrigé le même jour) — cette validation retire
+    // la possibilité même d'y injecter des caractères dangereux, en défense en profondeur.
+    test('rejette un nom de secteur contenant des caractères HTML/script (XSS)', async () => {
+        const res = await request(app).post('/api/inscription').send(
+            payloadValide({ secteurs: [{ nom: '<img src=x onerror=alert(1)>', suiviRecolte: false }] })
+        );
+        expect(res.status).toBe(400);
+        const org = await pool.query(`SELECT * FROM organisations WHERE nom = 'Ferme Test'`);
+        expect(org.rows).toHaveLength(0);
+    });
+
     test('rejette un mot de passe trop court', async () => {
         const res = await request(app).post('/api/inscription').send(payloadValide({ adminPassword: 'abc' }));
         expect(res.status).toBe(400);

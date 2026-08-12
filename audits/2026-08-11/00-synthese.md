@@ -215,6 +215,15 @@ commit avant reconstruction, garde les 5 dernières + `latest`. Rollback devenu 
 sans reconstruire (instantané). Logique de rétention testée isolément sur le VPS (images jetables).
 Procédure complète documentée dans `DEPLOIEMENT.md`.
 
+### ✅ XSS stocké : nom de secteur non échappé (2026-08-12)
+
+Deux endroits (`catalogue.js`, `comptabilite.js`) affichaient le nom de secteur sans `esc()` — les
+seuls oublis dans un frontend par ailleurs systématiquement échappé. Corrigé, plus une défense en
+profondeur côté serveur : nouveau `validation.js` (`nomSecteurValide`) restreint le format
+(lettres/chiffres/espaces/tirets/apostrophe, 50 caractères max) aux deux points de création
+(inscription self-service et création directe par le superviseur). Testé (225/225, +2 tests
+dédiés).
+
 ## Plan d'action restant
 
 Toute la liste « cette semaine » et « ce mois-ci » de l'audit du 2026-08-11 est terminée (items
@@ -222,7 +231,6 @@ Toute la liste « cette semaine » et « ce mois-ci » de l'audit du 2026-08-11 
 
 ### Ensuite
 
-- Échapper les 2 endroits XSS restants (noms de secteur)
 - Régénérer le secret ntfy (paramétrable depuis aujourd'hui, mais toujours la valeur historique)
 - Réduire la durée des sessions d'impersonation superviseur (12h → 30-60 min)
 

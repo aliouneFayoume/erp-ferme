@@ -272,6 +272,14 @@ Le nom de secteur est **entièrement libre** : `creerFerme.js:64-70` fait un `.t
 
 **Recommandation.** Envelopper les deux occurrences dans `esc()`, et restreindre le format des noms de secteur côté serveur (lettres, chiffres, espaces, tirets).
 
+> **Note de suivi (2026-08-12) :** corrigé. Les deux occurrences (`catalogue.js`, `comptabilite.js`)
+> enveloppées dans `esc()`. Nouveau `validation.js` (`nomSecteurValide`, regex Unicode
+> lettres/chiffres/espaces/tirets/apostrophe, 50 caractères max) appliqué aux deux points de
+> création (`creerFerme.js` — inscription self-service — et `routes/plateforme.js` — création
+> directe par le superviseur), en défense en profondeur : même si un futur point d'entrée oubliait
+> `esc()`, la valeur stockée ne pourrait plus contenir de caractères dangereux. Testé (225/225,
+> +2 tests dédiés : rejet d'un nom de secteur contenant du HTML/script sur les deux points d'entrée).
+
 ---
 
 #### M3 — Contraintes `UNIQUE` globales : oracle d'énumération + collisions cross-tenant
