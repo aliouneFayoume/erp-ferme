@@ -1,4 +1,5 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const { requireAuth, checkRole, attachTenantConnection, queryPreTenant } = require('../auth');
 const { logAudit } = require('../audit');
 const { genererFacturePDF } = require('../facturePdf');
@@ -6,6 +7,18 @@ const { creerFacture, confirmerFacture } = require('../paydunya');
 const { getPaydunyaConfig } = require('../paymentConfig');
 const { envoyerMessageWhatsapp } = require('../whatsapp');
 const { getWhatsappConfig } = require('../whatsappConfig');
+
+// Endpoint public (appelé par PayDunya, sans authentification) : chaque appel déclenche une
+// requête HTTPS sortante vers PayDunya et sert d'oracle d'existence de token (réponse différente
+// selon que le paiement existe) — audit sécurité 2026-08-11 (E5, point 3). Limite généreuse : ne
+// doit jamais bloquer un flux légitime de notifications PayDunya, seulement un balayage abusif.
+const limiteurIPN = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erreur: 'Trop de requêtes.' },
+});
 
 module.exports = function financeRoutes(pool) {
     const router = express.Router();
@@ -150,12 +163,19 @@ module.exports = function financeRoutes(pool) {
             });
         }
 
+        // Générée ici (avant l'appel PayDunya) et stockée dès l'INSERT ci-dessous : c'est cette
+        // même valeur, renvoyée telle quelle par PayDunya dans l'IPN de confirmation, qui permet la
+        // vérification croisée à la réception de l'IPN (voir /paiements/ipn) — en plus du token,
+        // qui à lui seul ne prouve que l'identité de la facture, pas que son montant confirmé
+        // correspond bien à ce qui a été demandé au départ.
+        const referenceInterne = `${commande_id}-${Date.now()}`;
+
         let facture;
         try {
             facture = await creerFacture({
                 montant,
                 description: `Commande ${commandeRes.rows[0].numero_commande}`,
-                referenceInterne: `${commande_id}-${Date.now()}`,
+                referenceInterne,
                 storeName: organisationRes.rows[0]?.nom,
                 credentials,
             });
@@ -165,9 +185,9 @@ module.exports = function financeRoutes(pool) {
         }
 
         const result = await req.db.query(
-            `INSERT INTO paiements (tenant_id, commande_id, client_id, montant, methode_paiement, reference_transaction, statut)
-             VALUES ($1, $2, $3, $4, $5, $6, 'EN_ATTENTE') RETURNING *`,
-            [tenantId, commande_id, client_id, montant, provider || 'WAVE', facture.token]
+            `INSERT INTO paiements (tenant_id, commande_id, client_id, montant, methode_paiement, reference_transaction, reference_interne, statut)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'EN_ATTENTE') RETURNING *`,
+            [tenantId, commande_id, client_id, montant, provider || 'WAVE', facture.token, referenceInterne]
         );
         await logAudit(req.db, { table: 'paiements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: { commande_id, montant, provider } });
         res.status(201).json({ ...result.rows[0], checkout_url: facture.url });
@@ -183,7 +203,7 @@ module.exports = function financeRoutes(pool) {
      * connaître le statut réel de la facture — impossible de vérifier une facture avec les clés
      * d'une autre organisation.
      */
-    router.post('/paiements/ipn', async (req, res) => {
+    router.post('/paiements/ipn', limiteurIPN, async (req, res) => {
         const body = req.body || {};
         let token;
         try {
@@ -238,7 +258,8 @@ module.exports = function financeRoutes(pool) {
             // FOR UPDATE : verrouille la ligne le temps de la transaction pour qu'une IPN dupliquée
             // (retry légitime de PayDunya) ne puisse pas valider et créditer deux fois le même paiement.
             const paiementRes = await client.query(
-                `SELECT id, tenant_id, commande_id, client_id FROM paiements WHERE reference_transaction = $1 AND statut = 'EN_ATTENTE' FOR UPDATE`,
+                `SELECT id, tenant_id, commande_id, client_id, montant, reference_interne FROM paiements
+                 WHERE reference_transaction = $1 AND statut = 'EN_ATTENTE' FOR UPDATE`,
                 [token]
             );
             if (paiementRes.rows.length === 0) {
@@ -246,6 +267,37 @@ module.exports = function financeRoutes(pool) {
                 return res.status(200).json({ message: 'Paiement introuvable ou déjà traité (idempotence).' });
             }
             const paiement = paiementRes.rows[0];
+
+            // Vérification croisée (audit développement 2026-08-11, liste "Ensuite") : le token
+            // authentifie QUELLE facture PayDunya a confirmé, pas que son montant/référence
+            // correspondent à ce qu'on attendait réellement — une réponse PayDunya corrompue,
+            // mal formée, ou un bug côté agrégateur créditerait sinon aveuglément n'importe quel
+            // montant. reference_interne est comparée seulement si elle a été enregistrée (colonne
+            // nullable, migration-13) : un paiement créé avant cette migration n'a que la
+            // vérification de montant.
+            const montantAttendu = Math.round(Number(paiement.montant));
+            const montantRecu = Math.round(Number(confirmation.montant));
+            const referenceIncoherente = paiement.reference_interne && confirmation.referenceInterne !== paiement.reference_interne;
+            if (montantRecu !== montantAttendu || referenceIncoherente) {
+                await client.query(`UPDATE paiements SET statut = 'ECHOUE' WHERE id = $1`, [paiement.id]);
+                await client.query('COMMIT');
+                console.error(
+                    `IPN PayDunya incohérente pour le paiement ${paiement.id} (tenant ${paiement.tenant_id}) : ` +
+                    `montant attendu ${montantAttendu}, reçu ${montantRecu} ; référence attendue "${paiement.reference_interne}", reçue "${confirmation.referenceInterne}".`
+                );
+                await logAudit(req.db, {
+                    table: 'paiements',
+                    rowId: paiement.id,
+                    action: 'ANOMALIE_IPN',
+                    tenantId: paiement.tenant_id,
+                    details: { token, montantAttendu, montantRecu, referenceAttendue: paiement.reference_interne, referenceRecue: confirmation.referenceInterne },
+                });
+                // 200 volontaire (même logique que le statut pending/cancelled ci-dessus) : la
+                // notification a été reçue et traitée (paiement marqué ECHOUE pour investigation
+                // manuelle), pas d'intérêt à ce que PayDunya la retente indéfiniment avec les mêmes
+                // données incohérentes.
+                return res.status(200).json({ message: 'Notification incohérente avec le paiement attendu — marqué en échec.' });
+            }
 
             await client.query(
                 `UPDATE paiements SET statut = 'VALIDE', date_paiement = CURRENT_TIMESTAMP WHERE id = $1`,

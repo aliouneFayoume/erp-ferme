@@ -227,6 +227,15 @@ router.post('/:id/pin', requireAuth(pool), checkRole(['admin','comptable']), asy
 
 **Recommandation.** Comparer `confirmation.referenceInterne` au préfixe `commande_id` attendu et `confirmation.montant` à `paiements.montant` — refuser (et alerter) en cas d'écart. Ajouter un `rateLimit` généreux (ex. 100/min) sur la route. Journaliser tout rejet dans `audit_logs`.
 
+> **Note de suivi (2026-08-12) :** corrigé. Nouvelle colonne `paiements.reference_interne`
+> (migration-13, nullable), générée à l'initiation et comparée à `confirmation.referenceInterne`
+> reçue via l'IPN ; `confirmation.montant` comparé à `paiements.montant` enregistré à l'initiation.
+> Tout écart marque le paiement `ECHOUE` (sans créditer) et journalise le détail dans
+> `audit_logs` (action `ANOMALIE_IPN`), plutôt que de refuser silencieusement — un paiement
+> incohérent doit rester visible pour investigation manuelle. `rateLimit` 100/min ajouté sur
+> `/paiements/ipn`. Testé (218/218, +3 tests dédiés : montant incohérent, référence incohérente,
+> cas nominal cohérent).
+
 ---
 
 ### 🟡 MOYEN

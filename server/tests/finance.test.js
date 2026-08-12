@@ -11,7 +11,7 @@ const { envoyerMessageWhatsapp } = require('../src/whatsapp');
 const CREDENTIALS_FACTICES = { mode: 'test', masterKey: 'mk', privateKey: 'pk', publicKey: 'pubk', token: 'tk' };
 
 /** Crée une commande + facture + paiement EN_ATTENTE prêts à être validés par l'IPN. */
-async function creerCommandeEtPaiementEnAttente(pool, tenantId, { typeClient = 'B2B', limiteCredit = 1000000, montant = 10000 } = {}) {
+async function creerCommandeEtPaiementEnAttente(pool, tenantId, { typeClient = 'B2B', limiteCredit = 1000000, montant = 10000, referenceInterne = null } = {}) {
     const client = await creerClient(pool, { tenant_id: tenantId, type_client: typeClient, limite_credit: limiteCredit });
     await pool.query(
         `INSERT INTO commandes (tenant_id, numero_commande, client_id, statut, montant_total) VALUES ($1, 'CMD-TEST', $2, 'EN_ATTENTE', $3) RETURNING id`,
@@ -27,9 +27,9 @@ async function creerCommandeEtPaiementEnAttente(pool, tenantId, { typeClient = '
     }
     const token = `paydunya-test-token-${Date.now()}`;
     await pool.query(
-        `INSERT INTO paiements (tenant_id, commande_id, client_id, montant, methode_paiement, reference_transaction, statut)
-         VALUES ($1, $2, $3, $4, 'WAVE', $5, 'EN_ATTENTE')`,
-        [tenantId, commande.id, client.id, montant, token]
+        `INSERT INTO paiements (tenant_id, commande_id, client_id, montant, methode_paiement, reference_transaction, reference_interne, statut)
+         VALUES ($1, $2, $3, $4, 'WAVE', $5, $6, 'EN_ATTENTE')`,
+        [tenantId, commande.id, client.id, montant, token, referenceInterne]
     );
     return { client, commande, token, montant };
 }
@@ -132,6 +132,51 @@ describe('finance — IPN PayDunya', () => {
         expect(confirmerFacture).not.toHaveBeenCalled();
         const paiement = await pool.query(`SELECT statut FROM paiements WHERE reference_transaction = $1`, [token]);
         expect(paiement.rows[0].statut).toBe('EN_ATTENTE');
+    });
+
+    // Vérification croisée (audit développement 2026-08-11, liste "Ensuite") : le token authentifie
+    // QUELLE facture PayDunya a confirmé, pas que son montant/référence correspondent à ce qu'on
+    // attendait réellement.
+    test('un montant confirmé différent du montant attendu ne crédite rien et marque le paiement ECHOUE', async () => {
+        const { commande, token } = await creerCommandeEtPaiementEnAttente(pool, tenantId, { montant: 10000 });
+        // PayDunya confirme 5000 alors que 10000 étaient attendus — écart qui doit être détecté,
+        // pas silencieusement appliqué (créditerait la moitié de ce qui était dû).
+        confirmerFacture.mockResolvedValue({ status: 'completed', montant: 5000, providerReference: 'PD-MISMATCH' });
+
+        const res = await request(app).post('/api/finance/paiements/ipn').send({ data: { token } });
+
+        expect(res.status).toBe(200);
+        const paiement = await pool.query(`SELECT statut FROM paiements WHERE reference_transaction = $1`, [token]);
+        expect(paiement.rows[0].statut).toBe('ECHOUE');
+        const facture = await pool.query(`SELECT statut, montant_restant FROM factures WHERE commande_id = $1`, [commande.id]);
+        expect(facture.rows[0].statut).toBe('A_PAYER');
+        expect(Number(facture.rows[0].montant_restant)).toBe(10000);
+    });
+
+    test('une reference_interne confirmée différente de celle attendue ne crédite rien et marque le paiement ECHOUE', async () => {
+        const { commande, token } = await creerCommandeEtPaiementEnAttente(pool, tenantId, { montant: 8000, referenceInterne: 'ref-attendue-123' });
+        confirmerFacture.mockResolvedValue({ status: 'completed', montant: 8000, providerReference: 'PD-REF-MISMATCH', referenceInterne: 'ref-inattendue-999' });
+
+        const res = await request(app).post('/api/finance/paiements/ipn').send({ data: { token } });
+
+        expect(res.status).toBe(200);
+        const paiement = await pool.query(`SELECT statut FROM paiements WHERE reference_transaction = $1`, [token]);
+        expect(paiement.rows[0].statut).toBe('ECHOUE');
+        const facture = await pool.query(`SELECT statut FROM factures WHERE commande_id = $1`, [commande.id]);
+        expect(facture.rows[0].statut).toBe('A_PAYER');
+    });
+
+    test('montant ET référence cohérents créditent normalement', async () => {
+        const { commande, token, montant } = await creerCommandeEtPaiementEnAttente(pool, tenantId, { montant: 12000, referenceInterne: 'ref-ok-456' });
+        confirmerFacture.mockResolvedValue({ status: 'completed', montant, providerReference: 'PD-OK', referenceInterne: 'ref-ok-456' });
+
+        const res = await request(app).post('/api/finance/paiements/ipn').send({ data: { token } });
+
+        expect(res.status).toBe(200);
+        const paiement = await pool.query(`SELECT statut FROM paiements WHERE reference_transaction = $1`, [token]);
+        expect(paiement.rows[0].statut).toBe('VALIDE');
+        const facture = await pool.query(`SELECT statut FROM factures WHERE commande_id = $1`, [commande.id]);
+        expect(facture.rows[0].statut).toBe('PAYEE');
     });
 });
 

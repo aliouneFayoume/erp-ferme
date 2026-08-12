@@ -172,14 +172,24 @@ distinctes du défaut une fois configurées, en-tête PDF contient l'adresse/té
 donné un faux négatif). Migration-12 exécutée par l'utilisateur, déploiement `a02dfc4` réussi,
 santé prod vérifiée.
 
+### ✅ Vérification croisée montant/référence sur l'IPN PayDunya (2026-08-12)
+
+Trouvé lors de l'audit sécurité (E5, `01-securite.md`) : `paydunya.js` documentait déjà
+`referenceInterne` comme « vérification croisée en plus du token », mais `finance.js` ne la lisait
+jamais, et `confirmation.montant` était appliqué tel quel sans jamais être confronté au montant
+réellement attendu. Corrigé : `paiements.reference_interne` (migration-13), comparaison du montant
+ET de la référence à la réception de l'IPN, tout écart marque le paiement `ECHOUE` (journalisé,
+jamais crédité) au lieu d'être appliqué aveuglément. `rateLimit` 100/min ajouté sur l'endpoint
+(oracle d'existence de token + amplification vers le quota API PayDunya). Testé (218/218, +3
+tests dédiés).
+
 ## Plan d'action restant
 
 Toute la liste « cette semaine » et « ce mois-ci » de l'audit du 2026-08-11 est terminée (items
-#1 à #13). Reste la liste « Ensuite », non urgente :
+#1 à #13). De la liste « Ensuite », non urgente, reste :
 
 ### Ensuite
 
-- Vérification croisée réelle du montant/référence sur l'IPN PayDunya
 - Contraintes `UNIQUE` par tenant + correction du générateur de numéro de commande
 - Registre de migrations SQL + registre d'images Docker pour rollback rapide
 - `npm ci` au lieu de `npm install` dans le Dockerfile de production

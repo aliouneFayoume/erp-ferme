@@ -556,7 +556,11 @@ describe('isolation multi-tenant — finance.js', () => {
         // La facture PayDunya doit avoir été créée avec les identifiants de l'organisation A, pas B.
         expect(creerFacture).toHaveBeenCalledWith(expect.objectContaining({ credentials: credentialsA }));
 
-        confirmerFacture.mockResolvedValue({ status: 'completed', montant: 5000, providerReference: 'PD-A' });
+        // La confirmation PayDunya renvoie la reference_interne telle qu'elle a été générée à
+        // l'initiation (voir vérification croisée dans routes/finance.js) — on la relit en base
+        // plutôt que de la deviner, exactement comme le ferait PayDunya en la faisant l'aller-retour.
+        const paiementA = await pool.query(`SELECT reference_interne FROM paiements WHERE reference_transaction = 'paydunya-token-A'`);
+        confirmerFacture.mockResolvedValue({ status: 'completed', montant: 5000, providerReference: 'PD-A', referenceInterne: paiementA.rows[0].reference_interne });
         const ipn = await request(app).post('/api/finance/paiements/ipn').send({ data: { token: 'paydunya-token-A' } });
 
         expect(ipn.status).toBe(200);

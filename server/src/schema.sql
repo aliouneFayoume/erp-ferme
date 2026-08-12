@@ -278,6 +278,11 @@ CREATE TABLE paiements (
     montant NUMERIC NOT NULL,
     methode_paiement VARCHAR(20) CHECK (methode_paiement IN ('WAVE', 'ORANGE_MONEY', 'ESPECES', 'VIREMENT')),
     reference_transaction VARCHAR(100), -- ID de transaction renvoyé par le Webhook de l'API
+    -- Valeur envoyée à PayDunya à l'initiation (custom_data.reference_interne, voir paydunya.js) et
+    -- renvoyée telle quelle dans l'IPN de confirmation : sert de vérification croisée du montant/
+    -- référence à la réception de l'IPN (routes/finance.js), en plus du token lui-même — audit
+    -- développement 2026-08-11 (liste "Ensuite"), jamais implémenté avant cette colonne.
+    reference_interne VARCHAR(150),
     statut VARCHAR(20) CHECK (statut IN ('EN_ATTENTE', 'VALIDE', 'ECHOUE')),
     livreur_id INT REFERENCES utilisateurs(id), -- encaissement terrain (caisse chauffeur)
     date_paiement TIMESTAMP DEFAULT CURRENT_TIMESTAMP
