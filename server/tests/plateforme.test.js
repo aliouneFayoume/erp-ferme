@@ -93,6 +93,35 @@ describe('plateforme — vue support multi-fermes', () => {
         expect(audit.rows).toHaveLength(1);
     });
 
+    // Audit sécurité 2026-08-11 (E4) : contrepartie de se-connecter-admin, journalise la fin d'une
+    // session d'impersonation.
+    test('fin-session-support journalise la fin de session avec un token d\'impersonation valide', async () => {
+        await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantB, nom_complet: 'Admin Ferme B' });
+
+        const connexion = await request(app)
+            .post(`/api/plateforme/organisations/${tenantB}/se-connecter-admin`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`);
+        const tokenImpersonation = connexion.body.token;
+
+        const res = await request(app)
+            .post('/api/plateforme/fin-session-support')
+            .set('Authorization', `Bearer ${tokenImpersonation}`);
+
+        expect(res.status).toBe(204);
+        const audit = await pool.query(`SELECT * FROM audit_logs WHERE tenant_id = $1 AND action = 'FIN_SUPPORT'`, [tenantB]);
+        expect(audit.rows).toHaveLength(1);
+    });
+
+    test('fin-session-support refuse un token normal (non-impersonation)', async () => {
+        const res = await request(app)
+            .post('/api/plateforme/fin-session-support')
+            .set('Authorization', `Bearer ${tokenSuperviseur}`);
+
+        expect(res.status).toBe(400);
+        const audit = await pool.query(`SELECT * FROM audit_logs WHERE action = 'FIN_SUPPORT'`);
+        expect(audit.rows).toHaveLength(0);
+    });
+
     test("se connecter à une organisation sans administrateur actif renvoie 404", async () => {
         const tenantVide = await creerOrganisation(pool, 'Ferme Vide');
 

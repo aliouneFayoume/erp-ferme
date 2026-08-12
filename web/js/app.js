@@ -403,9 +403,18 @@ document.getElementById('btn-logout').addEventListener('click', () => {
   showLogin();
 });
 
-document.getElementById('btn-retour-supervision').addEventListener('click', () => {
+document.getElementById('btn-retour-supervision').addEventListener('click', async () => {
   const superviseurSession = Api.getSuperviseurSession();
   if (!superviseurSession) return;
+  // Journalise la fin de session AVANT de restaurer le jeton superviseur : passé ce point, le
+  // jeton d'impersonation n'est plus celui utilisé par Api, cette requête doit donc partir avant
+  // le changement — audit sécurité 2026-08-11 (E4). Best-effort : un échec réseau ne doit jamais
+  // bloquer un superviseur qui essaie de sortir d'une session d'impersonation.
+  try {
+    await Api.post('/plateforme/fin-session-support', {});
+  } catch (err) {
+    console.error('Échec de la journalisation de fin de session support :', err);
+  }
   Api.clearSuperviseurSession();
   Api.setSession(superviseurSession.token, superviseurSession.utilisateur);
   window.location.href = '/';

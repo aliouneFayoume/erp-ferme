@@ -252,16 +252,32 @@ que `erp-ferme-backup.service`), copie systemd installée mise à jour sur le VP
 Un jeton d'impersonation (accès complet à une ferme cible, sans les contrôles de suspension
 d'abonnement) était valable aussi longtemps qu'une session staff normale (12h) — alors qu'il sert
 un dépannage ponctuel. Réduit à 45 min (`signToken`, `viaImpersonation`). Testé (226/226, +1 test
-dédié comparant les deux durées). Restent ouverts (non traités, changements plus larges) : la
-propagation du marqueur d'impersonation dans le journal d'audit et une entrée de fin de session
-côté frontend — voir la note de suivi E4 dans `01-securite.md`.
+dédié comparant les deux durées).
+
+### ✅ Entrée de fin de session d'impersonation dans le journal d'audit (2026-08-12)
+
+Le bouton « ↩ Retour à la supervision » ne faisait qu'un échange de jetons côté navigateur, aucune
+trace de fin de session support n'était journalisée. Nouvelle route `POST
+/plateforme/fin-session-support` (accessible avec le token d'impersonation lui-même — seul cas
+d'usage prévu, clore SA PROPRE session) qui journalise `FIN_SUPPORT` dans `audit_logs` de la ferme
+cible ; câblée dans `app.js` en best-effort (un échec réseau ne bloque jamais la sortie de session)
+avant de restaurer le jeton superviseur. Testé (228/228, +2 tests dédiés) **et vérifié en
+navigateur** : impersonation réelle d'une seconde ferme de démonstration, clic sur le bouton,
+requête confirmée en `204`, session superviseur restaurée. Bug réel trouvé et corrigé en cours de
+route : `'FIN_CONNEXION_SUPPORT'` (22 caractères) dépassait `audit_logs.action VARCHAR(20)` —
+renommé `FIN_SUPPORT`.
+
+Reste ouvert (non traité, changement plus large) : la propagation du marqueur
+d'impersonation/identité superviseur dans **chaque** écriture d'`audit_logs` de la session (pas
+seulement début/fin) — refactor de `logAudit()`, qui a ~56 points d'appel dans `routes/*.js`. Voir
+la note de suivi E4 dans `01-securite.md`.
 
 ## Plan d'action restant
 
 Toute la liste « cette semaine » et « ce mois-ci » de l'audit du 2026-08-11 est terminée (items
-#1 à #13). La liste « Ensuite » (non urgente) est également close, à l'exception des deux points
-E4 mentionnés ci-dessus (propagation du marqueur d'impersonation, entrée de fin de session), qui
-restent volontairement ouverts.
+#1 à #13). La liste « Ensuite » (non urgente) est également close, à l'exception d'un seul point
+E4 mentionné ci-dessus (propagation du marqueur d'impersonation dans chaque écriture d'audit),
+volontairement laissé ouvert.
 
 ## Verdict global des trois experts
 

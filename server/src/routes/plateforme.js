@@ -249,6 +249,31 @@ module.exports = function plateformeRoutes(pool) {
     });
 
     /**
+     * Contrepartie de /se-connecter-admin : journalise la fin d'une session d'impersonation, pour
+     * que le journal d'audit de la ferme cible montre non seulement quand le support s'est connecté
+     * (CONNEXION_SUPPORT ci-dessus) mais aussi quand il est reparti — audit sécurité 2026-08-11 (E4).
+     * Appelée par le frontend juste avant de restaurer la session superviseur (bouton "Retour à la
+     * supervision", app.js), donc AVEC le token d'impersonation encore valide, pas celui du
+     * superviseur (`requireSuperviseurPlateforme` refuserait ce token — l'admin ciblé n'a lui-même
+     * jamais ce flag). Pas de garde superviseur ici : n'importe quel token d'impersonation valide
+     * peut clore SA PROPRE session, ce qui est le seul cas d'usage prévu.
+     */
+    router.post('/fin-session-support', requireAuth(pool), async (req, res) => {
+        if (!req.user.impersonation) {
+            return res.status(400).json({ erreur: "Cette route ne s'applique qu'à une session d'impersonation." });
+        }
+        await logAudit(req.db, {
+            table: 'utilisateurs',
+            rowId: req.user.id,
+            action: 'FIN_SUPPORT', // audit_logs.action est VARCHAR(20) : 'FIN_CONNEXION_SUPPORT' (22) dépasse
+            userId: req.user.id,
+            tenantId: req.user.tenant_id,
+            details: {},
+        });
+        res.status(204).end();
+    });
+
+    /**
      * Secteurs de production d'une ferme (Avicole/Piscicole/Maraîcher/autre) — jusqu'ici choisis
      * une fois pour toutes à la création (creerFerme.js), sans moyen d'en ajouter un ensuite. Ces
      * deux routes permettent à la vue plateforme de lister les secteurs actuels d'une ferme et d'en

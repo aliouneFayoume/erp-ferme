@@ -215,10 +215,22 @@ router.post('/:id/pin', requireAuth(pool), checkRole(['admin','comptable']), asy
 
 > **Note de suivi (2026-08-12) :** premier point corrigé — `signToken` émet désormais un jeton de
 > 45 min pour `viaImpersonation` (au lieu de 12h, identique à une session staff normale). Testé
-> (226/226, +1 test dédié comparant les deux durées). Restent ouverts, non traités ici : la
-> propagation du marqueur `impersonation`/identité superviseur dans `audit_logs`, et une entrée de
-> fin de session côté frontend — des changements plus larges (schéma + plusieurs points d'écriture)
-> que la réduction de durée elle-même, volontairement scindés.
+> (226/226, +1 test dédié comparant les deux durées).
+>
+> **Deuxième point corrigé (même jour)** : nouvelle route `POST /plateforme/fin-session-support`
+> (accessible avec le token d'impersonation lui-même, pas de garde superviseur — seul cas d'usage
+> prévu : clore SA PROPRE session), journalise `FIN_SUPPORT` dans `audit_logs` de la ferme cible.
+> Câblée dans `app.js` : le bouton « ↩ Retour à la supervision » l'appelle (best-effort, un échec
+> réseau ne bloque jamais la sortie) avant de restaurer le jeton superviseur. Testé (228/228, +2
+> tests dédiés) **et vérifié en navigateur** (pg-mem) : impersonation d'une seconde ferme de
+> démonstration, clic sur le bouton, requête `POST .../fin-session-support` confirmée en `204`,
+> session superviseur restaurée. Bug réel trouvé et corrigé pendant l'implémentation :
+> `'FIN_CONNEXION_SUPPORT'` (22 caractères) dépassait `audit_logs.action VARCHAR(20)` — renommé
+> `FIN_SUPPORT`.
+>
+> Reste ouvert, non traité : la propagation du marqueur `impersonation`/identité superviseur dans
+> **chaque** écriture d'`audit_logs` de la session (pas seulement début/fin) — refactor plus large
+> de `logAudit()`, qui a ~56 points d'appel dans `routes/*.js`.
 
 ---
 
