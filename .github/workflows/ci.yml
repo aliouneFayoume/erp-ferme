@@ -37,3 +37,69 @@ jobs:
 
       - run: npm ci
       - run: npm test
+
+  # Constat de l'audit du 2026-08-11 (sécurité + systèmes + développement, convergent
+  # indépendamment sur ce point) : `npm test` ci-dessus tourne entièrement contre pg-mem, qui ne
+  # sait pas exécuter CREATE POLICY et n'applique donc jamais RLS (voir server/src/db.js). La
+  # garantie la plus critique du produit — l'étanchéité entre fermes clientes — n'avait donc AUCUN
+  # filet automatique, seulement server/src/verify-rls.js lancé à la main. Trois pannes de
+  # production (login staff, création de ferme, réglages PayDunya) avaient exactement cette
+  # signature : les tests passaient, RLS cassait en prod. Ce job ferme le trou : vraie instance
+  # Postgres, schéma + RLS + policies appliqués comme en production, puis verify-rls.js.
+  verify-rls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      # Rôle propriétaire (superuser du conteneur postgres:17 éphémère) : sert à construire le
+      # schéma et les fixtures, jamais à vérifier l'isolation elle-même (voir l'en-tête de
+      # verify-rls.js). Le mot de passe erp_app ci-dessous n'a de portée que cette base jetable,
+      # détruite à la fin du job — pas un secret à protéger.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      ERP_APP_DATABASE_URL: postgresql://erp_app:ci_only_password_not_a_secret@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci
+
+      - name: Installe le client psql
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Construit le schéma
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/schema.sql
+
+      - name: Active Row-Level Security sur toutes les tables
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/enable-rls.sql
+
+      - name: Provisionne le rôle applicatif erp_app (mot de passe CI uniquement)
+        run: |
+          sed 's/<MOT_DE_PASSE_A_GENERER>/ci_only_password_not_a_secret/' src/provision-role.sql \
+            | psql "$DATABASE_URL" -v ON_ERROR_STOP=1
+
+      - name: Applique les policies RLS
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/rls-policies.sql
+
+      - name: Vérifie que RLS isole réellement les tenants
+        run: node src/verify-rls.js
