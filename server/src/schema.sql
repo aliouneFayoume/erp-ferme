@@ -8,6 +8,15 @@
 --   - Abonnements B2C (paniers récurrents)
 -- ==============================================================================
 
+-- Registre des migrations SQL appliquées (audit systèmes/développement 2026-08-11) — voir
+-- migration-15-registre-migrations.sql pour le contexte complet et le modèle à suivre pour toute
+-- nouvelle migration. Présente ici pour que toute base créée à partir de ce schéma (fraîche, tests)
+-- l'ait dès le départ, sans dépendre de l'exécution manuelle de la migration 15.
+CREATE TABLE schema_migrations (
+    nom TEXT PRIMARY KEY,
+    appliquee_le TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- --------------------------------------------------------
 -- 0. ORGANISATIONS (PROTOTYPE MULTI-TENANT)
 -- --------------------------------------------------------

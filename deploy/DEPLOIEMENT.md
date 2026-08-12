@@ -155,6 +155,53 @@ Installer nginx séparément (`apt install nginx`) et utiliser `deploy/nginx.con
 départ pour `/etc/nginx/sites-available/erp-ferme` (adapter `proxy_pass` vers
 `http://127.0.0.1:4000` au lieu de `http://app:4000`, ce dernier n'existant qu'en réseau Docker).
 
+## Registre de migrations SQL + registre d'images Docker (rollback rapide)
+
+**Constat (audit systèmes/développement 2026-08-11) :** avant ceci, rien ne permettait de répondre
+rapidement à « quelles migrations SQL ont été appliquées en prod ? » (seule la mémoire de
+conversation en faisait foi) ni à « comment revenir à la version précédente si ce déploiement casse
+quelque chose ? » (`docker compose up -d --build` écrasait le tag `latest` et l'ancienne image
+partait au prune suivant, sans trace).
+
+### Registre de migrations SQL
+
+Table `schema_migrations` (créée par `schema.sql` pour toute base fraîche, et par
+`migration-15-registre-migrations.sql` sur la base de production, avec un backfill des migrations
+01-14 déjà appliquées avant que cette table existe). Chaque migration future doit se terminer par
+son propre enregistrement :
+
+```sql
+INSERT INTO schema_migrations (nom) VALUES ('migration-NN-nom-du-fichier.sql')
+ON CONFLICT (nom) DO NOTHING;
+```
+
+Vérifier l'état réel de la base à tout moment (Supabase SQL Editor) :
+
+```sql
+SELECT nom, appliquee_le FROM schema_migrations ORDER BY appliquee_le;
+```
+
+### Registre d'images Docker
+
+`docker-compose.yml` nomme explicitement l'image (`erp-ferme-app:latest`, plutôt que de dépendre du
+nom du dossier de déploiement). Le workflow `deploy.yml` tague désormais l'image en place avec le
+SHA du commit qu'elle sert **avant** de la reconstruire, et conserve les 5 dernières images taguées
+(en plus de `latest`) après chaque déploiement réussi — un rollback ne nécessite donc plus de
+reconstruire depuis un ancien commit (lent, et rien ne garantit que la reconstruction reproduise
+exactement les mêmes octets).
+
+**Rollback rapide** (sur le VPS, en cas de problème détecté après un déploiement) :
+
+```bash
+docker images erp-ferme-app   # lister les SHA disponibles (5 derniers + latest)
+docker tag erp-ferme-app:<sha-precedent> erp-ferme-app:latest
+docker compose up -d --no-build app   # instantané : pas de reconstruction, juste un redémarrage
+```
+
+Penser à revenir aussi le code source au même commit (`git reset --hard <sha-precedent>`) si le
+rollback doit être durable — sinon le prochain déploiement (`git push`) réintroduira la version
+problématique.
+
 ## TLS (HTTPS) avec Let's Encrypt
 
 Une fois le DNS du domaine pointé vers le VPS et nginx qui répond sur le port 80, décommenter les

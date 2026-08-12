@@ -3,6 +3,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Nom explicite plutôt que de dépendre du nom du dossier de déploiement (docker compose en
+    # dérive un sinon) : le workflow de déploiement (deploy.yml) tague cette image par SHA de
+    # commit pour permettre un rollback rapide (audit systèmes/développement 2026-08-11) — un nom
+    # implicite qui changerait selon le chemin de clonage casserait ce mécanisme silencieusement.
+    image: erp-ferme-app:latest
     restart: unless-stopped
     env_file:
       - ./server/.env

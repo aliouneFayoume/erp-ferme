@@ -196,6 +196,25 @@ de la rendre improbable). `utilisateurs.email`/`clients.telephone` restent volon
 (résolution du tenant à la connexion en dépend — décision déjà actée, voir task #50). Testé
 (223/223, +3 tests dédiés).
 
+### ✅ npm ci + registre de migrations SQL + registre d'images Docker (2026-08-12)
+
+**`npm ci`** : `Dockerfile` utilisait `npm install --omit=dev` (peut mettre à jour
+`package-lock.json` silencieusement si désynchronisé). Remplacé par `npm ci --omit=dev` — build
+reproductible, échoue plutôt que de dériver. Testé : build Docker isolé sur le VPS (image jetable)
++ démarrage vérifié.
+
+**Registre de migrations** : rien ne permettait de savoir rapidement quelles migrations SQL étaient
+appliquées en prod (seule la mémoire de conversation en faisait foi). Nouvelle table
+`schema_migrations` (`schema.sql` pour les bases fraîches, `migration-15` + backfill des
+migrations 01-14 pour la prod) — chaque future migration s'enregistre elle-même en dernière ligne.
+
+**Registre d'images Docker** : `docker compose up -d --build` écrasait le tag `latest` et l'ancienne
+image partait au prune suivant — un rollback nécessitait de reconstruire depuis un ancien commit
+(lent, résultat non garanti identique). `deploy.yml` tague désormais l'image en place par SHA de
+commit avant reconstruction, garde les 5 dernières + `latest`. Rollback devenu : retaguer + redémarrer
+sans reconstruire (instantané). Logique de rétention testée isolément sur le VPS (images jetables).
+Procédure complète documentée dans `DEPLOIEMENT.md`.
+
 ## Plan d'action restant
 
 Toute la liste « cette semaine » et « ce mois-ci » de l'audit du 2026-08-11 est terminée (items
@@ -203,9 +222,6 @@ Toute la liste « cette semaine » et « ce mois-ci » de l'audit du 2026-08-11 
 
 ### Ensuite
 
-- Contraintes `UNIQUE` par tenant + correction du générateur de numéro de commande
-- Registre de migrations SQL + registre d'images Docker pour rollback rapide
-- `npm ci` au lieu de `npm install` dans le Dockerfile de production
 - Échapper les 2 endroits XSS restants (noms de secteur)
 - Régénérer le secret ntfy (paramétrable depuis aujourd'hui, mais toujours la valeur historique)
 - Réduire la durée des sessions d'impersonation superviseur (12h → 30-60 min)

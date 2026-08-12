@@ -32,6 +32,16 @@ jobs:
           script: |
             set -e
             cd /home/ubuntu/erp-ferme
+
+            # Registre d'images pour rollback rapide (audit systèmes/développement 2026-08-11,
+            # liste "Ensuite") : avant de reconstruire, on marque l'image ACTUELLEMENT en
+            # production avec le SHA du commit qu'elle sert — sans ça, "docker compose up -d
+            # --build" écrase silencieusement le tag "latest" et l'ancienne image devient
+            # orpheline (supprimée par le prune ci-dessous en quelques secondes), sans aucun
+            # moyen d'y revenir autrement qu'en reconstruisant depuis un commit antérieur.
+            SHA_PRECEDENT=$(git rev-parse --short HEAD)
+            docker tag erp-ferme-app:latest "erp-ferme-app:$SHA_PRECEDENT" 2>/dev/null || true
+
             git fetch origin main
             git reset --hard origin/main
             docker compose up -d --build
@@ -40,6 +50,22 @@ jobs:
             for i in $(seq 1 10); do
               if curl -fs https://massla.sn/api/health > /dev/null; then
                 echo "OK : l'application répond (tentative $i)."
+
+                SHA_ACTUEL=$(git rev-parse --short HEAD)
+                docker tag erp-ferme-app:latest "erp-ferme-app:$SHA_ACTUEL"
+
+                # Rétention : garde les 5 dernières images taguées (par SHA) en plus de "latest",
+                # supprime les plus anciennes. Tri par date de création réelle de l'image
+                # (docker inspect), pas par le SHA lui-même (un hash ne trie pas chronologiquement).
+                {
+                  for t in $(docker images erp-ferme-app --format '{{.Tag}}' | grep -v -e '^latest$' -e '^<none>$'); do
+                    creee_le=$(docker inspect -f '{{.Created}}' "erp-ferme-app:$t" 2>/dev/null) || continue
+                    echo "$creee_le $t"
+                  done | sort -r | tail -n +6 | awk '{print $2}'
+                } | while read -r t; do
+                  docker rmi "erp-ferme-app:$t" 2>/dev/null || true
+                done
+
                 docker image prune -f
                 exit 0
               fi
@@ -47,4 +73,5 @@ jobs:
               sleep 3
             done
             echo "ÉCHEC : l'application ne répond plus après déploiement." >&2
+            echo "Rollback rapide : docker tag erp-ferme-app:$SHA_PRECEDENT erp-ferme-app:latest && docker compose up -d --no-build app" >&2
             exit 1
