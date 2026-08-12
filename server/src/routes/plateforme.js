@@ -206,7 +206,7 @@ module.exports = function plateformeRoutes(pool) {
         try {
             const tenantId = req.params.id;
             const adminRes = await req.db.query(
-                `SELECT u.id, u.nom_complet, u.email, u.secteur_id, u.tenant_id, o.nom as organisation_nom
+                `SELECT u.id, u.nom_complet, u.email, u.secteur_id, u.tenant_id, u.token_version, o.nom as organisation_nom
                  FROM utilisateurs u JOIN roles r ON u.role_id = r.id JOIN organisations o ON u.tenant_id = o.id
                  WHERE u.tenant_id = $1 AND r.nom = 'admin' AND u.actif = TRUE AND u.deleted_at IS NULL
                  ORDER BY u.id ASC LIMIT 1`,

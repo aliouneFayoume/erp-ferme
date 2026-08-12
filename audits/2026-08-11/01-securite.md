@@ -156,6 +156,17 @@ son jeton reste **pleinement valide jusqu'à 12 h**. `requireAuth` ne vérifie q
 2. Dans `requireAuth`, étendre la requête d'état déjà présente (auth.js:156-161) pour joindre `utilisateurs` et vérifier `actif`, `deleted_at`, `token_version` et `est_superviseur_plateforme` en base. Le coût est nul : la requête existe déjà, il s'agit d'un `JOIN` supplémentaire.
 3. Réduire l'expiration staff à 2-4 h avec un mécanisme de rafraîchissement, ou au minimum pour les jetons portant `superviseurPlateforme: true`.
 
+> **Note de suivi (2026-08-11, même session) :** points 1 et 2 corrigés. `token_version` ajouté
+> (migration-11), embarqué dans chaque JWT (`?? 1` de repli pour les jetons déjà émis, dont le
+> claim est absent), vérifié dans requireAuth en une seule requête combinée avec le contrôle
+> d'abonnement existant, **y compris pendant une impersonation** (l'identité de l'utilisateur ciblé
+> reste vérifiée, seul le statut de l'organisation est contourné). Incrémenté sur changement de mot
+> de passe, modification (rôle/secteur/actif/nom/email — coarse mais sûr) et suppression. Résout
+> aussi F5 (secteur_id figé dans le jeton) au passage, comme anticipé. Point 3 (réduire l'expiration
+> à 2-4h) reste à faire. **Effet de bord attendu au déploiement** : toute session déjà ouverte avant
+> ce correctif porte un jeton sans le claim `tokenVersion` (`undefined ≠ 1`) — déconnexion forcée de
+> tout le staff actif au moment du déploiement, y compris soi-même. Comportement voulu, pas un bug.
+
 ---
 
 #### E3 — `POST /api/clients/:id/pin` : cassé sous RLS réelle, et sans filtre tenant

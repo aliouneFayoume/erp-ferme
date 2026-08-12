@@ -1,5 +1,5 @@
 const request = require('supertest');
-const { createTestPool, buildApp, seedRolesEtSecteurs, tokenPour, creerUtilisateurEtToken, creerOrganisation } = require('./helpers/testApp');
+const { createTestPool, buildApp, seedRolesEtSecteurs, creerUtilisateurEtToken, creerOrganisation } = require('./helpers/testApp');
 
 // finance.js appelle désormais le vrai PayDunya (pas le webhook simulé du prototype d'origine) avec
 // les identifiants propres à l'organisation — mocké ici pour tester l'isolation multi-tenant de la
@@ -174,7 +174,7 @@ describe('isolation multi-tenant — dashboard.js', () => {
         await seedRolesEtSecteurs(pool);
         tenantA = await creerOrganisation(pool, 'Ferme A');
         tenantB = await creerOrganisation(pool, 'Ferme B');
-        tokenA = tokenPour({ role: 'comptable', tenant_id: tenantA });
+        tokenA = await creerUtilisateurEtToken(pool, { role: 'comptable', tenant_id: tenantA });
         app = buildApp(pool, ['dashboard']);
     });
 

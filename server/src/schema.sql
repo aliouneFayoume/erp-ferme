@@ -62,6 +62,11 @@ CREATE TABLE utilisateurs (
     -- scopé à sa propre organisation comme pour tout le monde. Activé manuellement en base pour un
     -- seul compte, jamais via l'inscription self-service ni l'API.
     est_superviseur_plateforme BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Révocation de session (auth.js:requireAuth) : incrémenté à chaque changement de mot de passe,
+    -- désactivation, suppression, ou changement de rôle/secteur. Un JWT embarque cette valeur au
+    -- moment de sa signature (signToken) ; si elle ne correspond plus à celle en base, le token est
+    -- rejeté même s'il n'a pas encore expiré (jusqu'à 12h sinon) — audit sécurité 2026-08-11 (E2).
+    token_version INT NOT NULL DEFAULT 1,
     deleted_at TIMESTAMP,
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

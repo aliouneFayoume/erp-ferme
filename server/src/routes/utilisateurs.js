@@ -78,13 +78,19 @@ module.exports = function utilisateursRoutes(pool) {
                 return res.status(400).json({ erreur: 'Vous ne pouvez pas désactiver votre propre compte.' });
             }
 
+            // token_version + 1 sur toute modification (rôle, secteur, statut actif, ou simple
+            // correction du nom/email) : force la reconnexion des sessions déjà ouvertes pour ce
+            // compte plutôt que de risquer un JWT encore valide 12h avec un rôle ou un secteur
+            // périmés — audit sécurité 2026-08-11 (E2, et son corollaire F5 sur secteur_id figé
+            // dans le token). Coût acceptable : cette route n'est appelée que par un admin, rarement.
             const result = await req.db.query(
                 `UPDATE utilisateurs SET
                     nom_complet = COALESCE($1, nom_complet),
                     email = COALESCE($2, email),
                     role_id = COALESCE($3, role_id),
                     secteur_id = $4,
-                    actif = COALESCE($5, actif)
+                    actif = COALESCE($5, actif),
+                    token_version = token_version + 1
                  WHERE id = $6 AND tenant_id = $7 AND deleted_at IS NULL
                  RETURNING id, nom_complet, email, secteur_id, actif`,
                 [nom_complet || null, email || null, roleId, role === 'chef_prod' ? secteur_id || null : null, actif, req.params.id, req.user.tenant_id]
@@ -105,8 +111,12 @@ module.exports = function utilisateursRoutes(pool) {
         }
         try {
             const hash = await bcrypt.hash(password, 10);
+            // token_version + 1 : un changement de mot de passe doit invalider toute session déjà
+            // ouverte pour ce compte, y compris un jeton volé qui n'a pas encore expiré (jusqu'à
+            // 12h sinon) — audit sécurité 2026-08-11 (E2).
             const result = await req.db.query(
-                `UPDATE utilisateurs SET mot_de_passe_hash = $1 WHERE id = $2 AND tenant_id = $3 AND deleted_at IS NULL RETURNING id`,
+                `UPDATE utilisateurs SET mot_de_passe_hash = $1, token_version = token_version + 1
+                 WHERE id = $2 AND tenant_id = $3 AND deleted_at IS NULL RETURNING id`,
                 [hash, req.params.id, req.user.tenant_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Utilisateur introuvable.' });
@@ -123,8 +133,11 @@ module.exports = function utilisateursRoutes(pool) {
         if (Number(req.params.id) === req.user.id) {
             return res.status(400).json({ erreur: 'Vous ne pouvez pas supprimer votre propre compte.' });
         }
+        // token_version + 1 : redondant avec actif = FALSE (déjà vérifié par requireAuth) mais
+        // garde le même réflexe sur toute mutation sensible du compte — défense en profondeur.
         const result = await req.db.query(
-            `UPDATE utilisateurs SET deleted_at = CURRENT_TIMESTAMP, actif = FALSE WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL RETURNING id`,
+            `UPDATE utilisateurs SET deleted_at = CURRENT_TIMESTAMP, actif = FALSE, token_version = token_version + 1
+             WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL RETURNING id`,
             [req.params.id, req.user.tenant_id]
         );
         if (result.rows.length === 0) return res.status(404).json({ erreur: 'Utilisateur introuvable.' });

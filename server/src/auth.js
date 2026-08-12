@@ -28,6 +28,13 @@ function signToken(user, { viaImpersonation = false } = {}) {
             // même si son abonnement SaaS est suspendu (requireAuth ci-dessous), pour pouvoir la
             // dépanner ou la réactiver.
             impersonation: viaImpersonation,
+            // Révocation de session (audit sécurité 2026-08-11, E2) : requireAuth compare cette
+            // valeur à utilisateurs.token_version à chaque requête ; un mot de passe changé, un
+            // compte désactivé/supprimé ou un rôle modifié incrémente la colonne, ce qui invalide
+            // instantanément tout token déjà émis, même avant ses 12h d'expiration naturelle. `?? 1`
+            // : repli sur la valeur par défaut d'un utilisateur tout juste créé, pour les rares
+            // appelants qui ne relisent pas encore explicitement la colonne.
+            tokenVersion: user.token_version ?? 1,
         },
         JWT_SECRET,
         { expiresIn: '12h' }
@@ -162,14 +169,19 @@ function requireClientAuth(pool) {
 }
 
 /**
- * Authentification par JWT (Authorization: Bearer <token>). Bloque aussi l'accès si l'organisation a
- * été supprimée (organisations.deleted_at, "Supprimer" dans la vue plateforme) ou si son abonnement
- * SaaS est explicitement suspendu (organisation_abonnement_saas.actif = false) — effet immédiat sur
- * toute session déjà ouverte, pas seulement les futures connexions. L'ABSENCE de ligne d'abonnement
- * (organisation jamais mise sous facturation, ex. Massla elle-même ou une ferme tout juste créée)
- * n'est PAS un blocage : seule une ligne existante avec actif = false l'est. Un token émis via
- * /se-connecter-admin (impersonation) ignore ces deux contrôles, pour que le superviseur puisse
- * toujours dépanner, réactiver ou récupérer une ferme suspendue ou supprimée.
+ * Authentification par JWT (Authorization: Bearer <token>). Une seule requête combine deux familles
+ * de contrôles, distinguées par leur portée :
+ *
+ * 1. Identité de l'UTILISATEUR (utilisateurs.actif/deleted_at/token_version) : toujours vérifiée, y
+ *    compris pendant une impersonation — un compte désactivé, supprimé, ou dont le mot de passe/rôle
+ *    a changé depuis l'émission du token doit perdre l'accès immédiatement, quelle que soit la raison
+ *    de la session (audit sécurité 2026-08-11, E2 — avant ce correctif, un token restait valide
+ *    jusqu'à 12h après un licenciement, un poste volé, ou un changement de rôle).
+ * 2. Statut de l'ORGANISATION (organisations.deleted_at, organisation_abonnement_saas.actif) :
+ *    ignoré pendant une impersonation (émise uniquement par /se-connecter-admin), pour que le
+ *    superviseur puisse toujours dépanner, réactiver ou récupérer une ferme suspendue ou supprimée.
+ *    L'ABSENCE de ligne d'abonnement (organisation jamais mise sous facturation) n'est PAS un
+ *    blocage : seule une ligne existante avec actif = false l'est.
  */
 function requireAuth(pool) {
     return async (req, res, next) => {
@@ -183,18 +195,26 @@ function requireAuth(pool) {
         try {
             req.user = jwt.verify(token, JWT_SECRET);
             await attachTenantConnection(req, res, pool, req.user.tenant_id);
+
+            const etat = await req.db.query(
+                `SELECT u.actif, u.deleted_at AS utilisateur_supprime_le, u.token_version,
+                        o.deleted_at AS organisation_supprimee_le, s.actif AS abonnement_actif
+                 FROM utilisateurs u
+                 LEFT JOIN organisations o ON o.id = u.tenant_id
+                 LEFT JOIN organisation_abonnement_saas s ON s.tenant_id = o.id
+                 WHERE u.id = $1`,
+                [req.user.id]
+            );
+            const ligne = etat.rows[0];
+            if (!ligne || ligne.utilisateur_supprime_le || !ligne.actif || ligne.token_version !== req.user.tokenVersion) {
+                return res.status(401).json({ erreur: 'Session invalide ou expirée' });
+            }
+
             if (!req.user.impersonation) {
-                const etat = await req.db.query(
-                    `SELECT o.deleted_at, s.actif AS abonnement_actif
-                     FROM organisations o LEFT JOIN organisation_abonnement_saas s ON s.tenant_id = o.id
-                     WHERE o.id = $1`,
-                    [req.user.tenant_id]
-                );
-                const ligne = etat.rows[0];
-                if (ligne?.deleted_at) {
+                if (ligne.organisation_supprimee_le) {
                     return res.status(403).json({ erreur: 'Cette organisation a été supprimée. Contactez le support.' });
                 }
-                if (ligne?.abonnement_actif === false) {
+                if (ligne.abonnement_actif === false) {
                     return res.status(403).json({ erreur: 'Accès suspendu pour cette organisation. Contactez le support.' });
                 }
             }

@@ -72,7 +72,7 @@ async function creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, a
         const hash = await bcrypt.hash(adminPassword, 10);
         const userRes = await client.query(
             `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, actif)
-             VALUES ($1, $2, $3, $4, $5, TRUE) RETURNING id, nom_complet, email, secteur_id, tenant_id`,
+             VALUES ($1, $2, $3, $4, $5, TRUE) RETURNING id, nom_complet, email, secteur_id, tenant_id, token_version`,
             [tenantId, adminNomComplet.trim(), adminEmail.trim().toLowerCase(), hash, roleRes.rows[0].id]
         );
         const admin = userRes.rows[0];

@@ -1,7 +1,8 @@
 const request = require('supertest');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const express = require('express');
-const { createTestPool, seedRolesEtSecteurs, creerOrganisation, tokenPour } = require('./helpers/testApp');
+const { createTestPool, seedRolesEtSecteurs, creerOrganisation, creerUtilisateurEtToken } = require('./helpers/testApp');
 const { requireAuth, checkRole, signToken } = require('../src/auth');
 
 async function creerUtilisateur(pool, { email = 'test@massla.sn', motDePasse = 'demo1234', role = 'admin', actif = true, tenant_id = null } = {}) {
@@ -93,8 +94,9 @@ describe('auth — middlewares requireAuth / checkRole', () => {
     let pool;
     let app;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         pool = createTestPool();
+        await seedRolesEtSecteurs(pool);
         app = express();
         app.get('/protegee', requireAuth(pool), (req, res) => res.json({ ok: true }));
         app.get('/comptable-seulement', requireAuth(pool), checkRole(['comptable']), (req, res) => res.json({ ok: true }));
@@ -114,24 +116,32 @@ describe('auth — middlewares requireAuth / checkRole', () => {
         expect(res.status).toBe(401);
     });
 
+    // requireAuth vérifie désormais l'identité en base à chaque requête (audit sécurité 2026-08-11,
+    // E2) : un token signé sans ligne utilisateurs correspondante est rejeté par construction — les
+    // tests ci-dessous utilisent donc creerUtilisateurEtToken (vraie ligne + vrai token_version),
+    // jamais le raccourci synthétique tokenPour.
+
     test('token valide donne accès à une route protégée', async () => {
-        const res = await request(app).get('/protegee').set('Authorization', `Bearer ${tokenPour({ role: 'livreur' })}`);
+        const token = await creerUtilisateurEtToken(pool, { role: 'livreur' });
+        const res = await request(app).get('/protegee').set('Authorization', `Bearer ${token}`);
         expect(res.status).toBe(200);
     });
 
     test('checkRole refuse un rôle non autorisé', async () => {
-        const res = await request(app).get('/comptable-seulement').set('Authorization', `Bearer ${tokenPour({ role: 'livreur' })}`);
+        const token = await creerUtilisateurEtToken(pool, { role: 'livreur' });
+        const res = await request(app).get('/comptable-seulement').set('Authorization', `Bearer ${token}`);
         expect(res.status).toBe(403);
     });
 
     test('checkRole laisse toujours passer admin, même hors liste', async () => {
-        const res = await request(app).get('/comptable-seulement').set('Authorization', `Bearer ${tokenPour({ role: 'admin' })}`);
+        const token = await creerUtilisateurEtToken(pool, { role: 'admin' });
+        const res = await request(app).get('/comptable-seulement').set('Authorization', `Bearer ${token}`);
         expect(res.status).toBe(200);
     });
 
     test('un token déjà émis est bloqué immédiatement si son organisation est suspendue entre-temps', async () => {
         const tenantId = await creerOrganisation(pool, 'Ferme Suspendue En Cours de Session');
-        const token = tokenPour({ role: 'admin', tenant_id: tenantId });
+        const token = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantId });
 
         const avant = await request(app).get('/protegee').set('Authorization', `Bearer ${token}`);
         expect(avant.status).toBe(200);
@@ -147,7 +157,7 @@ describe('auth — middlewares requireAuth / checkRole', () => {
 
     test('un token déjà émis est bloqué immédiatement si son organisation est supprimée entre-temps', async () => {
         const tenantId = await creerOrganisation(pool, 'Ferme Supprimée En Cours de Session');
-        const token = tokenPour({ role: 'admin', tenant_id: tenantId });
+        const token = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantId });
 
         await pool.query(`UPDATE organisations SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1`, [tenantId]);
 
@@ -161,9 +171,40 @@ describe('auth — middlewares requireAuth / checkRole', () => {
             `INSERT INTO organisation_abonnement_saas (tenant_id, montant_mensuel, actif) VALUES ($1, 40000, FALSE)`,
             [tenantId]
         );
-        const tokenImpersonation = signToken({ id: 1, role_nom: 'admin', nom_complet: 'Admin Ferme', tenant_id: tenantId }, { viaImpersonation: true });
+        const roleRes = await pool.query(`SELECT id FROM roles WHERE nom = 'admin'`);
+        const adminRes = await pool.query(
+            `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, actif)
+             VALUES ($1, 'Admin Ferme', 'admin-depanne@test.sn', 'x', $2, TRUE) RETURNING id, token_version`,
+            [tenantId, roleRes.rows[0].id]
+        );
+        const admin = adminRes.rows[0];
+        const tokenImpersonation = signToken(
+            { id: admin.id, role_nom: 'admin', nom_complet: 'Admin Ferme', tenant_id: tenantId, token_version: admin.token_version },
+            { viaImpersonation: true }
+        );
 
         const res = await request(app).get('/protegee').set('Authorization', `Bearer ${tokenImpersonation}`);
         expect(res.status).toBe(200);
+    });
+
+    test('un token est rejeté après un changement de mot de passe (token_version incrémenté)', async () => {
+        const token = await creerUtilisateurEtToken(pool, { role: 'admin' });
+        const avant = await request(app).get('/protegee').set('Authorization', `Bearer ${token}`);
+        expect(avant.status).toBe(200);
+
+        const decoded = jwt.decode(token);
+        await pool.query(`UPDATE utilisateurs SET token_version = token_version + 1 WHERE id = $1`, [decoded.id]);
+
+        const apres = await request(app).get('/protegee').set('Authorization', `Bearer ${token}`);
+        expect(apres.status).toBe(401);
+    });
+
+    test('un token est rejeté si le compte est désactivé entre-temps', async () => {
+        const token = await creerUtilisateurEtToken(pool, { role: 'admin' });
+        const decoded = jwt.decode(token);
+        await pool.query(`UPDATE utilisateurs SET actif = FALSE WHERE id = $1`, [decoded.id]);
+
+        const res = await request(app).get('/protegee').set('Authorization', `Bearer ${token}`);
+        expect(res.status).toBe(401);
     });
 });
