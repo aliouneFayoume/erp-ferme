@@ -403,6 +403,46 @@ Pour recevoir les alertes : installer l'app **ntfy** (iOS/Android) ou ouvrir
 `https://ntfy.sh/<topic>` dans un navigateur, et s'abonner au topic configuré dans
 `deploy/monitor.sh` (`NTFY_TOPIC`).
 
+## Supervision externe (audit systèmes 2026-08-11, item #11)
+
+**Constat** : `monitor.sh` ci-dessus tourne *sur* le VPS — si le VPS entier tombe (coupure réseau,
+panne matérielle, disque plein), le contrôle ne s'exécute plus et aucune alerte ne part. Même
+limite pour le trap `ERR` de `backup.sh` : il n'alerte que si le script se lance et échoue, pas
+s'il ne se lance pas du tout (timer systemd désactivé par erreur, cron cassé) — exactement le
+scénario resté invisible 77h lors de l'incident du 2026-08-09. Deux services externes gratuits
+comblent ce point aveugle en surveillant depuis *l'extérieur* du VPS. **Étape manuelle, à faire une
+fois** (nécessite de créer un compte sur chacun — à faire personnellement, pas par un agent) :
+
+### 1. UptimeRobot — l'application répond-elle depuis l'extérieur ?
+
+1. Créer un compte gratuit sur [uptimerobot.com](https://uptimerobot.com).
+2. Nouveau moniteur : type **HTTP(s)**, URL `https://massla.sn/api/health`, intervalle 5 min.
+3. Alerte attendue : le corps de la réponse contient `"statut":"En ligne"` — UptimeRobot peut
+   vérifier un mot-clé attendu (`En ligne`) en plus du code HTTP 200, pour détecter aussi le cas où
+   `/api/health` répond 503 (base injoignable, voir `server/src/index.js`).
+4. Ajouter un contact d'alerte (email et/ou l'app mobile UptimeRobot) dans les réglages du compte.
+
+### 2. Healthchecks.io — le cycle de sauvegarde tourne-t-il vraiment toutes les 6h ?
+
+`deploy/backup.sh` sait déjà envoyer un ping à `HEALTHCHECKS_PING_URL` (succès en fin de script,
+`/fail` si le trap `ERR` se déclenche) — **si cette variable n'est pas définie, comportement
+strictement inchangé**, rien à faire pour l'activer plus tard.
+
+1. Créer un compte gratuit sur [healthchecks.io](https://healthchecks.io).
+2. Nouveau check : période **6 heures**, grâce (grace period) **1 heure** (laisse une marge avant
+   l'alerte si un cycle est simplement un peu en retard).
+3. Copier l'URL de ping fournie (forme `https://hc-ping.com/<uuid>`).
+4. L'ajouter à `server/.env` sur le VPS :
+   ```bash
+   echo 'HEALTHCHECKS_PING_URL=https://hc-ping.com/<uuid>' >> /home/ubuntu/erp-ferme/server/.env
+   ```
+5. Vérifier qu'un cycle de sauvegarde envoie bien le ping (le tableau de bord Healthchecks.io passe
+   au vert après un cycle) :
+   ```bash
+   set -a; source /home/ubuntu/erp-ferme/server/.env; set +a
+   /home/ubuntu/erp-ferme/deploy/backup.sh
+   ```
+
 ## Checklist sécurité avant mise en production réelle
 
 - [x] Changer les mots de passe des comptes de démonstration (`demo1234`) via le module

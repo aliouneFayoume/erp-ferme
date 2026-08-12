@@ -14,7 +14,15 @@ set -euo pipefail
 NTFY_TOPIC="${NTFY_TOPIC:-erp-massla-alertes-97963866109cd7138fe636fb}"
 # Alerte identique au monitoring (deploy/monitor.sh) : une sauvegarde qui échoue en silence est aussi
 # dangereuse qu'une panne, on ne le découvre juste que le jour d'une restauration nécessaire.
-trap 'curl -s -H "Title: Sauvegarde ERP Massla en échec" -H "Priority: urgent" -H "Tags: warning" -d "La sauvegarde du $(date -u +%Y-%m-%dT%H:%M:%SZ) a échoué (ligne $LINENO)." "https://ntfy.sh/$NTFY_TOPIC" > /dev/null' ERR
+#
+# HEALTHCHECKS_PING_URL (audit systèmes 2026-08-11, item #11, optionnel — absent = comportement
+# inchangé) : ce trap ntfy ne couvre que l'échec DÉTECTÉ d'un script qui s'exécute. Il ne couvre
+# pas le cas où le script ne s'exécute pas du tout (VPS éteint, timer systemd désactivé par erreur,
+# cron cassé) — un silence total, indiscernable d'une nuit calme, ce qui est exactement le scénario
+# de l'incident du 2026-08-09 (77h sans sauvegarde utilisable avant détection). Healthchecks.io est
+# un "dead man's switch" : c'est LUI qui alerte si aucun ping (succès ou échec) n'arrive dans le
+# délai attendu, plutôt que de dépendre du script pour signaler son propre silence.
+trap '[ -n "${HEALTHCHECKS_PING_URL:-}" ] && curl -fsS --max-time 10 "${HEALTHCHECKS_PING_URL}/fail" > /dev/null 2>&1; curl -s -H "Title: Sauvegarde ERP Massla en échec" -H "Priority: urgent" -H "Tags: warning" -d "La sauvegarde du $(date -u +%Y-%m-%dT%H:%M:%SZ) a échoué (ligne $LINENO)." "https://ntfy.sh/$NTFY_TOPIC" > /dev/null' ERR
 
 BACKUP_DIR="${BACKUP_DIR:-/home/ubuntu/erp-ferme/backups}"
 RETENTION_JOURS="${RETENTION_JOURS:-14}"
@@ -84,3 +92,9 @@ rclone sync "$BACKUP_DIR" "$RCLONE_REMOTE"
 echo "Sauvegarde synchronisée vers $RCLONE_REMOTE"
 
 find "$BACKUP_DIR" -name '*.dump' -mtime "+$RETENTION_JOURS" -delete
+
+# Ping de succès (dead man's switch, voir plus haut) : signale à Healthchecks.io que ce cycle est
+# allé jusqu'au bout. Sans cela (HEALTHCHECKS_PING_URL non défini), comportement inchangé.
+if [ -n "${HEALTHCHECKS_PING_URL:-}" ]; then
+  curl -fsS --max-time 10 "$HEALTHCHECKS_PING_URL" > /dev/null 2>&1 || true
+fi
