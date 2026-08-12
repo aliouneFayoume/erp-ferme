@@ -3,6 +3,9 @@
 // paydunya.js : une intégration non configurée échoue proprement (erreur claire) plutôt que
 // d'échouer silencieusement ou de simuler un envoi.
 const WHATSAPP_API_VERSION = 'v21.0';
+// Audit systèmes 2026-08-11 (item #10) : même raisonnement que paydunya.js — pas de timeout par
+// défaut sur fetch, un Graph API muet bloquerait indéfiniment la requête de relance.
+const DELAI_MAX_MS = 10000;
 
 /**
  * Identifiants globaux (server/.env) — ceux de Ferme Massla elle-même (organisations.est_plateforme,
@@ -53,6 +56,7 @@ async function envoyerMessageWhatsapp(telephone, { composants, config: configFou
             Authorization: `Bearer ${config.accessToken}`,
             'Content-Type': 'application/json',
         },
+        signal: AbortSignal.timeout(DELAI_MAX_MS),
         body: JSON.stringify({
             messaging_product: 'whatsapp',
             to: numero,

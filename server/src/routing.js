@@ -1,6 +1,11 @@
 // Ferme Massla — dépôt de départ des tournées (zone Diamniadio, cahier des charges §1).
 const FARM_DEPOT = { lat: 14.7247, lng: -17.1875 };
 
+// Audit systèmes 2026-08-11 (item #10) : les deux appelants de ce module ont déjà un repli
+// (vol d'oiseau / ligne droite) en cas d'échec — sans timeout, un ORS muet retardait ce repli
+// indéfiniment au lieu de l'atteindre en quelques secondes.
+const DELAI_MAX_MS = 8000;
+
 function haversineKm(lat1, lng1, lat2, lng2) {
     const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -28,6 +33,7 @@ async function matriceReelle(depot, points) {
     const res = await fetch('https://api.openrouteservice.org/v2/matrix/driving-car', {
         method: 'POST',
         headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(DELAI_MAX_MS),
         body: JSON.stringify({ locations, metrics: ['distance', 'duration'] }),
     });
     if (!res.ok) {
@@ -117,6 +123,7 @@ async function itineraireReel(points) {
     const res = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
         method: 'POST',
         headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(DELAI_MAX_MS),
         body: JSON.stringify({ coordinates }),
     });
     if (!res.ok) {

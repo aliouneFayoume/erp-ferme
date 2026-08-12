@@ -37,7 +37,18 @@ function registerGucStubs(db) {
 function createPool() {
     if (process.env.DATABASE_URL) {
         const { Pool } = require('pg');
-        return { pool: new Pool({ connectionString: process.env.DATABASE_URL }), mode: 'postgres' };
+        // Audit systèmes 2026-08-11 (item #10) : sans ces bornes, une base injoignable ou une requête
+        // bloquée gèle silencieusement toutes les requêtes en attente d'une connexion du pool — la
+        // seule limite était le timeout HTTP du reverse proxy, en amont, jamais celui-ci.
+        return {
+            pool: new Pool({
+                connectionString: process.env.DATABASE_URL,
+                connectionTimeoutMillis: 5000, // temps max pour obtenir une connexion du pool
+                idleTimeoutMillis: 30000, // ferme les connexions inactives plutôt que de les garder ouvertes indéfiniment
+                statement_timeout: 15000, // tue côté Postgres toute requête qui dépasserait 15s
+            }),
+            mode: 'postgres',
+        };
     }
 
     const { newDb } = require('pg-mem');

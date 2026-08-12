@@ -10,6 +10,11 @@
 // les identifiants de l'organisation courante en paramètre (voir paymentConfig.js pour comment ils
 // sont récupérés/déchiffrés).
 
+// Audit systèmes 2026-08-11 (item #10) : sans ceci, un PayDunya lent ou muet bloquait la requête
+// HTTP entrante indéfiniment (aucun timeout par défaut sur fetch) — le client final restait devant
+// un écran de paiement qui ne répond jamais, sans même un message d'erreur.
+const DELAI_MAX_MS = 15000;
+
 function baseUrl(mode) {
   return (mode || 'test').toLowerCase() === 'live' ? 'https://app.paydunya.com/api/v1' : 'https://app.paydunya.com/sandbox-api/v1';
 }
@@ -41,6 +46,7 @@ async function creerFacture({ montant, description, referenceInterne, storeName,
   const res = await fetch(`${baseUrl(credentials.mode)}/checkout-invoice/create`, {
     method: 'POST',
     headers: headers(credentials),
+    signal: AbortSignal.timeout(DELAI_MAX_MS),
     body: JSON.stringify({
       invoice: {
         total_amount: Math.round(Number(montant)),
@@ -77,6 +83,7 @@ async function creerFacture({ montant, description, referenceInterne, storeName,
 async function confirmerFacture(token, credentials) {
   const res = await fetch(`${baseUrl(credentials.mode)}/checkout-invoice/confirm/${token}`, {
     headers: headers(credentials),
+    signal: AbortSignal.timeout(DELAI_MAX_MS),
   });
 
   const data = await res.json();
