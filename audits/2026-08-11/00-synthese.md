@@ -28,8 +28,8 @@ des endroits différents — le signal le plus fiable d'un audit de ce type :
   `pg-mem` (utilisé dans les tests) ne peut pas simuler les policies RLS — la garantie la plus
   critique du produit (l'étanchéité entre fermes) n'avait aucun filet automatique, seulement
   `verify-rls.js` lancé à la main. Les 3 pannes de production des semaines précédentes (login
-  staff, création de ferme, réglages PayDunya) ont exactement cette signature. **Reste vrai
-  aujourd'hui : c'est le seul constat critique du rapport pas encore corrigé (item #7 ci-dessous).**
+  staff, création de ferme, réglages PayDunya) ont exactement cette signature. **Corrigé** (item #7
+  ci-dessous) : c'était le dernier constat encore classé critique dans les trois rapports.
 - **Sécurité ET Développement** ont trouvé, indépendamment, **les deux mêmes lignes de code non
   échappées** (XSS) dans le frontend.
 
@@ -84,14 +84,27 @@ antérieures au 8 août 18h sont restées intactes. Cycle complet retesté avec 
 et devient plus urgent — on a prouvé que la *création* fonctionne à nouveau, mais la
 *restauration* elle-même n'a **toujours jamais été testée**.
 
+### ✅ Item #7 — Job CI RLS (2026-08-11)
+
+Nouveau job `verify-rls` dans `.github/workflows/ci.yml` : service Postgres 17 éphémère, applique
+`schema.sql` + `enable-rls.sql` + `provision-role.sql` + `rls-policies.sql`, puis lance les 24
+assertions de `verify-rls.js`. Bloque désormais le déploiement (`deploy.yml` appelle `ci.yml` en
+entier) si une policy RLS régresse. Réussi du premier coup en production CI.
+
+### ✅ Item #8 — CORS + verrouillage par compte (2026-08-11)
+
+CORS restreint à `massla.sn` et ses sous-domaines (`server/src/cors-origine.js`, testé
+isolément) au lieu de `Access-Control-Allow-Origin: *`. Verrouillage par compte sur le portail
+client après 5 échecs / 15 min (`clients.pin_tentatives_echouees`, `pin_bloque_jusqu`,
+migration-10), en plus de la limite par IP déjà en place. Vérifié en production : origine
+`massla.sn` reçoit l'en-tête CORS, une origine arbitraire n'en reçoit aucun.
+
 ## Plan d'action restant
 
 ### Ce mois-ci
 
 | # | Action | Effort | Statut |
 |---|---|---|---|
-| 7 | Job CI avec vrai Postgres qui applique RLS et lance `verify-rls.js` | ~0,5j | À faire — le seul constat **critique** encore ouvert |
-| 8 | Restreindre le CORS à `massla.sn` + verrouillage par compte sur le portail | ~2h | À faire |
 | 9 | `token_version` pour révoquer une session staff avant les 12h | ~2h | À faire |
 | 10 | Régler le pool DB (timeouts) + délai max sur les appels PayDunya/WhatsApp/ORS | ~0,5j | À faire |
 | 11 | Supervision externe (UptimeRobot + Healthchecks.io, gratuits) | ~2h | À faire — aurait détecté l'incident sauvegardes en 5 min au lieu de 77h |
