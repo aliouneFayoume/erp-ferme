@@ -141,13 +141,27 @@ OpenRouteService 8s (`routing.js` — repli déjà en place vers le calcul à vo
 droite, le timeout ne fait qu'accélérer ce repli au lieu de le retarder). Testé (207/207, aucune
 régression), pas de surface UI observable — rien à vérifier au navigateur.
 
+### 🟡 Item #11 — Supervision externe, partie code/doc faite (2026-08-12)
+
+Ce qui pouvait être fait sans intervention humaine est fait et déployé (`553ce1c`) : `backup.sh`
+sait désormais pinguer un `HEALTHCHECKS_PING_URL` optionnel (succès en fin de cycle, `/fail` via le
+trap existant) — un « dead man's switch » qui comble l'angle mort resté invisible 77h lors de
+l'incident du 2026-08-09 : le cas où le script ne s'exécute pas du tout (VPS injoignable, timer
+désactivé), que ni `monitor.sh` ni le trap `ntfy` de `backup.sh` ne peuvent détecter puisqu'ils
+tournent tous les deux *sur* le VPS lui-même. Sans la variable, comportement strictement inchangé.
+
+**Reste une étape volontairement laissée à l'utilisateur** : la création des comptes UptimeRobot
+et Healthchecks.io eux-mêmes (création de compte tiers, hors du périmètre qu'un agent doit
+effectuer). Marche à suivre détaillée dans `deploy/DEPLOIEMENT.md` (§ « Supervision externe ») —
+5 minutes, deux services gratuits, zéro carte bancaire requise.
+
 ## Plan d'action restant
 
 ### Ce mois-ci
 
 | # | Action | Effort | Statut |
 |---|---|---|---|
-| 11 | Supervision externe (UptimeRobot + Healthchecks.io, gratuits) | ~2h | À faire — aurait détecté l'incident sauvegardes en 5 min au lieu de 77h |
+| 11 | ↳ Créer les comptes UptimeRobot + Healthchecks.io et coller l'URL de ping (voir ci-dessus) | ~5 min | À faire — **par l'utilisateur** |
 | 13 | Dépôt GPS et en-tête de facture PDF par ferme (au lieu de codés en dur sur Massla) | ~3h | À faire |
 
 ### Ensuite
