@@ -155,6 +155,24 @@ et Healthchecks.io eux-mêmes (création de compte tiers, hors du périmètre qu
 effectuer). Marche à suivre détaillée dans `deploy/DEPLOIEMENT.md` (§ « Supervision externe ») —
 5 minutes, deux services gratuits, zéro carte bancaire requise.
 
+### ✅ Item #13 — Dépôt GPS et en-tête de facture PDF par ferme (2026-08-12)
+
+Le dépôt de départ des tournées (`routing.js`) et l'en-tête de la facture PDF (`facturePdf.js` :
+nom, adresse, téléphone) étaient codés en dur sur Ferme Massla (Diamniadio) pour TOUTES les fermes
+clientes. Ajout de `organisations.gps_lat/gps_lng/adresse/telephone` (migration-12, nullables —
+une ferme qui ne renseigne rien garde le comportement précédent), d'une route self-service
+`GET/PUT /api/parametres-ferme` (admin uniquement) et d'un panneau « Informations de la ferme »
+dans la vue Réglages (renommée depuis « Paiements (réglages) », qui héberge désormais 3 panneaux).
+`routes/logistique.js` utilise le dépôt de la ferme quand il est configuré, sinon le repli par
+défaut de `routing.js`.
+
+Testé (215/215, +8 tests dédiés) **et vérifié en navigateur** (pg-mem, serveur de dev local) :
+réglages enregistrés et relus correctement, dépôt de tournée reflète bien des coordonnées
+distinctes du défaut une fois configurées, en-tête PDF contient l'adresse/téléphone saisis
+(confirmé par décodage du flux PDF compressé, pas juste une recherche de texte en clair qui aurait
+donné un faux négatif). Migration-12 exécutée par l'utilisateur, déploiement `a02dfc4` réussi,
+santé prod vérifiée.
+
 ## Plan d'action restant
 
 ### Ce mois-ci
@@ -162,7 +180,6 @@ effectuer). Marche à suivre détaillée dans `deploy/DEPLOIEMENT.md` (§ « Sup
 | # | Action | Effort | Statut |
 |---|---|---|---|
 | 11 | ↳ Créer les comptes UptimeRobot + Healthchecks.io et coller l'URL de ping (voir ci-dessus) | ~5 min | À faire — **par l'utilisateur** |
-| 13 | Dépôt GPS et en-tête de facture PDF par ferme (au lieu de codés en dur sur Massla) | ~3h | À faire |
 
 ### Ensuite
 
