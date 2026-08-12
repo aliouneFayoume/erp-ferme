@@ -99,13 +99,25 @@ client après 5 échecs / 15 min (`clients.pin_tentatives_echouees`, `pin_bloque
 migration-10), en plus de la limite par IP déjà en place. Vérifié en production : origine
 `massla.sn` reçoit l'en-tête CORS, une origine arbitraire n'en reçoit aucun.
 
+### ✅ Item #9 — Révocation de session staff via `token_version` (2026-08-11)
+
+Colonne `utilisateurs.token_version` (migration-11), embarquée dans chaque JWT à l'émission.
+`requireAuth` (`server/src/auth.js`) rejoint désormais systématiquement la table `utilisateurs`
+à chaque requête et compare le `token_version` du token à celui en base (y compris pendant une
+impersonation) — un changement de mot de passe, de rôle, de secteur ou une désactivation/
+suppression de compte (`routes/utilisateurs.js`) invalide donc immédiatement toute session déjà
+ouverte, au lieu d'attendre l'expiration naturelle du JWT (jusqu'à 12h). Testé (207/207,
++4 tests dédiés dont un scénario bout-en-bout token-valide-puis-révoqué). Déployé en production
+(migration-11 exécutée par l'utilisateur, déploiement `a7d2bb9` réussi, santé prod vérifiée) —
+effet de bord attendu et accepté : toutes les sessions staff déjà ouvertes ont été déconnectées
+au moment du déploiement.
+
 ## Plan d'action restant
 
 ### Ce mois-ci
 
 | # | Action | Effort | Statut |
 |---|---|---|---|
-| 9 | `token_version` pour révoquer une session staff avant les 12h | ~2h | À faire |
 | 10 | Régler le pool DB (timeouts) + délai max sur les appels PayDunya/WhatsApp/ORS | ~0,5j | À faire |
 | 11 | Supervision externe (UptimeRobot + Healthchecks.io, gratuits) | ~2h | À faire — aurait détecté l'incident sauvegardes en 5 min au lieu de 77h |
 | 12 | Tester une restauration de sauvegarde, chronométrée | ~0,5j | À faire — **priorité relevée**, voir ci-dessus |
