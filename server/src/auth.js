@@ -105,6 +105,27 @@ async function queryPreTenant(pool, sql, params) {
 }
 
 /**
+ * Exécute une requête pour un tenant CONNU, en dehors du cycle req/res habituel (donc sans passer
+ * par attachTenantConnection, qui suppose une requête HTTP en cours). Utilisé par exemple pour
+ * mettre à jour le compteur de tentatives échouées d'un client pendant /portail/login, avant que
+ * la session ne soit établie et alors que le tenant vient tout juste d'être découvert par la
+ * lecture pré-tenant (queryPreTenant) qui précède cet appel.
+ */
+async function queryAvecTenant(pool, tenantId, sql, params) {
+    const client = await pool.connect();
+    try {
+        await client.query(
+            "SELECT set_config('app.current_tenant_id', $1, false), set_config('app.is_plateforme_admin', '', false)",
+            [String(tenantId)]
+        );
+        return await client.query(sql, params);
+    } finally {
+        await client.query("SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_plateforme_admin', '', false)").catch(() => {});
+        client.release();
+    }
+}
+
+/**
  * Authentification portail client. Revérifie `pin_version` en base à chaque requête (coût
  * négligeable à cette échelle) : régénérer le code d'un client invalide instantanément toute
  * session déjà émise, sans quoi un JWT volé resterait valable jusqu'à 7 jours malgré la régénération.
@@ -231,6 +252,7 @@ module.exports = {
     requireClientAuth,
     attachTenantConnection,
     queryPreTenant,
+    queryAvecTenant,
     requireSuperviseurPlateforme,
     JWT_SECRET,
 };

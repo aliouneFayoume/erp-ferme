@@ -117,6 +117,8 @@ CREATE TABLE clients (
     est_abonne BOOLEAN DEFAULT FALSE, -- Pour les paniers B2C récurrents
     pin_hash VARCHAR(255), -- Code d'accès au portail client (haché comme un mot de passe), NULL tant qu'aucun n'a été généré
     pin_version INT NOT NULL DEFAULT 1, -- Incrémenté à chaque régénération du PIN : invalide immédiatement les sessions portail déjà émises
+    pin_tentatives_echouees INT NOT NULL DEFAULT 0, -- Verrouillage par compte (routes/portail.js) : un PIN à 6 chiffres a peu d'entropie, la limite par IP seule (express-rate-limit) est contournable en distribuant les tentatives sur plusieurs IP
+    pin_bloque_jusqu TIMESTAMPTZ, -- Non NULL et dans le futur => connexion refusée même avec le bon PIN, jusqu'à expiration
     deleted_at TIMESTAMP,
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

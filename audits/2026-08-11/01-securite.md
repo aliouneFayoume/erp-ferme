@@ -128,6 +128,12 @@ Scénario concret : un attaquant place un script sur un site à trafic (ou dans 
 2. Passer le PIN à 8 chiffres, ou ajouter un verrouillage progressif **par compte client** (pas seulement par IP) : `clients.tentatives_echouees` + blocage temporaire après 5 échecs.
 3. Ajouter un `limit_req_zone` nginx sur `/api/portail/login` et `/api/auth/login` en complément de la limite applicative.
 
+> **Note de suivi (2026-08-11, même session) :** points 1 et 2 corrigés — CORS restreint à
+> `massla.sn`/sous-domaines (`server/src/cors-origine.js`, testé isolément dans `tests/cors.test.js`),
+> et verrouillage par compte après 5 échecs pendant 15 min (`clients.pin_tentatives_echouees`,
+> `clients.pin_bloque_jusqu`, migration-10, testé dans `tests/portail-verrouillage.test.js`). Point 3
+> (`limit_req_zone` nginx) reste à faire.
+
 ---
 
 #### E2 — Aucune révocation de session staff : 12 h d'accès garanti après compromission

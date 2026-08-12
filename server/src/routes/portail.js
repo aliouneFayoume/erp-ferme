@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
-const { signClientToken, requireClientAuth, queryPreTenant } = require('../auth');
+const { signClientToken, requireClientAuth, queryPreTenant, queryAvecTenant } = require('../auth');
 const { genererFacturePDF } = require('../facturePdf');
 
 // Un PIN à 6 chiffres a beaucoup moins d'entropie qu'un mot de passe : limite plus stricte que le
@@ -13,6 +13,14 @@ const limiteurLoginPortail = rateLimit({
     legacyHeaders: false,
     message: { erreur: 'Trop de tentatives de connexion. Réessayez plus tard.' },
 });
+
+// Verrouillage PAR COMPTE (numéro de téléphone), en plus de la limite par IP ci-dessus — audit
+// sécurité 2026-08-11 (E1) : la limite par IP seule est contournable en distribuant les tentatives
+// sur plusieurs IP (ex: un script tournant dans le navigateur de visiteurs tiers, désormais bloqué
+// par la restriction CORS de index.js, mais ce verrouillage reste utile en défense en profondeur —
+// y compris contre un botnet qui n'a pas besoin de lire la réponse pour être gênant).
+const MAX_TENTATIVES_PIN = 5;
+const DUREE_BLOCAGE_MINUTES = 15;
 
 module.exports = function portailRoutes(pool) {
     const router = express.Router();
@@ -34,7 +42,8 @@ module.exports = function portailRoutes(pool) {
         // sur `clients` qui autorise ce cas précis, voir rls-policies.sql.
         const result = await queryPreTenant(
             pool,
-            `SELECT c.id, c.nom, c.telephone, c.type_client, c.pin_hash, c.pin_version, o.nom as organisation_nom
+            `SELECT c.id, c.tenant_id, c.nom, c.telephone, c.type_client, c.pin_hash, c.pin_version,
+                    c.pin_tentatives_echouees, c.pin_bloque_jusqu, o.nom as organisation_nom
              FROM clients c LEFT JOIN organisations o ON c.tenant_id = o.id
              WHERE c.telephone = $1 AND c.deleted_at IS NULL`,
             [telephone]
@@ -43,10 +52,45 @@ module.exports = function portailRoutes(pool) {
         if (!client || !client.pin_hash) {
             return res.status(401).json({ erreur: 'Identifiants incorrects.' });
         }
+
+        // Compte verrouillé : on refuse avant même de comparer le PIN (utile même si le PIN fourni
+        // est le bon — sinon un verrouillage n'empêche rien, il retarde juste de la durée d'un essai).
+        if (client.pin_bloque_jusqu && new Date(client.pin_bloque_jusqu) > new Date()) {
+            return res.status(429).json({ erreur: 'Trop de tentatives échouées. Réessayez dans quelques minutes.' });
+        }
+
         const valide = await bcrypt.compare(pin, client.pin_hash);
         if (!valide) {
+            const tentatives = (client.pin_tentatives_echouees || 0) + 1;
+            const bloque = tentatives >= MAX_TENTATIVES_PIN;
+            const bloqueJusqu = bloque ? new Date(Date.now() + DUREE_BLOCAGE_MINUTES * 60 * 1000) : null;
+            await queryAvecTenant(
+                pool,
+                client.tenant_id,
+                // COALESCE : si on ne vient pas de déclencher un blocage, on laisse pin_bloque_jusqu
+                // tel quel (déjà NULL ou déjà expiré à ce stade — la vérification en tête de route
+                // a rejeté toute tentative sur un compte encore verrouillé).
+                `UPDATE clients SET pin_tentatives_echouees = $1, pin_bloque_jusqu = COALESCE($2, pin_bloque_jusqu) WHERE id = $3`,
+                [bloque ? 0 : tentatives, bloqueJusqu, client.id]
+            ).catch((err) => console.error('Échec de la mise à jour du compteur de tentatives PIN:', err));
+            if (bloque) {
+                return res.status(429).json({ erreur: 'Trop de tentatives échouées. Réessayez dans quelques minutes.' });
+            }
             return res.status(401).json({ erreur: 'Identifiants incorrects.' });
         }
+
+        // PIN correct : on réinitialise le compteur (sans bloquer la connexion si cette écriture
+        // échoue — un compteur non remis à zéro n'est jamais qu'un verrouillage légèrement anticipé
+        // au prochain échec, pas une faille).
+        if (client.pin_tentatives_echouees > 0 || client.pin_bloque_jusqu) {
+            await queryAvecTenant(
+                pool,
+                client.tenant_id,
+                `UPDATE clients SET pin_tentatives_echouees = 0, pin_bloque_jusqu = NULL WHERE id = $1`,
+                [client.id]
+            ).catch((err) => console.error('Échec de la réinitialisation du compteur de tentatives PIN:', err));
+        }
+
         const token = signClientToken(client);
         res.json({
             token,

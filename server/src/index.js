@@ -23,7 +23,18 @@ const PORT = process.env.PORT || 4000;
 // requête au lieu de calculer la limite par IP réelle du client.
 app.set('trust proxy', 1);
 
-app.use(cors());
+// Restreint aux origines massla.sn (site principal + tout sous-domaine par ferme, voir
+// deploy/nginx.conf) — auparavant cors() sans options renvoyait Access-Control-Allow-Origin: *,
+// ce qui permettait à N'IMPORTE QUEL site web d'appeler l'API en cross-origin ET DE LIRE LA
+// RÉPONSE. Le frontend étant servi par ce même Express (voir express.static plus bas), le
+// same-origin request de l'app elle-même n'a jamais eu besoin de CORS ouvert. Sans en-tête Origin
+// (PayDunya IPN, curl, appels serveur à serveur) : toujours autorisé, cors() n'agit que sur les
+// requêtes de navigateur. Constat audit sécurité 2026-08-11 (E1) : combiné à la faible entropie
+// d'un PIN à 6 chiffres, l'ouverture totale permettait un brute-force distribué du portail client
+// via les navigateurs de visiteurs tiers, contournant la limite de rate-limit par IP. Regex dans
+// son propre module (cors-origine.js) pour être testable sans démarrer tout le serveur.
+const ORIGINE_MASSLA = require('./cors-origine');
+app.use(cors({ origin: [ORIGINE_MASSLA] }));
 app.use(express.json());
 // PayDunya envoie ses notifications IPN en application/x-www-form-urlencoded, pas en JSON.
 app.use(express.urlencoded({ extended: true }));
