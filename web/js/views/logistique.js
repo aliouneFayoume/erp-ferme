@@ -67,7 +67,7 @@ async function renderLivreur(container) {
       <div class="panel-row">
         <div>
           <h2>Ma tournée du jour</h2>
-          <p class="desc" style="margin-bottom:0">Ordre de passage optimisé (TMS) depuis le dépôt de la ferme (Diamniadio). Les livraisons apparaissent ici une fois qu'un Administrateur ou le Comptable les assigne depuis l'onglet Logistique (côté gestion), pour une commande au statut PREPAREE.</p>
+          <p class="desc" style="margin-bottom:0">Ordre de passage optimisé (TMS) depuis le dépôt de la ferme. Les livraisons apparaissent ici une fois qu'un Administrateur ou le Comptable les assigne depuis l'onglet Logistique (côté gestion), pour une commande au statut PREPAREE.</p>
         </div>
         ${
           tournees.length
@@ -90,7 +90,7 @@ async function renderLivreur(container) {
       iconSize: [28, 28],
       iconAnchor: [14, 14],
     });
-    L.marker([depot.lat, depot.lng], { icon: depotIcon }).addTo(map).bindPopup('Dépôt — Ferme Massla (Diamniadio)');
+    L.marker([depot.lat, depot.lng], { icon: depotIcon }).addTo(map).bindPopup(`Dépôt — ${esc(Api.getUser()?.organisation_nom || 'la ferme')}`);
 
     const pointsOrdre = [[depot.lat, depot.lng]];
     tournees.forEach((t) => {

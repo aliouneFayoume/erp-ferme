@@ -12,7 +12,7 @@ const TAB_DEFS = [
   { key: 'finance', label: 'Finance', roles: ['admin', 'comptable'] },
   { key: 'comptabilite', label: 'Comptabilité', roles: ['admin', 'comptable'] },
   { key: 'tickets', label: 'Support client', roles: ['admin', 'comptable'] },
-  { key: 'parametres-paiement', label: 'Paiements (réglages)', roles: ['admin'] },
+  { key: 'parametres-paiement', label: 'Réglages de la ferme', roles: ['admin'] },
   { key: 'utilisateurs', label: 'Utilisateurs', roles: ['admin'] },
   { key: 'audit', label: "Journal d'audit", roles: ['admin'] },
   // Réservé à un seul compte (voir migration-04-superviseur-plateforme.sql) — jamais visible pour

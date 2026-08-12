@@ -36,7 +36,15 @@ CREATE TABLE organisations (
     -- (WHATSAPP_ACCESS_TOKEN, server/.env), toute autre ferme doit configurer les siens
     -- (organisation_whatsapp_config, réglages self-service) — voir la demande explicite de
     -- l'utilisateur de ne pas partager le numéro WhatsApp de Massla avec les autres clients.
-    est_plateforme BOOLEAN NOT NULL DEFAULT FALSE
+    est_plateforme BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Dépôt GPS (optimisation de tournée, routing.js) et en-tête de facture PDF (facturePdf.js) —
+    -- audit systèmes 2026-08-11 (item #13). Nullables : une ferme sans coordonnées renseignées se
+    -- replie sur le dépôt par défaut de routing.js (routes/logistique.js) plutôt que d'échouer ;
+    -- une facture sans adresse/téléphone omet simplement ces lignes plutôt que d'afficher "null".
+    gps_lat NUMERIC,
+    gps_lng NUMERIC,
+    adresse VARCHAR(255),
+    telephone VARCHAR(20)
 );
 
 -- --------------------------------------------------------

@@ -14,6 +14,16 @@ module.exports = function logistiqueRoutes(pool) {
         try {
             const livreurId = req.user.role === 'livreur' ? req.user.id : req.query.livreur_id;
             const aujourdhui = new Date().toISOString().slice(0, 10);
+
+            // Dépôt propre à la ferme (réglages self-service, routes/parametres-ferme.js) si
+            // renseigné, sinon repli sur le dépôt par défaut de routing.js — audit systèmes
+            // 2026-08-11, item #13 (avant ceci, toutes les fermes partageaient le dépôt de Massla).
+            const orgRes = await req.db.query(`SELECT gps_lat, gps_lng FROM organisations WHERE id = $1`, [req.user.tenant_id]);
+            const org = orgRes.rows[0];
+            const depot = org?.gps_lat != null && org?.gps_lng != null
+                ? { lat: Number(org.gps_lat), lng: Number(org.gps_lng) }
+                : FARM_DEPOT;
+
             const query = `
                 SELECT l.id as livraison_id, l.statut, l.notes_livreur, l.preuve_livraison,
                        c.id as commande_id, c.numero_commande, c.montant_total,
@@ -28,7 +38,7 @@ module.exports = function logistiqueRoutes(pool) {
                 ORDER BY l.statut DESC, l.id ASC
             `;
             const result = await req.db.query(query, [livreurId || null, req.user.tenant_id, aujourdhui]);
-            const tournee = await optimiserTournee(result.rows);
+            const tournee = await optimiserTournee(result.rows, depot);
 
             // Tracé routier réel suivant l'ordre optimisé (dépôt puis arrêts) — distinct de la
             // matrice de distances utilisée pour l'optimisation elle-même. Best-effort : une
@@ -36,14 +46,14 @@ module.exports = function logistiqueRoutes(pool) {
             let trace = null;
             try {
                 trace = await itineraireReel([
-                    FARM_DEPOT,
+                    depot,
                     ...tournee.map((t) => ({ lat: Number(t.gps_lat), lng: Number(t.gps_lng) })),
                 ]);
             } catch (err) {
                 console.error("OpenRouteService indisponible pour le tracé, repli sur la ligne droite :", err.message);
             }
 
-            res.json({ depot: FARM_DEPOT, arrets: tournee, trace });
+            res.json({ depot, arrets: tournee, trace });
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: 'Erreur lors de la récupération des tournées.' });

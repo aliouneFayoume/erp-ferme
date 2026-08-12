@@ -124,3 +124,41 @@ describe('logistique — encaissement à la livraison', () => {
         expect(res.status).toBe(400);
     });
 });
+
+// Audit systèmes 2026-08-11 (item #13) : le dépôt utilisé pour l'optimisation de tournée doit venir
+// des réglages propres à la ferme (organisations.gps_lat/gps_lng) quand ils sont renseignés, et se
+// replier sur le dépôt par défaut de routing.js sinon — avant ceci, c'était toujours ce dernier.
+describe('logistique — dépôt GPS propre à la ferme (item #13)', () => {
+    let pool;
+    let app;
+    let tenantId;
+    let token;
+
+    beforeEach(async () => {
+        pool = createTestPool();
+        await seedRolesEtSecteurs(pool);
+        tenantId = await creerOrganisation(pool, 'Ferme Avec Dépôt');
+        app = buildApp(pool, ['logistique']);
+        token = await creerUtilisateurEtToken(pool, { role: 'livreur', tenant_id: tenantId });
+    });
+
+    afterEach(async () => {
+        await pool.end();
+    });
+
+    test('sans coordonnées configurées, la tournée utilise le dépôt par défaut de routing.js', async () => {
+        const { FARM_DEPOT } = require('../src/routing');
+        const res = await request(app).get('/api/logistique/tournees').set('Authorization', `Bearer ${token}`);
+        expect(res.status).toBe(200);
+        expect(Number(res.body.depot.lat)).toBeCloseTo(FARM_DEPOT.lat);
+        expect(Number(res.body.depot.lng)).toBeCloseTo(FARM_DEPOT.lng);
+    });
+
+    test('avec des coordonnées configurées, la tournée utilise le dépôt de la ferme', async () => {
+        await pool.query(`UPDATE organisations SET gps_lat = $1, gps_lng = $2 WHERE id = $3`, [12.5, -16.2, tenantId]);
+        const res = await request(app).get('/api/logistique/tournees').set('Authorization', `Bearer ${token}`);
+        expect(res.status).toBe(200);
+        expect(Number(res.body.depot.lat)).toBeCloseTo(12.5);
+        expect(Number(res.body.depot.lng)).toBeCloseTo(-16.2);
+    });
+});

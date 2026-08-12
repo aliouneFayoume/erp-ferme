@@ -150,6 +150,7 @@ module.exports = function portailRoutes(pool) {
             `SELECT lc.*, p.nom as produit_nom FROM lignes_commande lc JOIN produits p ON lc.produit_id = p.id WHERE lc.commande_id = $1`,
             [facture.commande_id]
         );
+        const orgRes = await req.db.query(`SELECT nom, adresse, telephone FROM organisations WHERE id = $1`, [req.client.tenant_id]);
 
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="facture-${facture.numero_commande}.pdf"`);
@@ -158,6 +159,7 @@ module.exports = function portailRoutes(pool) {
             commande: { numero_commande: facture.numero_commande, montant_total: facture.montant_total },
             client: clientRes.rows[0],
             lignes: lignesRes.rows,
+            organisation: orgRes.rows[0],
         });
     });
 

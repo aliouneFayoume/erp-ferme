@@ -2,12 +2,29 @@ window.Views = window.Views || {};
 
 window.Views['parametres-paiement'] = {
   async render(container) {
-    const [config, configWhatsapp] = await Promise.all([
+    const [config, configWhatsapp, infoFerme] = await Promise.all([
       Api.get('/parametres-paiement/paiement'),
       Api.get('/parametres-whatsapp'),
+      Api.get('/parametres-ferme'),
     ]);
 
     container.innerHTML = `
+      <div class="panel">
+        <h2>Informations de la ferme</h2>
+        <p class="desc">
+          Adresse et téléphone apparaissent sur l'en-tête de vos factures PDF. Les coordonnées GPS
+          définissent le dépôt de départ des tournées de livraison (module Logistique) — sans elles,
+          un dépôt par défaut est utilisé.
+        </p>
+        <form id="form-ferme" class="form-grid">
+          <label>Adresse<input type="text" name="adresse" value="${esc(infoFerme.adresse || '')}" placeholder="Ex : Route de Diamniadio, Dakar" /></label>
+          <label>Téléphone<input type="text" name="telephone" value="${esc(infoFerme.telephone || '')}" placeholder="Ex : 77 123 45 67" /></label>
+          <label>Latitude du dépôt<input type="text" name="gps_lat" value="${esc(infoFerme.gps_lat ?? '')}" placeholder="Ex : 14.7247" /></label>
+          <label>Longitude du dépôt<input type="text" name="gps_lng" value="${esc(infoFerme.gps_lng ?? '')}" placeholder="Ex : -17.1875" /></label>
+          <button type="submit">Enregistrer</button>
+        </form>
+      </div>
+
       <div class="panel">
         <h2>Agrégateur de paiement (PayDunya)</h2>
         <p class="desc">
@@ -69,6 +86,22 @@ window.Views['parametres-paiement'] = {
         }
       </div>
     `;
+
+    container.querySelector('#form-ferme').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      try {
+        await Api.put('/parametres-ferme', {
+          adresse: fd.get('adresse'),
+          telephone: fd.get('telephone'),
+          gps_lat: fd.get('gps_lat'),
+          gps_lng: fd.get('gps_lng'),
+        });
+        showToast('Informations de la ferme enregistrées.', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
 
     container.querySelector('#form-paiement').addEventListener('submit', async (e) => {
       e.preventDefault();

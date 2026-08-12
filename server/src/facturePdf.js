@@ -25,13 +25,20 @@ function formatMontant(n) {
  * Génère le PDF d'une facture et l'écrit directement sur la réponse HTTP (Content-Type déjà posé
  * par l'appelant). pdfkit ne fournit pas de widget "tableau" : les colonnes des lignes de commande
  * sont dessinées à des positions x fixes.
+ *
+ * `organisation` (audit systèmes 2026-08-11, item #13) : nom/adresse/téléphone de la ferme
+ * émettrice, propres à chaque tenant — avant ceci, cet en-tête affichait toujours "FERME MASSLA"
+ * quelle que soit la ferme cliente. `adresse`/`telephone` sont optionnels (une ferme qui ne les a
+ * pas renseignés dans ses réglages voit simplement ces lignes omises).
  */
-function genererFacturePDF(res, { facture, commande, client, lignes }) {
+function genererFacturePDF(res, { facture, commande, client, lignes, organisation }) {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     doc.pipe(res);
 
-    doc.fontSize(20).text('FERME MASSLA', { align: 'left' });
-    doc.fontSize(10).fillColor('#666666').text('Avicole · Piscicole · Maraîcher').text('massla.sn');
+    doc.fontSize(20).text((organisation?.nom || 'Ferme').toUpperCase(), { align: 'left' });
+    doc.fontSize(10).fillColor('#666666');
+    if (organisation?.adresse) doc.text(organisation.adresse);
+    if (organisation?.telephone) doc.text(`Tél : ${organisation.telephone}`);
     doc.moveDown(1.5);
 
     doc.fillColor('#000000').fontSize(16).text('FACTURE', { align: 'right' });
@@ -88,7 +95,7 @@ function genererFacturePDF(res, { facture, commande, client, lignes }) {
 
     doc.moveDown(3);
     doc.font('Helvetica').fontSize(8).fillColor('#999999');
-    doc.text(`Facture générée automatiquement par l'ERP Ferme Massla le ${formatDate(new Date())}.`, 50, doc.y, { width: 495, align: 'center' });
+    doc.text(`Facture générée automatiquement le ${formatDate(new Date())}.`, 50, doc.y, { width: 495, align: 'center' });
 
     doc.end();
 }
