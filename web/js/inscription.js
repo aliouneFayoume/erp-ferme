@@ -37,6 +37,7 @@ document.getElementById('inscription-form').addEventListener('submit', async (e)
     if (!res.ok) {
       throw new Error(result.erreur || 'Erreur lors de la création de la ferme.');
     }
+    window.MassiaAnalytics?.track('compte_cree');
     // Connexion automatique : mêmes clés localStorage que l'app principale (js/api.js), qui les
     // relit au chargement de / pour afficher directement le tableau de bord sans repasser par login.
     localStorage.setItem('erp_token', result.token);
