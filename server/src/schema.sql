@@ -412,6 +412,45 @@ CREATE TABLE lignes_commande_fournisseur (
 CREATE INDEX idx_commandes_fournisseurs_statut ON commandes_fournisseurs(statut);
 
 -- --------------------------------------------------------
+-- 7ter. MATÉRIEL (inventaire, entretien, rattachement optionnel à un secteur/fournisseur)
+-- --------------------------------------------------------
+
+CREATE TABLE equipements (
+    id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
+    secteur_id INT REFERENCES secteurs(id), -- NULL = matériel partagé entre secteurs (ex: véhicule de livraison)
+    fournisseur_id INT REFERENCES fournisseurs(id), -- NULL = fournisseur non renseigné/inconnu
+    nom VARCHAR(150) NOT NULL, -- ex: 'Motoculteur', 'Pompe à eau', 'Groupe électrogène'
+    categorie VARCHAR(50), -- libre, ex: 'Motoculture', 'Irrigation', 'Transport', 'Autre'
+    etat VARCHAR(20) CHECK (etat IN ('Bon', 'A réparer', 'Hors service')) DEFAULT 'Bon',
+    quantite INT NOT NULL DEFAULT 1,
+    date_achat DATE,
+    valeur_achat NUMERIC,
+    -- Dénormalisé depuis entretiens_equipement.prochain_entretien (mis à jour à chaque entretien
+    -- loggé) : évite un JOIN/sous-requête pour l'affichage liste + alerte "entretien à venir".
+    prochain_entretien DATE,
+    notes TEXT,
+    deleted_at TIMESTAMP,
+    cree_par INT REFERENCES utilisateurs(id),
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Historique des entretiens ; chaque ligne peut générer une dépense (voir routes/materiel.js),
+-- miroir du même principe que la réception d'une commande fournisseur (routes/fournisseurs.js).
+CREATE TABLE entretiens_equipement (
+    id SERIAL PRIMARY KEY,
+    equipement_id INT REFERENCES equipements(id) ON DELETE CASCADE,
+    date_entretien DATE NOT NULL,
+    description TEXT,
+    cout NUMERIC,
+    prochain_entretien DATE,
+    cree_par INT REFERENCES utilisateurs(id),
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_equipements_prochain_entretien ON equipements(prochain_entretien);
+
+-- --------------------------------------------------------
 -- 8. SUPPORT CLIENT (SAV)
 -- --------------------------------------------------------
 
