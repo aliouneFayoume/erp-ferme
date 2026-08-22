@@ -51,7 +51,7 @@ module.exports = function comptabiliteRoutes(pool) {
     router.get('/analytique', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
         try {
             const tenantId = req.user.tenant_id;
-            const [secteurs, ca, dep] = await Promise.all([
+            const [secteurs, ca, dep, depParCategorie] = await Promise.all([
                 req.db.query(`SELECT * FROM secteurs WHERE tenant_id = $1 ORDER BY id`, [tenantId]),
                 req.db.query(
                     `SELECT p.secteur_id, COALESCE(SUM(lc.sous_total), 0) as total
@@ -67,10 +67,24 @@ module.exports = function comptabiliteRoutes(pool) {
                      WHERE tenant_id = $1 AND deleted_at IS NULL GROUP BY secteur_id`,
                     [tenantId]
                 ),
+                // Ventilation par catégorie ("gestion des coûts") — d'où vient exactement la marge
+                // d'un pôle : intrants, main d'œuvre, machines, eau/électricité, récolte, autre.
+                req.db.query(
+                    `SELECT secteur_id, categorie, COALESCE(SUM(montant), 0) as total FROM depenses
+                     WHERE tenant_id = $1 AND deleted_at IS NULL GROUP BY secteur_id, categorie`,
+                    [tenantId]
+                ),
             ]);
 
             const caParSecteur = Object.fromEntries(ca.rows.map((r) => [r.secteur_id, Number(r.total)]));
             const depParSecteur = Object.fromEntries(dep.rows.map((r) => [r.secteur_id, Number(r.total)]));
+
+            const depensesParCategorie = {};
+            for (const r of depParCategorie.rows) {
+                const cle = r.secteur_id === null ? 'general' : String(r.secteur_id);
+                if (!depensesParCategorie[cle]) depensesParCategorie[cle] = {};
+                depensesParCategorie[cle][r.categorie] = Number(r.total);
+            }
 
             const parPole = secteurs.rows.map((s) => {
                 const chiffreAffaires = caParSecteur[s.id] || 0;
@@ -81,12 +95,13 @@ module.exports = function comptabiliteRoutes(pool) {
                     chiffreAffaires,
                     depenses,
                     marge: chiffreAffaires - depenses,
+                    parCategorie: depensesParCategorie[String(s.id)] || {},
                 };
             });
 
             const depensesGenerales = Number(dep.rows.find((r) => r.secteur_id === null)?.total || 0);
 
-            res.json({ parPole, depensesGenerales });
+            res.json({ parPole, depensesGenerales, depensesGeneralesParCategorie: depensesParCategorie.general || {} });
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: "Erreur lors du calcul de la comptabilité analytique." });

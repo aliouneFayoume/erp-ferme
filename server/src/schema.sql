@@ -412,7 +412,7 @@ CREATE TABLE lignes_commande_fournisseur (
 CREATE INDEX idx_commandes_fournisseurs_statut ON commandes_fournisseurs(statut);
 
 -- --------------------------------------------------------
--- 7ter. MATÉRIEL (inventaire, entretien, rattachement optionnel à un secteur/fournisseur)
+-- 7ter. IMMOBILISATIONS (inventaire, entretien, amortissement — section de l'onglet Comptabilité)
 -- --------------------------------------------------------
 
 CREATE TABLE equipements (
@@ -426,6 +426,10 @@ CREATE TABLE equipements (
     quantite INT NOT NULL DEFAULT 1,
     date_achat DATE,
     valeur_achat NUMERIC,
+    -- Amortissement linéaire optionnel : NULL = non amortissable (ex: petit outillage déjà passé en
+    -- dépense directe à l'achat) — voir routes/immobilisations.js POST /amortissements/calculer.
+    duree_amortissement_mois INT,
+    valeur_residuelle NUMERIC DEFAULT 0,
     -- Dénormalisé depuis entretiens_equipement.prochain_entretien (mis à jour à chaque entretien
     -- loggé) : évite un JOIN/sous-requête pour l'affichage liste + alerte "entretien à venir".
     prochain_entretien DATE,
@@ -435,7 +439,7 @@ CREATE TABLE equipements (
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Historique des entretiens ; chaque ligne peut générer une dépense (voir routes/materiel.js),
+-- Historique des entretiens ; chaque ligne peut générer une dépense (voir routes/immobilisations.js),
 -- miroir du même principe que la réception d'une commande fournisseur (routes/fournisseurs.js).
 CREATE TABLE entretiens_equipement (
     id SERIAL PRIMARY KEY,
@@ -448,7 +452,59 @@ CREATE TABLE entretiens_equipement (
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Ledger des dotations d'amortissement déjà comptabilisées (une dépense postée par ligne) — UNIQUE
+-- empêche de comptabiliser deux fois le même mois pour le même équipement si le comptable reclique
+-- sur "Calculer les amortissements du mois".
+CREATE TABLE amortissements (
+    id SERIAL PRIMARY KEY,
+    equipement_id INT REFERENCES equipements(id) ON DELETE CASCADE,
+    periode DATE NOT NULL, -- 1er jour du mois comptabilisé, ex: 2026-09-01
+    montant NUMERIC NOT NULL,
+    depense_id INT REFERENCES depenses(id),
+    cree_par INT REFERENCES utilisateurs(id),
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (equipement_id, periode)
+);
+
 CREATE INDEX idx_equipements_prochain_entretien ON equipements(prochain_entretien);
+
+-- --------------------------------------------------------
+-- 7quater. PAIE (employés, bulletins — coût "main d'œuvre" de l'onglet Comptabilité)
+-- --------------------------------------------------------
+
+CREATE TABLE employes (
+    id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
+    secteur_id INT REFERENCES secteurs(id), -- NULL = personnel général (non rattaché à un pôle)
+    nom_complet VARCHAR(150) NOT NULL,
+    poste VARCHAR(100),
+    telephone VARCHAR(30),
+    date_embauche DATE,
+    date_depart DATE, -- renseignée quand l'employé quitte, sans supprimer l'historique de paie
+    salaire_brut_mensuel NUMERIC,
+    actif BOOLEAN NOT NULL DEFAULT TRUE,
+    notes TEXT,
+    deleted_at TIMESTAMP,
+    cree_par INT REFERENCES utilisateurs(id),
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Les taux légaux de charges sociales (IPRES/CSS...) ne sont volontairement pas calculés par
+-- l'application (évoluent, hors périmètre) : le comptable saisit le montant lui-même par bulletin.
+CREATE TABLE bulletins_paie (
+    id SERIAL PRIMARY KEY,
+    employe_id INT REFERENCES employes(id) ON DELETE CASCADE,
+    periode DATE NOT NULL, -- 1er jour du mois payé
+    salaire_brut NUMERIC NOT NULL,
+    charges_sociales NUMERIC NOT NULL DEFAULT 0,
+    salaire_net NUMERIC NOT NULL, -- ce que l'employé perçoit réellement
+    statut VARCHAR(20) CHECK (statut IN ('EN_ATTENTE', 'PAYE')) DEFAULT 'EN_ATTENTE',
+    date_paiement DATE,
+    depense_id INT REFERENCES depenses(id), -- posé au passage EN_ATTENTE -> PAYE (coût = brut + charges)
+    cree_par INT REFERENCES utilisateurs(id),
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (employe_id, periode)
+);
 
 -- --------------------------------------------------------
 -- 8. SUPPORT CLIENT (SAV)
