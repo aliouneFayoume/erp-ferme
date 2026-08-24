@@ -1,0 +1,474 @@
+<meta charset="UTF-8">
+<title>Infrastructure Massla</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #eef1f4;
+    --surface: #ffffff;
+    --surface-2: #e3e8ed;
+    --surface-3: #d7dee5;
+    --ink: #17202b;
+    --ink-dim: #55636f;
+    --ink-faint: #8592a0;
+    --line: #c7d0d8;
+    --line-strong: #9aa8b3;
+    --accent: #2f7d5c;
+    --accent-soft: #dcece3;
+    --backup: #a8650a;
+    --backup-soft: #f4e3ca;
+    --cicd: #5850c9;
+    --cicd-soft: #e4e2fa;
+    --alert: #c23b3b;
+    --alert-soft: #f6dcdc;
+    --payment: #2b6cb0;
+    --payment-soft: #dce9f6;
+    --messaging: #0e8f8f;
+    --messaging-soft: #d9f0f0;
+    --shadow: 0 1px 2px rgba(23,32,43,0.06), 0 8px 24px rgba(23,32,43,0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12171e;
+      --surface: #1a212b;
+      --surface-2: #212a35;
+      --surface-3: #2a3441;
+      --ink: #e7ecf1;
+      --ink-dim: #a9b6c2;
+      --ink-faint: #6f7d8a;
+      --line: #364250;
+      --line-strong: #4a5866;
+      --accent: #5cb98a;
+      --accent-soft: #1e332a;
+      --backup: #e0a856;
+      --backup-soft: #3a2e1a;
+      --cicd: #9c96e8;
+      --cicd-soft: #2a2748;
+      --alert: #e2807f;
+      --alert-soft: #3a2325;
+      --payment: #7db1e6;
+      --payment-soft: #1f2e3d;
+      --messaging: #5fd0d0;
+      --messaging-soft: #16302f;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12171e;
+    --surface: #1a212b;
+    --surface-2: #212a35;
+    --surface-3: #2a3441;
+    --ink: #e7ecf1;
+    --ink-dim: #a9b6c2;
+    --ink-faint: #6f7d8a;
+    --line: #364250;
+    --line-strong: #4a5866;
+    --accent: #5cb98a;
+    --accent-soft: #1e332a;
+    --backup: #e0a856;
+    --backup-soft: #3a2e1a;
+    --cicd: #9c96e8;
+    --cicd-soft: #2a2748;
+    --alert: #e2807f;
+    --alert-soft: #3a2325;
+    --payment: #7db1e6;
+    --payment-soft: #1f2e3d;
+    --messaging: #5fd0d0;
+    --messaging-soft: #16302f;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    padding: 40px 24px 64px;
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; }
+
+  header { margin-bottom: 28px; }
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  h1 {
+    font-size: clamp(28px, 4vw, 38px);
+    margin: 6px 0 8px;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  header p {
+    color: var(--ink-dim);
+    max-width: 68ch;
+    line-height: 1.55;
+    font-size: 15.5px;
+    margin: 0;
+  }
+
+  figure { margin: 0; }
+  .diagram-shell {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 8px;
+    overflow-x: auto;
+  }
+  svg { display: block; width: 100%; height: auto; min-width: 980px; }
+
+  figcaption {
+    margin-top: 14px;
+    color: var(--ink-dim);
+    font-size: 13.5px;
+    line-height: 1.6;
+    max-width: 84ch;
+  }
+
+  .zone-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    fill: var(--ink-faint);
+  }
+  .box-title {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: 13.5px;
+    fill: var(--ink);
+  }
+  .box-sub {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.8px;
+    fill: var(--ink-dim);
+  }
+  .edge-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.6px;
+    fill: var(--ink-dim);
+  }
+  .edge-label-strong { fill: var(--ink); font-weight: 600; }
+
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 10px 22px;
+    margin-top: 22px;
+    padding: 16px 18px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-dim); }
+  .swatch { width: 22px; height: 3px; border-radius: 2px; flex: none; }
+  .legend-item b { color: var(--ink); font-weight: 600; }
+
+  .facts {
+    margin-top: 28px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+  }
+  .fact {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .fact h3 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+  }
+  .fact p { margin: 0; font-size: 14px; color: var(--ink); line-height: 1.5; }
+  .fact code {
+    font-family: 'IBM Plex Mono', monospace;
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12.5px;
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Schéma d'infrastructure</div>
+    <h1>ERP Massla — de la requête du navigateur à la sauvegarde chiffrée</h1>
+    <p>
+      Un seul serveur applicatif (VPS Oracle Cloud) derrière nginx, une base Postgres managée
+      (Supabase) accédée avec un rôle restreint par RLS, et cinq services externes : PayDunya
+      (encaissement Mobile Money), l'API WhatsApp de Meta (rappels), GitHub Actions (déploiement
+      continu), Cloudflare R2 (sauvegardes) et OVH (DNS + certificat TLS). Les couleurs suivent le
+      trajet d'une requête, pas la hiérarchie des boîtes.
+    </p>
+  </header>
+
+  <figure>
+    <div class="diagram-shell">
+      <svg viewBox="0 0 1760 1500" role="img" aria-label="Schéma d'architecture de l'ERP Massla : navigateurs et WhatsApp vers nginx puis l'application sur un VPS Oracle Cloud, l'application vers Postgres Supabase, PayDunya et l'API WhatsApp de Meta ; GitHub Actions déploie sur le VPS par SSH ; trois tâches planifiées sur le VPS surveillent la santé du service, sauvegardent la base vers Cloudflare R2 et renouvellent le certificat TLS via OVH.">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- ============ ZONE BACKGROUNDS ============ -->
+        <rect x="20" y="196" width="1720" height="470" rx="16" fill="var(--surface-2)" />
+        <text x="44" y="222" class="zone-label">VPS Oracle Cloud · 40.233.98.20 · Docker Compose</text>
+
+        <rect x="1360" y="196" width="380" height="330" rx="14" fill="var(--surface-3)" />
+        <text x="1382" y="222" class="zone-label">CI / CD</text>
+
+        <rect x="20" y="712" width="1720" height="360" rx="16" fill="var(--surface-2)" />
+        <text x="44" y="738" class="zone-label">Services externes managés</text>
+
+        <!-- ============ ACTORS ROW ============ -->
+        <!-- Personnel -->
+        <rect x="40" y="40" width="300" height="86" rx="10" fill="var(--surface)" stroke="var(--line-strong)"/>
+        <text x="60" y="76" class="box-title">Personnel de la ferme</text>
+        <text x="60" y="96" class="box-sub">navigateur — app d'admin</text>
+
+        <!-- Client -->
+        <rect x="380" y="40" width="300" height="86" rx="10" fill="var(--surface)" stroke="var(--line-strong)"/>
+        <text x="400" y="76" class="box-title">Client de la ferme</text>
+        <text x="400" y="96" class="box-sub">portail web + WhatsApp</text>
+
+        <!-- Dev -->
+        <rect x="1400" y="40" width="300" height="86" rx="10" fill="var(--surface)" stroke="var(--line-strong)"/>
+        <text x="1420" y="76" class="box-title">Développeur</text>
+        <text x="1420" y="96" class="box-sub">git push origin main</text>
+
+        <!-- ============ CI/CD COLUMN ============ -->
+        <rect x="1382" y="240" width="336" height="66" rx="8" fill="var(--surface)" stroke="var(--cicd)"/>
+        <text x="1400" y="268" class="box-title">GitHub — dépôt erp-ferme</text>
+        <text x="1400" y="286" class="box-sub">branche main</text>
+
+        <rect x="1382" y="330" width="336" height="66" rx="8" fill="var(--surface)" stroke="var(--cicd)"/>
+        <text x="1400" y="358" class="box-title">GitHub Actions — CI</text>
+        <text x="1400" y="376" class="box-sub">npm test (suite complète)</text>
+
+        <rect x="1382" y="420" width="336" height="86" rx="8" fill="var(--cicd-soft)" stroke="var(--cicd)"/>
+        <text x="1400" y="448" class="box-title">GitHub Actions — Deploy</text>
+        <text x="1400" y="466" class="box-sub">SSH → git pull + docker build</text>
+        <text x="1400" y="482" class="box-sub">rollback : image taguée par SHA</text>
+
+        <!-- ============ VPS INTERIOR ============ -->
+        <rect x="60" y="256" width="280" height="86" rx="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.6"/>
+        <text x="80" y="288" class="box-title">nginx</text>
+        <text x="80" y="306" class="box-sub">:80 → redirect · :443 TLS</text>
+        <text x="80" y="322" class="box-sub">reverse proxy</text>
+
+        <rect x="390" y="256" width="280" height="86" rx="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.6"/>
+        <text x="410" y="288" class="box-title">app (Node / Express)</text>
+        <text x="410" y="306" class="box-sub">conteneur :4000</text>
+        <text x="410" y="322" class="box-sub">ERP Massla — multi-tenant</text>
+
+        <rect x="720" y="256" width="300" height="86" rx="10" fill="var(--backup-soft)" stroke="var(--backup)"/>
+        <text x="740" y="288" class="box-title">Dump local + secrets .gpg</text>
+        <text x="740" y="306" class="box-sub">~/erp-ferme/backups</text>
+        <text x="740" y="322" class="box-sub">rétention 14 jours</text>
+
+        <rect x="1060" y="256" width="240" height="86" rx="10" fill="var(--surface)" stroke="var(--line-strong)"/>
+        <text x="1080" y="288" class="box-title">Certificat TLS</text>
+        <text x="1080" y="306" class="box-sub">wildcard *.massla.sn</text>
+        <text x="1080" y="322" class="box-sub">monté en lecture seule</text>
+
+        <!-- Timers -->
+        <rect x="60" y="480" width="280" height="80" rx="10" fill="var(--surface)" stroke="var(--alert)"/>
+        <text x="80" y="508" class="box-title">erp-ferme-monitor.timer</text>
+        <text x="80" y="526" class="box-sub">systemd, hôte VPS</text>
+        <text x="80" y="542" class="box-sub">vérifie /api/health</text>
+
+        <rect x="390" y="480" width="280" height="80" rx="10" fill="var(--backup-soft)" stroke="var(--backup)" stroke-width="1.6"/>
+        <text x="410" y="508" class="box-title">erp-ferme-backup.timer</text>
+        <text x="410" y="526" class="box-sub">systemd, toutes les 6h</text>
+        <text x="410" y="542" class="box-sub">→ backup.sh</text>
+
+        <rect x="720" y="480" width="300" height="80" rx="10" fill="var(--surface)" stroke="var(--line-strong)"/>
+        <text x="740" y="508" class="box-title">erp-ferme-renew.timer</text>
+        <text x="740" y="526" class="box-sub">systemd, hôte VPS</text>
+        <text x="740" y="542" class="box-sub">→ certbot-renew.sh</text>
+
+        <!-- ============ EXTERNAL SERVICES ============ -->
+        <rect x="60" y="770" width="320" height="106" rx="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.6"/>
+        <text x="80" y="800" class="box-title">Supabase — PostgreSQL</text>
+        <text x="80" y="818" class="box-sub">base managée, RLS actif</text>
+        <text x="80" y="834" class="box-sub">rôle app : erp_app (restreint)</text>
+        <text x="80" y="850" class="box-sub">rôle sauvegarde : erp_backup (BYPASSRLS)</text>
+
+        <rect x="440" y="770" width="300" height="106" rx="10" fill="var(--messaging-soft)" stroke="var(--messaging)"/>
+        <text x="460" y="800" class="box-title">Meta Graph API</text>
+        <text x="460" y="818" class="box-sub">WhatsApp Business Cloud API</text>
+        <text x="460" y="834" class="box-sub">rappels de facture par ferme</text>
+
+        <rect x="800" y="770" width="300" height="106" rx="10" fill="var(--payment-soft)" stroke="var(--payment)"/>
+        <text x="820" y="800" class="box-title">PayDunya</text>
+        <text x="820" y="818" class="box-sub">agrégateur Mobile Money</text>
+        <text x="820" y="834" class="box-sub">1 compte par ferme cliente</text>
+
+        <rect x="1160" y="770" width="300" height="106" rx="10" fill="var(--backup-soft)" stroke="var(--backup)" stroke-width="1.6"/>
+        <text x="1180" y="800" class="box-title">Cloudflare R2</text>
+        <text x="1180" y="818" class="box-sub">sauvegardes externalisées</text>
+        <text x="1180" y="834" class="box-sub">rclone sync (dump + secrets)</text>
+
+        <rect x="440" y="920" width="300" height="90" rx="10" fill="var(--alert-soft)" stroke="var(--alert)"/>
+        <text x="460" y="950" class="box-title">ntfy.sh + healthchecks.io</text>
+        <text x="460" y="968" class="box-sub">alertes push · dead man's switch</text>
+
+        <rect x="800" y="920" width="300" height="90" rx="10" fill="var(--surface)" stroke="var(--line-strong)"/>
+        <text x="820" y="950" class="box-title">OVH → Let's Encrypt</text>
+        <text x="820" y="968" class="box-sub">API DNS (challenge DNS-01)</text>
+
+        <rect x="440" y="1070" width="300" height="76" rx="10" fill="var(--surface)" stroke="var(--messaging)"/>
+        <text x="460" y="1098" class="box-title">WhatsApp du client</text>
+        <text x="460" y="1116" class="box-sub">réception du rappel</text>
+
+        <rect x="800" y="1070" width="300" height="76" rx="10" fill="var(--surface)" stroke="var(--payment)"/>
+        <text x="820" y="1098" class="box-title">Wave / Orange Money</text>
+        <text x="820" y="1116" class="box-sub">encaissement réel</text>
+
+        <!-- ============ ARROWS — trajet principal (accent vert) ============ -->
+        <!-- Personnel + Client convergent tous les deux sur nginx : seul point d'entrée HTTPS. -->
+        <g stroke="var(--accent)" fill="none" marker-end="url(#arrow)">
+          <path d="M190,126 L165,256" stroke-width="2"/>
+          <path d="M530,126 C 480,180 340,220 265,256" stroke-width="2"/>
+          <line x1="340" y1="299" x2="390" y2="299" stroke-width="2"/>
+          <path d="M530,342 L530,770" stroke-width="2"/>
+        </g>
+        <text x="196" y="200" class="edge-label edge-label-strong" fill="var(--accent)">HTTPS :443</text>
+        <text x="536" y="170" class="edge-label edge-label-strong" fill="var(--accent)">HTTPS :443</text>
+        <text x="346" y="292" class="edge-label" fill="var(--accent)">proxy_pass :4000</text>
+        <text x="536" y="540" class="edge-label edge-label-strong" fill="var(--accent)">SQL — rôle erp_app</text>
+        <text x="536" y="556" class="edge-label" fill="var(--accent)">(Row-Level Security)</text>
+
+        <!-- app -> PayDunya (initier) : le payeur lui-même n'échange jamais avec nginx, il est pris
+             en charge par PayDunya (page de paiement / USSD), d'où l'absence d'un acteur "payeur"
+             séparé en haut du schéma. -->
+        <g stroke="var(--payment)" fill="none" marker-end="url(#arrow)">
+          <path d="M670,320 C 760,400 800,500 800,770" stroke-width="2"/>
+        </g>
+        <text x="676" y="400" class="edge-label edge-label-strong" fill="var(--payment)">initier paiement</text>
+
+        <!-- PayDunya -> app (IPN) -->
+        <g stroke="var(--payment)" fill="none" marker-end="url(#arrow)" stroke-dasharray="5 4">
+          <path d="M960,770 C 1010,600 810,480 670,340" stroke-width="1.8"/>
+        </g>
+        <text x="964" y="640" class="edge-label" fill="var(--payment)">webhook IPN</text>
+        <text x="964" y="656" class="edge-label" fill="var(--payment)">(confirmation)</text>
+
+        <!-- PayDunya -> Wave/OM -->
+        <g stroke="var(--payment)" fill="none" marker-end="url(#arrow)">
+          <path d="M950,876 L950,1070" stroke-width="2"/>
+        </g>
+        <text x="958" y="980" class="edge-label" fill="var(--payment)">débit / crédit réel</text>
+
+        <!-- app -> Meta Graph API -> WhatsApp client -->
+        <g stroke="var(--messaging)" fill="none" marker-end="url(#arrow)">
+          <path d="M560,342 C 580,500 580,650 590,770" stroke-width="2"/>
+          <path d="M590,876 L590,1070" stroke-width="2"/>
+        </g>
+        <text x="596" y="620" class="edge-label edge-label-strong" fill="var(--messaging)">rappel de facture</text>
+        <text x="598" y="980" class="edge-label" fill="var(--messaging)">message livré</text>
+
+        <!-- ============ CI/CD (indigo) ============ -->
+        <g stroke="var(--cicd)" fill="none" marker-end="url(#arrow)">
+          <path d="M1550,126 L1550,240" stroke-width="2"/>
+          <path d="M1550,306 L1550,330" stroke-width="2"/>
+          <path d="M1550,396 L1550,420" stroke-width="2"/>
+          <path d="M1382,463 C 1000,463 720,420 670,340" stroke-width="2"/>
+        </g>
+        <text x="1556" y="188" class="edge-label" fill="var(--cicd)">git push</text>
+        <text x="1556" y="322" class="edge-label" fill="var(--cicd)">déclenche</text>
+        <text x="1556" y="412" class="edge-label" fill="var(--cicd)">tests OK</text>
+        <text x="1020" y="454" class="edge-label edge-label-strong" fill="var(--cicd)">SSH — git pull + rebuild</text>
+
+        <!-- ============ Monitoring (alert) ============ -->
+        <g stroke="var(--alert)" fill="none" marker-end="url(#arrow)">
+          <path d="M200,480 C 150,420 150,360 190,342" stroke-width="1.8"/>
+          <path d="M200,560 C 350,650 400,700 460,920" stroke-width="1.8" stroke-dasharray="5 4"/>
+        </g>
+        <text x="60" y="440" class="edge-label" fill="var(--alert)">GET /api/health</text>
+        <text x="220" y="700" class="edge-label" fill="var(--alert)">alerte si hors ligne</text>
+
+        <!-- ============ Backup (amber, mis en avant) — 4 sauts, chacun vérifié contre les
+             coordonnées réelles des boîtes qu'il relie ============ -->
+        <g stroke="var(--backup)" fill="none" marker-end="url(#arrow)" stroke-width="2.4">
+          <!-- 1. backup.timer -> Postgres (pg_dump) -->
+          <path d="M450,560 C 420,660 300,720 220,770"/>
+          <!-- 2. backup.timer -> Dump local (écriture + chiffrement des secrets) -->
+          <path d="M530,480 C 570,420 660,370 730,342"/>
+          <!-- 3. Dump local -> Cloudflare R2 (rclone sync), en contournant la boîte Certificat TLS -->
+          <path d="M1020,310 C 1160,350 1290,560 1300,770"/>
+          <!-- 4. backup.timer -> ntfy.sh + healthchecks.io (statut du cycle) -->
+          <path d="M480,560 C 500,700 530,850 550,920"/>
+        </g>
+        <text x="250" y="640" class="edge-label edge-label-strong" fill="var(--backup)">pg_dump — rôle erp_backup</text>
+        <text x="250" y="656" class="edge-label" fill="var(--backup)">(BYPASSRLS, lecture seule)</text>
+        <text x="576" y="410" class="edge-label edge-label-strong" fill="var(--backup)">écrit le dump</text>
+        <text x="576" y="426" class="edge-label" fill="var(--backup)">chiffre .env + ovh.ini (gpg)</text>
+        <text x="1080" y="470" class="edge-label edge-label-strong" fill="var(--backup)">rclone sync</text>
+        <text x="1080" y="486" class="edge-label" fill="var(--backup)">(dump + secrets chiffrés)</text>
+        <text x="386" y="750" class="edge-label" fill="var(--backup)">ping succès / échec</text>
+        <text x="386" y="766" class="edge-label" fill="var(--backup)">(dead man's switch)</text>
+
+        <!-- ============ TLS renew (neutre) — 2 sauts, contournant PayDunya et R2 ============ -->
+        <g stroke="var(--ink-faint)" fill="none" marker-end="url(#arrow)">
+          <!-- 1. renew.timer -> OVH/Let's Encrypt, en passant à droite de PayDunya -->
+          <path d="M1020,540 C 1160,620 1170,820 1050,920" stroke-width="1.8"/>
+          <!-- 2. OVH/Let's Encrypt -> Certificat TLS (nginx recharge), en passant à gauche de R2 -->
+          <path d="M1000,920 C 1000,750 1050,450 1180,342" stroke-width="1.8" stroke-dasharray="5 4"/>
+        </g>
+        <text x="1024" y="700" class="edge-label">déclenche</text>
+        <text x="900" y="1000" class="edge-label">DNS-01 (wildcard)</text>
+        <text x="1006" y="600" class="edge-label">certificat renouvelé</text>
+      </svg>
+    </div>
+    <figcaption>
+      Le trajet vert est celui d'une requête normale (navigateur ou WhatsApp → nginx → app →
+      Postgres). Les autres couleurs sont des flux indépendants qui partagent la même app ou le
+      même VPS : bleu pour l'argent (PayDunya ↔ Wave/Orange Money), turquoise pour les rappels
+      WhatsApp, indigo pour le déploiement (GitHub Actions se connecte en SSH et reconstruit les
+      conteneurs), rouge pour la surveillance, et ambre pour la sauvegarde — mise en évidence
+      volontairement, car c'est la seule chose qui protège la ferme si le VPS disparaît.
+    </figcaption>
+  </figure>
+
+  <div class="legend">
+    <div class="legend-item"><span class="swatch" style="background:var(--accent)"></span><b>Trajet applicatif</b>&nbsp;— navigateur/WhatsApp → nginx → app → Postgres</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--payment)"></span><b>Paiement</b>&nbsp;— PayDunya, IPN, Wave/Orange Money</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--messaging)"></span><b>Messagerie</b>&nbsp;— rappels WhatsApp via Meta</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--cicd)"></span><b>Déploiement</b>&nbsp;— GitHub Actions (CI puis SSH)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--alert)"></span><b>Surveillance</b>&nbsp;— health check + alerte ntfy.sh</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--backup)"></span><b>Sauvegarde</b>&nbsp;— pg_dump chiffré → Cloudflare R2, toutes les 6h</div>
+  </div>
+
+  <div class="facts">
+    <div class="fact">
+      <h3>Un seul point de défaillance assumé</h3>
+      <p>Un seul VPS (<code>40.233.98.20</code>) fait tourner nginx et l'app. S'il tombe, la sauvegarde chiffrée sur R2 permet de reconstruire ailleurs — c'est tout l'intérêt de l'externaliser.</p>
+    </div>
+    <div class="fact">
+      <h3>Deux rôles Postgres, pas un</h3>
+      <p><code>erp_app</code> (RLS actif) sert l'application au quotidien ; <code>erp_backup</code> (BYPASSRLS, jamais utilisé par le code) sert uniquement à <code>pg_dump</code> — sans lui, la sauvegarde échouerait silencieusement sur les tables à policies.</p>
+    </div>
+    <div class="fact">
+      <h3>La sauvegarde ne couvre pas que la base</h3>
+      <p><code>server/.env</code> et <code>ovh.ini</code> (clé de chiffrement, JWT, identifiants PayDunya/WhatsApp de chaque ferme) sont chiffrés en <code>.gpg</code> avant l'envoi vers R2 — perdre le VPS ne doit pas rendre ces secrets irrécupérables.</p>
+    </div>
+    <div class="fact">
+      <h3>Double filet contre le silence</h3>
+      <p><code>ntfy.sh</code> alerte en cas d'échec détecté ; <code>healthchecks.io</code> est un "dead man's switch" qui alerte si la sauvegarde ne s'exécute pas du tout (VPS éteint, timer désactivé).</p>
+    </div>
+  </div>
+</div>
