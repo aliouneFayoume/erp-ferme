@@ -1,4 +1,5 @@
 node_modules/
+web/js/dist/
 .env
 .env.*
 !.env.example

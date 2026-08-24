@@ -1,0 +1,12 @@
+{
+  "name": "erp-ferme-web-build",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Étape de build (minification) du JS servi au navigateur — jamais exécuté en runtime, uniquement lors de la construction de l'image Docker.",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

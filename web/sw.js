@@ -1,7 +1,11 @@
 // Service worker : cache l'app shell pour un fonctionnement installable et hors-ligne
 // (terrain PWA offline-first, cahier des charges §4). Les appels /api/* ne sont jamais
 // mis en cache : ils doivent toujours refléter l'état réel du serveur.
-const CACHE_NAME = 'erp-ferme-shell-v22';
+// v23 : le JS de l'app shell est maintenant fusionné+minifié en un seul fichier (web/build.js) —
+// une seule entrée à tenir à jour au lieu d'une par vue (un ancien drift avait laissé paie.js hors
+// de cette liste alors qu'index.html le chargeait déjà). Incrémenté pour que les clients déjà
+// installés purgent l'ancien cache plutôt que de continuer à réclamer les anciens chemins par-vue.
+const CACHE_NAME = 'erp-ferme-shell-v23';
 
 const APP_SHELL = [
   '/',
@@ -9,25 +13,7 @@ const APP_SHELL = [
   '/manifest.json',
   '/icons/icon.svg',
   '/css/style.css',
-  '/js/branding.js',
-  '/js/api.js',
-  '/js/offline-queue.js',
-  '/js/app.js',
-  '/js/views/dashboard.js',
-  '/js/views/production.js',
-  '/js/views/catalogue.js',
-  '/js/views/clients.js',
-  '/js/views/abonnements.js',
-  '/js/views/commandes.js',
-  '/js/views/fournisseurs.js',
-  '/js/views/logistique.js',
-  '/js/views/finance.js',
-  '/js/views/comptabilite.js',
-  '/js/views/utilisateurs.js',
-  '/js/views/audit.js',
-  '/js/views/tickets.js',
-  '/js/views/parametres-paiement.js',
-  '/js/views/plateforme.js',
+  '/js/dist/app.min.js',
 ];
 
 self.addEventListener('install', (event) => {
