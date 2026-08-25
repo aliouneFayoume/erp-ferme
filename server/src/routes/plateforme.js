@@ -282,7 +282,10 @@ module.exports = function plateformeRoutes(pool) {
      */
     router.get('/organisations/:id/secteurs', ...garde, async (req, res) => {
         try {
-            const result = await req.db.query(`SELECT id, nom, suivi_recolte FROM secteurs WHERE tenant_id = $1 ORDER BY id`, [req.params.id]);
+            const result = await req.db.query(
+                `SELECT id, nom, suivi_recolte, parent_secteur_id, suivi_individuel FROM secteurs WHERE tenant_id = $1 ORDER BY id`,
+                [req.params.id]
+            );
             res.json(result.rows);
         } catch (err) {
             console.error(err);
@@ -303,9 +306,25 @@ module.exports = function plateformeRoutes(pool) {
             const existant = await req.db.query(`SELECT id FROM secteurs WHERE tenant_id = $1 AND lower(nom) = lower($2)`, [tenantId, nom]);
             if (existant.rows.length > 0) return res.status(409).json({ erreur: 'Ce secteur existe déjà pour cette ferme.' });
 
+            // parentSecteurId optionnel (ex: "Bovins" sous "Élevage") — profondeur max 1 niveau : un
+            // secteur qui a déjà lui-même un parent ne peut pas devenir parent à son tour.
+            let parentSecteurId = null;
+            if (req.body.parentSecteurId) {
+                const parentRes = await req.db.query(
+                    `SELECT id, parent_secteur_id FROM secteurs WHERE id = $1 AND tenant_id = $2`,
+                    [req.body.parentSecteurId, tenantId]
+                );
+                if (parentRes.rows.length === 0) return res.status(400).json({ erreur: 'Secteur parent invalide.' });
+                if (parentRes.rows[0].parent_secteur_id) {
+                    return res.status(400).json({ erreur: 'Un secteur ne peut pas être imbriqué sur plus d\'un niveau.' });
+                }
+                parentSecteurId = parentRes.rows[0].id;
+            }
+
             const result = await req.db.query(
-                `INSERT INTO secteurs (tenant_id, nom, suivi_recolte) VALUES ($1, $2, $3) RETURNING id, nom, suivi_recolte`,
-                [tenantId, nom, !!req.body.suiviRecolte]
+                `INSERT INTO secteurs (tenant_id, nom, suivi_recolte, parent_secteur_id, suivi_individuel)
+                 VALUES ($1, $2, $3, $4, $5) RETURNING id, nom, suivi_recolte, parent_secteur_id, suivi_individuel`,
+                [tenantId, nom, !!req.body.suiviRecolte, parentSecteurId, !!req.body.suiviIndividuel]
             );
             await logAudit(req.db, { req, table: 'secteurs', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: { nom, superviseur: req.user.nom } });
             res.status(201).json(result.rows[0]);

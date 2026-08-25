@@ -26,6 +26,7 @@ const BUNDLES = {
     'js/offline-queue.js',
     'js/views/dashboard.js',
     'js/views/production.js',
+    'js/views/elevage.js',
     'js/views/catalogue.js',
     'js/views/clients.js',
     'js/views/abonnements.js',

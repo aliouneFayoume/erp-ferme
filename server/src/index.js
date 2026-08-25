@@ -104,6 +104,7 @@ async function main() {
     app.use('/api/fournisseurs', require('./routes/fournisseurs')(pool));
     app.use('/api/immobilisations', require('./routes/immobilisations')(pool));
     app.use('/api/paie', require('./routes/paie')(pool));
+    app.use('/api/elevage', require('./routes/elevage')(pool));
     app.use('/api/parametres-paiement', require('./routes/parametres-paiement')(pool));
     app.use('/api/parametres-whatsapp', require('./routes/parametres-whatsapp')(pool));
     app.use('/api/parametres-ferme', require('./routes/parametres-ferme')(pool));

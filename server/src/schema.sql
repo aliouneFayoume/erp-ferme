@@ -166,7 +166,9 @@ CREATE TABLE secteurs (
     id SERIAL PRIMARY KEY,
     tenant_id INT REFERENCES organisations(id),
     nom VARCHAR(50) NOT NULL, -- libre par organisation (prototype) : plus limité à 'Avicole'/'Piscicole'/'Maraîcher'
-    suivi_recolte BOOLEAN DEFAULT FALSE -- coché pour un secteur de type culture (maturité/récolte à suivre), ex-"Maraîcher"
+    suivi_recolte BOOLEAN DEFAULT FALSE, -- coché pour un secteur de type culture (maturité/récolte à suivre), ex-"Maraîcher"
+    parent_secteur_id INT REFERENCES secteurs(id), -- ex: "Bovins" a pour parent "Élevage" — profondeur max 1 niveau, validée côté route, pas en SQL
+    suivi_individuel BOOLEAN NOT NULL DEFAULT FALSE -- coché pour un secteur suivi animal par animal (voir 3bis), pas par lot/effectif global
 );
 
 CREATE TABLE lots_production (
@@ -202,6 +204,72 @@ CREATE TABLE releves_journaliers (
     quantite_recoltee_kg NUMERIC, -- Maraîcher : récolte du jour
     notes TEXT,
     est_synchronise BOOLEAN DEFAULT TRUE, -- Essentiel pour la PWA (gestion offline)
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- --------------------------------------------------------
+-- 3bis. ÉLEVAGE INDIVIDUEL (bovins/ovins/caprins) — suivi animal par animal, pas par lot
+-- --------------------------------------------------------
+-- Un secteur `suivi_individuel = TRUE` (Bovins/Ovins/Caprins) porte des `animaux` au lieu de
+-- `lots_production` — un ruminant a une valeur individuelle, une longue durée de vie, et une
+-- identité qu'on veut suivre (poids, santé, reproduction), contrairement à un lot de volailles.
+-- `reproductions` est déclarée avant `animaux` à cause de la FK `animaux.reproduction_id`.
+
+CREATE TABLE reproductions (
+    id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
+    mere_id INT, -- FK vers animaux ajoutée après la création de la table animaux (dépendance circulaire)
+    pere_id INT, -- optionnel ; FK ajoutée de même
+    date_saillie DATE NOT NULL,
+    date_mise_bas_prevue DATE, -- estimée côté client à la saisie (gestation par espèce), figée ici
+    date_mise_bas_reelle DATE,
+    nombre_petits INT,
+    statut VARCHAR(15) CHECK (statut IN ('EN_COURS', 'MISE_BAS', 'ECHEC')) NOT NULL DEFAULT 'EN_COURS',
+    notes TEXT,
+    cree_par INT REFERENCES utilisateurs(id),
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE animaux (
+    id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
+    secteur_id INT REFERENCES secteurs(id), -- toujours un secteur ENFANT (Bovins/Ovins/Caprins), jamais le parent "Élevage"
+    identifiant VARCHAR(30) NOT NULL, -- boucle/tag, ex 'BOV-0042'
+    espece VARCHAR(10) CHECK (espece IN ('BOVIN', 'OVIN', 'CAPRIN')) NOT NULL,
+    race VARCHAR(50),
+    sexe VARCHAR(1) CHECK (sexe IN ('M', 'F')) NOT NULL,
+    date_naissance DATE,
+    mere_id INT REFERENCES animaux(id), -- généalogie mère→petit uniquement (pas de pere_id sur l'animal lui-même)
+    reproduction_id INT REFERENCES reproductions(id), -- regroupe les petits d'une même portée
+    origine VARCHAR(10) CHECK (origine IN ('NE_FERME', 'ACHETE')) NOT NULL DEFAULT 'NE_FERME',
+    statut VARCHAR(10) CHECK (statut IN ('VIVANT', 'VENDU', 'ABATTU', 'MORT')) NOT NULL DEFAULT 'VIVANT',
+    date_sortie DATE, -- posée avec le statut à la sortie du troupeau (vente/abattage/mort)
+    poids_initial_kg NUMERIC,
+    cree_par INT REFERENCES utilisateurs(id),
+    deleted_at TIMESTAMP,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (tenant_id, identifiant) -- même convention que lots_production(tenant_id, code_lot) : pas d'unicité globale
+);
+
+CREATE INDEX idx_animaux_mere ON animaux(mere_id);
+CREATE INDEX idx_animaux_secteur_statut ON animaux(secteur_id, statut);
+
+ALTER TABLE reproductions ADD CONSTRAINT fk_reproductions_mere FOREIGN KEY (mere_id) REFERENCES animaux(id);
+ALTER TABLE reproductions ADD CONSTRAINT fk_reproductions_pere FOREIGN KEY (pere_id) REFERENCES animaux(id);
+
+-- Historique d'événements par animal (pesée/vaccination/traitement/observation) — table séparée de
+-- `releves_journaliers` : celle-ci est câblée sur POST /production/sync (offline PWA par lot), y
+-- mélanger le suivi par animal serait fragile. Pas de champ est_synchronise : pas de mode hors-ligne
+-- pour l'élevage dans cette version.
+CREATE TABLE releves_animal (
+    id SERIAL PRIMARY KEY,
+    animal_id INT REFERENCES animaux(id) ON DELETE CASCADE,
+    utilisateur_id INT REFERENCES utilisateurs(id),
+    date_releve DATE NOT NULL,
+    type_evenement VARCHAR(20) CHECK (type_evenement IN ('PESEE', 'VACCINATION', 'TRAITEMENT', 'OBSERVATION')) NOT NULL,
+    poids_kg NUMERIC, -- pertinent seulement pour PESEE
+    produit_utilise VARCHAR(150), -- nom du vaccin/traitement
+    notes TEXT,
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

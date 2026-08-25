@@ -101,7 +101,25 @@ module.exports = function comptabiliteRoutes(pool) {
 
             const depensesGenerales = Number(dep.rows.find((r) => r.secteur_id === null)?.total || 0);
 
-            res.json({ parPole, depensesGenerales, depensesGeneralesParCategorie: depensesParCategorie.general || {} });
+            // Total consolidé pour un secteur parent (ex: "Élevage") en plus du détail par
+            // sous-secteur déjà présent dans parPole — inclut aussi les éventuelles dépenses posées
+            // directement sur le parent (coûts partagés entre espèces, ex: visite vétérinaire globale).
+            const enfantsParParent = {};
+            for (const s of secteurs.rows) {
+                if (s.parent_secteur_id) {
+                    (enfantsParParent[s.parent_secteur_id] ||= []).push(s.id);
+                }
+            }
+            const totauxParFamille = secteurs.rows
+                .filter((s) => enfantsParParent[s.id])
+                .map((parent) => {
+                    const idsFamille = [parent.id, ...enfantsParParent[parent.id]];
+                    const chiffreAffaires = idsFamille.reduce((sum, id) => sum + (caParSecteur[id] || 0), 0);
+                    const depenses = idsFamille.reduce((sum, id) => sum + (depParSecteur[id] || 0), 0);
+                    return { secteur_id: parent.id, secteur_nom: parent.nom, chiffreAffaires, depenses, marge: chiffreAffaires - depenses };
+                });
+
+            res.json({ parPole, depensesGenerales, depensesGeneralesParCategorie: depensesParCategorie.general || {}, totauxParFamille });
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: "Erreur lors du calcul de la comptabilité analytique." });

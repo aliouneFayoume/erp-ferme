@@ -66,10 +66,11 @@ async function creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, a
         await client.query('SELECT set_config($1, $2, false)', ['app.current_tenant_id', String(tenantId)]);
 
         for (const s of secteurs) {
-            await client.query(`INSERT INTO secteurs (tenant_id, nom, suivi_recolte) VALUES ($1, $2, $3)`, [
+            await client.query(`INSERT INTO secteurs (tenant_id, nom, suivi_recolte, suivi_individuel) VALUES ($1, $2, $3, $4)`, [
                 tenantId,
                 s.nom.trim(),
                 !!s.suiviRecolte,
+                !!s.suiviIndividuel,
             ]);
         }
 

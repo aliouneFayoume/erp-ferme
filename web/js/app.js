@@ -3,6 +3,7 @@ const Views = window.Views || {};
 const TAB_DEFS = [
   { key: 'dashboard', label: 'Tableau de bord', roles: ['admin', 'comptable'] },
   { key: 'production', label: 'Production', roles: ['admin', 'chef_prod'] },
+  { key: 'elevage', label: 'Élevage', roles: ['admin', 'chef_prod'] },
   { key: 'catalogue', label: 'Catalogue & Stock', roles: ['admin', 'comptable', 'chef_prod'] },
   { key: 'clients', label: 'Clients', roles: ['admin', 'comptable'] },
   { key: 'abonnements', label: 'Abonnements', roles: ['admin', 'comptable'] },
@@ -25,6 +26,7 @@ const TAB_DEFS = [
 const TAB_ICONS = {
   dashboard: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   production: '<path d="M12 21c0-6 4-8 4-13a4 4 0 0 0-8 0c0 5 4 7 4 13Z"/><path d="M12 12v9"/>',
+  elevage: '<path d="M7 10a3 3 0 1 1 6 0v1a3 3 0 1 1-6 0v-1Z"/><path d="M5 8V6M9 8V5M13 8V6"/><path d="M6 14c0 3 1.5 5 4 5s4-2 4-5"/>',
   catalogue: '<path d="M3 7l9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>',
   clients: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>',
   abonnements: '<path d="M21 12a9 9 0 0 1-15.3 6.4M3 12a9 9 0 0 1 15.3-6.4"/><path d="M21 5v5h-5M3 19v-5h5"/>',

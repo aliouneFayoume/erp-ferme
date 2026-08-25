@@ -397,9 +397,21 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
           <h4 style="margin-top:0;">Secteurs de production</h4>
           <p class="desc" id="liste-secteurs">${secteurs.length ? secteurs.map((s) => esc(s.nom)).join(', ') : 'Aucun secteur.'}</p>
           <form id="form-ajout-secteur" class="form-grid" style="margin-bottom:0;">
-            <label>Nouveau secteur<input type="text" name="nom" autocomplete="off" placeholder="ex: Élevage bovin" /></label>
+            <label>Nouveau secteur<input type="text" name="nom" autocomplete="off" placeholder="ex: Élevage, Bovins, Ovins…" /></label>
+            <label>Secteur parent (optionnel)
+              <select name="parentSecteurId" id="select-secteur-parent">
+                <option value="">Aucun (secteur de premier niveau)</option>
+                ${secteurs
+                  .filter((s) => !s.parent_secteur_id)
+                  .map((s) => `<option value="${s.id}">${esc(s.nom)}</option>`)
+                  .join('')}
+              </select>
+            </label>
             <label style="flex-direction: row; align-items: center; gap: 8px;">
               <input type="checkbox" name="suiviRecolte" style="width:auto" /> Suivre une date de récolte prévue
+            </label>
+            <label style="flex-direction: row; align-items: center; gap: 8px;">
+              <input type="checkbox" name="suiviIndividuel" style="width:auto" /> Suivi individuel des animaux (bovins/ovins/caprins)
             </label>
             <button type="submit" class="secondary">Ajouter le secteur</button>
           </form>
@@ -462,9 +474,17 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
       const nouveau = await Api.post(`/plateforme/organisations/${org.id}/secteurs`, {
         nom,
         suiviRecolte: fd.get('suiviRecolte') === 'on',
+        suiviIndividuel: fd.get('suiviIndividuel') === 'on',
+        parentSecteurId: fd.get('parentSecteurId') || null,
       });
       secteurs.push(nouveau);
       overlay.querySelector('#liste-secteurs').textContent = secteurs.map((s) => s.nom).join(', ');
+      // Un secteur de premier niveau qui vient d'être créé (ex: "Élevage") doit pouvoir servir
+      // immédiatement de parent pour le suivant (ex: "Bovins"), sans fermer/rouvrir la modale.
+      if (!nouveau.parent_secteur_id) {
+        const selectParent = overlay.querySelector('#select-secteur-parent');
+        selectParent.insertAdjacentHTML('beforeend', `<option value="${nouveau.id}">${esc(nouveau.nom)}</option>`);
+      }
       e.target.reset();
       showToast('Secteur ajouté.', 'success');
     } catch (err) {

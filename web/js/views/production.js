@@ -33,7 +33,12 @@ window.Views.production = {
     const user = Api.getUser();
     const [secteurs, lots] = await Promise.all([Api.get('/production/secteurs'), Api.get('/production/lots')]);
 
-    const secteursAutorises = secteurs.filter((s) => user.role === 'admin' || !user.secteur_id || s.id === user.secteur_id);
+    // Les secteurs "Élevage" (parent) et ses sous-secteurs (Bovins/Ovins/Caprins, suivi_individuel)
+    // relèvent du module Élevage (suivi animal par animal), pas des lots de production ici.
+    const idsParents = new Set(secteurs.filter((s) => s.parent_secteur_id).map((s) => s.parent_secteur_id));
+    const secteursAutorises = secteurs.filter(
+      (s) => !s.suivi_individuel && !idsParents.has(s.id) && (user.role === 'admin' || !user.secteur_id || s.id === user.secteur_id)
+    );
 
     container.innerHTML = `
       ${offlineBanner()}
