@@ -20,6 +20,16 @@ function estConfigure() {
     return !!(apiKey && from);
 }
 
+// Audit sécurité 2026-08-27 : nomComplet est fourni par l'utilisateur (inscription self-service,
+// ou choisi par un admin à la création d'un tiers) et était interpolé tel quel dans le HTML de
+// l'email — un nom contenant du balisage/liens s'affichait sans échappement dans la boîte du
+// destinataire, envoyé depuis l'adresse de confiance no-reply@massla.sn (vecteur de phishing
+// interne). Échappement minimal (les seuls caractères significatifs en HTML), même liste que
+// `esc()` côté frontend (web/js/app.js).
+function echapperHtml(valeur) {
+    return String(valeur ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 async function envoyerEmailVerification(email, nomComplet, token) {
     const { apiKey, from, baseUrl } = lireConfig();
     if (!apiKey || !from) {
@@ -34,7 +44,7 @@ async function envoyerEmailVerification(email, nomComplet, token) {
             from,
             to: [email],
             subject: 'Vérifiez votre adresse email — ERP Ferme',
-            html: `<p>Bonjour ${nomComplet},</p><p>Cliquez sur ce lien pour activer votre compte : <a href="${lien}">${lien}</a></p><p>Ce lien expire dans 24h.</p>`,
+            html: `<p>Bonjour ${echapperHtml(nomComplet)},</p><p>Cliquez sur ce lien pour activer votre compte : <a href="${lien}">${lien}</a></p><p>Ce lien expire dans 24h.</p>`,
         }),
     });
 

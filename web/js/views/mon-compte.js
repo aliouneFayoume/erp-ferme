@@ -85,8 +85,12 @@ window.Views['mon-compte'] = {
     }
 
     container.querySelector('#btn-totp-init').addEventListener('click', async () => {
+      // Le serveur exige une reconfirmation du mot de passe pour brancher un nouveau second
+      // facteur (audit sécurité 2026-08-27) — un jeton de session seul ne suffit plus.
+      const values = await Modal.open('Configurer le MFA', [{ name: 'currentPassword', label: 'Mot de passe actuel', type: 'password', value: '' }]);
+      if (!values) return;
       try {
-        const data = await Api.post('/auth/mfa/totp/init', {});
+        const data = await Api.post('/auth/mfa/totp/init', { currentPassword: values.currentPassword });
         const zone = container.querySelector('#zone-totp');
         zone.classList.remove('hidden');
         zone.innerHTML = `

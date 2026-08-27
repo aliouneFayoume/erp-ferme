@@ -51,6 +51,17 @@ const limiteurVerifierEmail = rateLimit({
     message: { erreur: 'Trop de tentatives. Réessayez plus tard.' },
 });
 
+// Audit sécurité 2026-08-27 : ces routes vérifient `currentPassword` via bcrypt.compare mais
+// n'avaient aucune limite de tentatives, contrairement à /login — un jeton dérobé permettait de
+// deviner le mot de passe réel par essais successifs sans jamais déclencher de verrouillage.
+const limiteurCompteSensible = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erreur: 'Trop de tentatives. Réessayez plus tard.' },
+});
+
 function hashToken(token) {
     return crypto.createHash('sha256').update(String(token || '')).digest('hex');
 }
@@ -254,7 +265,7 @@ module.exports = function authRoutes(pool) {
     });
 
     /** Changement de mot de passe self-service — jusqu'ici seul un admin pouvait réinitialiser celui d'un tiers (routes/utilisateurs.js). */
-    router.put('/mot-de-passe', requireAuth(pool), async (req, res) => {
+    router.put('/mot-de-passe', limiteurCompteSensible, requireAuth(pool), async (req, res) => {
         const { currentPassword, newPassword } = req.body;
         if (!currentPassword || !newPassword) {
             return res.status(400).json({ erreur: 'Mot de passe actuel et nouveau mot de passe requis.' });
@@ -364,8 +375,21 @@ module.exports = function authRoutes(pool) {
 
     // --- Configuration MFA (compte déjà authentifié) --------------------------------------------
 
-    router.post('/mfa/totp/init', requireAuth(pool), async (req, res) => {
+    /**
+     * Audit sécurité 2026-08-27 : brancher un nouveau secret TOTP est l'équivalent de CHANGER le
+     * second facteur — sans reconfirmation du mot de passe, un jeton dérobé (session partagée,
+     * appareil non verrouillé, jeton qui fuit) suffisait à un attaquant pour y greffer SA propre
+     * application d'authentification, sans jamais prouver connaître le mot de passe. Même exigence
+     * que DELETE /mfa, désormais cohérente sur toute la surface MFA.
+     */
+    router.post('/mfa/totp/init', limiteurCompteSensible, requireAuth(pool), async (req, res) => {
+        const { currentPassword } = req.body;
+        if (!currentPassword) return res.status(400).json({ erreur: 'Mot de passe requis pour configurer le MFA.' });
         try {
+            const actuel = await req.db.query(`SELECT mot_de_passe_hash FROM utilisateurs WHERE id = $1`, [req.user.id]);
+            const valide = actuel.rows[0] && (await bcrypt.compare(currentPassword, actuel.rows[0].mot_de_passe_hash));
+            if (!valide) return res.status(401).json({ erreur: 'Mot de passe incorrect.' });
+
             const secret = mfa.genererSecretTotp();
             // req.user (payload JWT) ne porte pas l'email (voir signToken, auth.js) — relu ici.
             const infosRes = await req.db.query(
@@ -401,15 +425,23 @@ module.exports = function authRoutes(pool) {
         }
     });
 
-    router.post('/mfa/whatsapp/init', requireAuth(pool), async (req, res) => {
+    router.post('/mfa/whatsapp/init', limiteurCompteSensible, requireAuth(pool), async (req, res) => {
         // Mise en attente volontaire (2026-08-27) : voir le commentaire de whatsappMfaActif() dans
         // mfa.js — numéro WhatsApp Business de production bloqué + template Meta non approuvé.
         if (!mfa.whatsappMfaActif()) {
             return res.status(503).json({ erreur: 'MFA par WhatsApp pas encore disponible. Utilisez une application d\'authentification (TOTP).' });
         }
-        const numero = String(req.body.numero || '').replace(/[^0-9+]/g, '');
+        const { currentPassword, numero: numeroBrut } = req.body;
+        if (!currentPassword) return res.status(400).json({ erreur: 'Mot de passe requis pour configurer le MFA.' });
+        const numero = String(numeroBrut || '').replace(/[^0-9+]/g, '');
         if (!numero) return res.status(400).json({ erreur: 'Numéro WhatsApp requis.' });
         try {
+            // Même exigence que /mfa/totp/init (audit sécurité 2026-08-27) : brancher un nouveau
+            // second facteur doit reprouver le mot de passe, pas juste posséder un jeton en cours.
+            const actuel = await req.db.query(`SELECT mot_de_passe_hash FROM utilisateurs WHERE id = $1`, [req.user.id]);
+            const valide = actuel.rows[0] && (await bcrypt.compare(currentPassword, actuel.rows[0].mot_de_passe_hash));
+            if (!valide) return res.status(401).json({ erreur: 'Mot de passe incorrect.' });
+
             const { code, hash, expireLe } = mfa.genererCodeWhatsapp();
             await req.db.query(
                 `UPDATE utilisateurs SET mfa_methode = 'WHATSAPP', mfa_whatsapp_numero = $1, mfa_code_hash = $2, mfa_code_expire_le = $3, mfa_code_tentatives = 0 WHERE id = $4`,
@@ -466,7 +498,7 @@ module.exports = function authRoutes(pool) {
      * pas totalement compromise). Pour un admin avec mfa_obligatoire=TRUE, le garde-fou de
      * requireAuth (auth.js) redemandera aussitôt la configuration à la requête suivante.
      */
-    router.delete('/mfa', requireAuth(pool), async (req, res) => {
+    router.delete('/mfa', limiteurCompteSensible, requireAuth(pool), async (req, res) => {
         const { currentPassword } = req.body;
         if (!currentPassword) return res.status(400).json({ erreur: 'Mot de passe requis pour désactiver le MFA.' });
         try {

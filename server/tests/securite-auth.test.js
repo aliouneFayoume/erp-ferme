@@ -199,7 +199,7 @@ describe('sécurité — MFA', () => {
 
         // Active le TOTP via les routes elles-mêmes (comme le ferait l'écran "Mon compte").
         const tokenSetup = require('../src/auth').signToken({ id: u.id, role_nom: 'admin', nom_complet: 'Utilisateur Test', tenant_id: tenantId, token_version: 1 });
-        const init = await request(app).post('/api/auth/mfa/totp/init').set('Authorization', `Bearer ${tokenSetup}`).send({});
+        const init = await request(app).post('/api/auth/mfa/totp/init').set('Authorization', `Bearer ${tokenSetup}`).send({ currentPassword: u.motDePasse });
         expect(init.status).toBe(200);
         const codeInit = authenticator.generate(init.body.secret);
         const activer = await request(app).post('/api/auth/mfa/totp/activer').set('Authorization', `Bearer ${tokenSetup}`).send({ code: codeInit });
@@ -220,7 +220,7 @@ describe('sécurité — MFA', () => {
     test('code TOTP invalide est rejeté au moment du défi de connexion', async () => {
         const u = await creerUtilisateurComplet(pool, { tenant_id: tenantId });
         const tokenSetup = require('../src/auth').signToken({ id: u.id, role_nom: 'admin', nom_complet: 'Utilisateur Test', tenant_id: tenantId, token_version: 1 });
-        const init = await request(app).post('/api/auth/mfa/totp/init').set('Authorization', `Bearer ${tokenSetup}`).send({});
+        const init = await request(app).post('/api/auth/mfa/totp/init').set('Authorization', `Bearer ${tokenSetup}`).send({ currentPassword: u.motDePasse });
         const codeInit = authenticator.generate(init.body.secret);
         await request(app).post('/api/auth/mfa/totp/activer').set('Authorization', `Bearer ${tokenSetup}`).send({ code: codeInit });
 
@@ -263,6 +263,24 @@ describe('sécurité — MFA', () => {
         expect(envoyerMessageWhatsapp).not.toHaveBeenCalled();
     });
 
+    // Audit sécurité 2026-08-27 : brancher un nouveau second facteur doit reprouver le mot de passe
+    // — un jeton de session seul ne doit jamais suffire (sinon un jeton dérobé permet de greffer
+    // silencieusement le TOTP de l'attaquant sur le compte de la victime).
+    test('POST /mfa/totp/init exige le mot de passe actuel', async () => {
+        const u = await creerUtilisateurComplet(pool, { tenant_id: tenantId });
+        const tokenSetup = require('../src/auth').signToken({ id: u.id, role_nom: 'admin', nom_complet: 'Utilisateur Test', tenant_id: tenantId, token_version: 1 });
+
+        const sansMotDePasse = await request(app).post('/api/auth/mfa/totp/init').set('Authorization', `Bearer ${tokenSetup}`).send({});
+        expect(sansMotDePasse.status).toBe(400);
+
+        const mauvaisMotDePasse = await request(app).post('/api/auth/mfa/totp/init').set('Authorization', `Bearer ${tokenSetup}`).send({ currentPassword: 'mauvais-mot-de-passe' });
+        expect(mauvaisMotDePasse.status).toBe(401);
+
+        const bonMotDePasse = await request(app).post('/api/auth/mfa/totp/init').set('Authorization', `Bearer ${tokenSetup}`).send({ currentPassword: u.motDePasse });
+        expect(bonMotDePasse.status).toBe(200);
+        expect(bonMotDePasse.body.secret).toBeTruthy();
+    });
+
     test('un admin avec MFA obligatoire mais non configuré est bloqué sur les autres routes, sauf allowlist', async () => {
         const u = await creerUtilisateurComplet(pool, { tenant_id: tenantId, role: 'admin', mfaObligatoire: true, mfaActif: false });
         const appAvecUtilisateurs = buildApp(pool, ['auth', 'utilisateurs']);
@@ -279,7 +297,7 @@ describe('sécurité — MFA', () => {
         expect(me.status).toBe(200);
 
         // Termine la configuration TOTP, puis la route précédemment bloquée doit passer.
-        const init = await request(appAvecUtilisateurs).post('/api/auth/mfa/totp/init').set('Authorization', `Bearer ${token}`).send({});
+        const init = await request(appAvecUtilisateurs).post('/api/auth/mfa/totp/init').set('Authorization', `Bearer ${token}`).send({ currentPassword: u.motDePasse });
         const code = authenticator.generate(init.body.secret);
         await request(appAvecUtilisateurs).post('/api/auth/mfa/totp/activer').set('Authorization', `Bearer ${token}`).send({ code });
 
@@ -323,6 +341,24 @@ describe('sécurité — changement de mot de passe self-service', () => {
             .set('Authorization', `Bearer ${login.body.token}`)
             .send({ currentPassword: 'mauvais', newPassword: 'Autremdp123!' });
         expect(res.status).toBe(401);
+    });
+
+    // Audit sécurité 2026-08-27 : cette route (comme DELETE /mfa) vérifie un mot de passe mais
+    // n'avait aucune limite de tentatives, contrairement à /login — vérifie juste que le
+    // middleware de limitation est bien attaché (l'en-tête RateLimit-* ne peut apparaître que si
+    // express-rate-limit est monté sur la route).
+    test('limite les tentatives sur le changement de mot de passe et la désactivation MFA', async () => {
+        const u = await creerUtilisateurComplet(pool, { tenant_id: tenantId });
+        const login = await request(app).post('/api/auth/login').send({ email: u.email, password: u.motDePasse });
+
+        const resMdp = await request(app)
+            .put('/api/auth/mot-de-passe')
+            .set('Authorization', `Bearer ${login.body.token}`)
+            .send({ currentPassword: 'mauvais', newPassword: 'Autremdp123!' });
+        expect(resMdp.headers['ratelimit-limit']).toBeTruthy();
+
+        const resMfa = await request(app).delete('/api/auth/mfa').set('Authorization', `Bearer ${login.body.token}`).send({ currentPassword: 'mauvais' });
+        expect(resMfa.headers['ratelimit-limit']).toBeTruthy();
     });
 
     test('rejette un nouveau mot de passe non conforme', async () => {
