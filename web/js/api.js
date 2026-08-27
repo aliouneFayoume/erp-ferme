@@ -106,6 +106,9 @@ const Api = (() => {
       // "commande déjà annulée") d'une session expirée (401/403) ou d'une panne serveur passagère
       // (5xx), qui ne doivent jamais faire perdre une action en attente. Audit systèmes 2026-08-11.
       erreurHttp.statut = res.status;
+      // Code métier optionnel (ex: EMAIL_NON_VERIFIE, MFA_SETUP_REQUIS — voir routes/auth.js) : le
+      // message texte peut changer, le code non, donc c'est lui que le frontend doit tester.
+      erreurHttp.code = data && data.code;
       throw erreurHttp;
     }
 
@@ -151,7 +154,7 @@ const Api = (() => {
     get: (path) => request(path),
     post: (path, body) => request(path, { method: 'POST', body }),
     put: (path, body) => request(path, { method: 'PUT', body }),
-    del: (path) => request(path, { method: 'DELETE' }),
+    del: (path, body) => request(path, { method: 'DELETE', body }),
     getBlob,
   };
 })();

@@ -1,7 +1,11 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+const { motDePasseValide, motDePasseErreurs } = require('../validation');
+// Nommé `emailService` (pas `email`) : cette route destructure déjà `email` depuis req.body.
+const emailService = require('../email');
 
 module.exports = function utilisateursRoutes(pool) {
     const router = express.Router();
@@ -35,19 +39,34 @@ module.exports = function utilisateursRoutes(pool) {
         if (!nom_complet || !email || !password || !role) {
             return res.status(400).json({ erreur: 'Nom, email, mot de passe et rôle sont requis.' });
         }
-        if (password.length < 8) {
-            return res.status(400).json({ erreur: 'Le mot de passe doit contenir au moins 8 caractères.' });
+        if (!motDePasseValide(password)) {
+            return res.status(400).json({ erreur: `Le mot de passe doit contenir ${motDePasseErreurs(password).join(', ')}.` });
+        }
+        // Durcissement sécurité (migration-20) : même garde que creerFerme.js — impossible de
+        // créer un compte dont l'email ne pourra jamais être vérifié.
+        if (!emailService.estConfigure()) {
+            return res.status(503).json({ erreur: 'Vérification email indisponible pour le moment.' });
         }
         try {
             const roleRes = await req.db.query(`SELECT id FROM roles WHERE nom = $1`, [role]);
             if (roleRes.rows.length === 0) return res.status(400).json({ erreur: 'Rôle invalide.' });
 
             const hash = await bcrypt.hash(password, 10);
+            const tokenVerification = crypto.randomBytes(32).toString('hex');
+            const tokenVerificationHash = crypto.createHash('sha256').update(tokenVerification).digest('hex');
+            const mfaObligatoire = role === 'admin';
             const result = await req.db.query(
-                `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, secteur_id, actif)
-                 VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING id, nom_complet, email, secteur_id, actif, cree_le`,
-                [req.user.tenant_id, nom_complet, email, hash, roleRes.rows[0].id, role === 'chef_prod' ? secteur_id || null : null]
+                `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, secteur_id, actif,
+                                            email_verifie, email_verification_token_hash, email_verification_expire_le, mfa_obligatoire)
+                 VALUES ($1, $2, $3, $4, $5, $6, TRUE, FALSE, $7, now() + interval '24 hours', $8)
+                 RETURNING id, nom_complet, email, secteur_id, actif, cree_le`,
+                [req.user.tenant_id, nom_complet, email, hash, roleRes.rows[0].id, role === 'chef_prod' ? secteur_id || null : null, tokenVerificationHash, mfaObligatoire]
             );
+            try {
+                await emailService.envoyerEmailVerification(email, nom_complet, tokenVerification);
+            } catch (err) {
+                console.error("Échec de l'envoi de l'email de vérification lors de la création d'un utilisateur :", err);
+            }
             await logAudit(req.db, { req,
                 table: 'utilisateurs',
                 rowId: result.rows[0].id,
@@ -106,8 +125,8 @@ module.exports = function utilisateursRoutes(pool) {
 
     router.put('/:id/mot-de-passe', requireAuth(pool), checkRole(['admin']), async (req, res) => {
         const { password } = req.body;
-        if (!password || password.length < 8) {
-            return res.status(400).json({ erreur: 'Le mot de passe doit contenir au moins 8 caractères.' });
+        if (!motDePasseValide(password)) {
+            return res.status(400).json({ erreur: `Le mot de passe doit contenir ${motDePasseErreurs(password).join(', ')}.` });
         }
         try {
             const hash = await bcrypt.hash(password, 10);

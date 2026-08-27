@@ -117,8 +117,13 @@ async function seedOrganisation(pool, def, roleIds, motDePasse) {
 
     const userIds = {};
     for (const u of def.utilisateurs) {
+        // email_verifie = TRUE : les comptes de démo (pg-mem, rechargés à chaque démarrage) sont
+        // considérés "déjà provisionnés", exactement comme un compte réel déjà en production au
+        // moment de la migration-20 (grandfathering) — sinon aucun compte de démo ne pourrait se
+        // connecter faute d'intégration email configurée en local.
         const res = await pool.query(
-            `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, secteur_id, est_superviseur_plateforme) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+            `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, secteur_id, est_superviseur_plateforme, email_verifie)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE) RETURNING id`,
             [tenantId, u.nom, u.email, motDePasse, roleIds[u.role], u.secteur ? secteurIds[u.secteur] : null, u.email === 'admin@massla.sn']
         );
         userIds[u.email] = res.rows[0].id;

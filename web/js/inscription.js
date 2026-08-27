@@ -38,11 +38,14 @@ document.getElementById('inscription-form').addEventListener('submit', async (e)
       throw new Error(result.erreur || 'Erreur lors de la création de la ferme.');
     }
     window.MassiaAnalytics?.track('compte_cree');
-    // Connexion automatique : mêmes clés localStorage que l'app principale (js/api.js), qui les
-    // relit au chargement de / pour afficher directement le tableau de bord sans repasser par login.
-    localStorage.setItem('erp_token', result.token);
-    localStorage.setItem('erp_user', JSON.stringify(result.utilisateur));
-    window.location.href = '/';
+    // Durcissement sécurité (migration-20) : plus de connexion automatique — le nouvel admin est
+    // email_verifie=FALSE côté serveur, une session immédiate contournerait la vérification
+    // bloquante. On affiche le message du serveur et on laisse l'utilisateur consulter sa boîte mail.
+    form.reset();
+    form.classList.add('hidden');
+    const succesEl = document.getElementById('inscription-succes');
+    succesEl.textContent = result.message || 'Compte créé. Vérifiez votre boîte mail avant de vous connecter.';
+    succesEl.classList.remove('hidden');
   } catch (err) {
     errEl.textContent = err.message;
     errEl.classList.remove('hidden');

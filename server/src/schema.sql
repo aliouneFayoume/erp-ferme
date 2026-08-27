@@ -84,6 +84,24 @@ CREATE TABLE utilisateurs (
     -- moment de sa signature (signToken) ; si elle ne correspond plus à celle en base, le token est
     -- rejeté même s'il n'a pas encore expiré (jusqu'à 12h sinon) — audit sécurité 2026-08-11 (E2).
     token_version INT NOT NULL DEFAULT 1,
+    -- Durcissement sécurité (migration-20) : vérification d'email + MFA. DEFAULT FALSE ici (schéma
+    -- d'une base FRAÎCHE, jamais de ligne pré-existante à préserver) — le grandfathering DEFAULT
+    -- TRUE→FALSE ne s'applique qu'à la migration elle-même sur une base déjà en production.
+    email_verifie BOOLEAN NOT NULL DEFAULT FALSE,
+    email_verification_token_hash VARCHAR(64),
+    email_verification_expire_le TIMESTAMP,
+    mfa_actif BOOLEAN NOT NULL DEFAULT FALSE,
+    mfa_methode VARCHAR(10) CHECK (mfa_methode IS NULL OR mfa_methode IN ('TOTP', 'WHATSAPP')),
+    -- Chiffré au repos via credentials.js (chiffrer/dechiffrer), même AES-256-GCM que les
+    -- identifiants PayDunya/WhatsApp par tenant — jamais de secret TOTP en clair.
+    mfa_totp_secret_chiffre TEXT,
+    mfa_whatsapp_numero VARCHAR(20),
+    -- Posé explicitement à TRUE par l'application (creerFerme.js, routes/utilisateurs.js) à la
+    -- création d'un compte admin — jamais un défaut global par rôle.
+    mfa_obligatoire BOOLEAN NOT NULL DEFAULT FALSE,
+    mfa_code_hash VARCHAR(64),
+    mfa_code_expire_le TIMESTAMP,
+    mfa_code_tentatives INT NOT NULL DEFAULT 0,
     deleted_at TIMESTAMP,
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

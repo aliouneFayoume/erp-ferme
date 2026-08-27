@@ -8,8 +8,10 @@ const { requireAuth, checkRole, signToken } = require('../src/auth');
 async function creerUtilisateur(pool, { email = 'test@massla.sn', motDePasse = 'demo1234', role = 'admin', actif = true, tenant_id = null } = {}) {
     const roleRes = await pool.query(`SELECT id FROM roles WHERE nom = $1`, [role]);
     const hash = await bcrypt.hash(motDePasse, 4);
+    // email_verifie = TRUE : simule un compte "grandfathered" (pré-migration-20) — ces tests portent
+    // sur d'autres aspects du login, pas sur la vérification d'email (voir securite-auth.test.js).
     await pool.query(
-        `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, actif) VALUES ($1, $2, $3, $4, $5, $6)`,
+        `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, actif, email_verifie) VALUES ($1, $2, $3, $4, $5, $6, TRUE)`,
         [tenant_id, 'Utilisateur Test', email, hash, roleRes.rows[0].id, actif]
     );
 }

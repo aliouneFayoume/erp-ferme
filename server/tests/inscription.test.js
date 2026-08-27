@@ -1,6 +1,14 @@
 const request = require('supertest');
 const { createTestPool, buildApp, seedRolesEtSecteurs } = require('./helpers/testApp');
 
+// Durcissement sécurité (migration-20) : creerFerme.js refuse de créer un compte si l'envoi de
+// l'email de vérification n'est pas configuré (503) — jamais de vrai appel réseau vers Resend en
+// test (voir mfa/whatsapp, même principe : ne jamais toucher une vraie API tierce depuis la suite).
+jest.mock('../src/email', () => ({
+    estConfigure: () => true,
+    envoyerEmailVerification: jest.fn().mockResolvedValue({}),
+}));
+
 const CODE = process.env.SIGNUP_INVITE_CODE || 'demo-inscription-ferme-massla';
 
 function payloadValide(overrides = {}) {
@@ -10,7 +18,7 @@ function payloadValide(overrides = {}) {
         secteurs: [{ nom: 'Avicole', suiviRecolte: false }, { nom: 'Maraîcher', suiviRecolte: true }],
         adminNomComplet: 'Admin Test',
         adminEmail: `admin-${Date.now()}@test.sn`,
-        adminPassword: 'motdepasse123',
+        adminPassword: 'Motdepasse123!',
         ...overrides,
     };
 }
@@ -34,12 +42,16 @@ describe('inscription — création self-service d\'une nouvelle ferme', () => {
         await pool.end();
     });
 
-    test('crée l\'organisation, ses secteurs et le premier admin, et renvoie un token de connexion immédiate', async () => {
+    test('crée l\'organisation, ses secteurs et le premier admin, sans connexion automatique', async () => {
         const res = await request(app).post('/api/inscription').send(payloadValide());
 
         expect(res.status).toBe(201);
-        expect(res.body.token).toBeTruthy();
-        expect(res.body.utilisateur.role).toBe('admin');
+        // Durcissement sécurité (migration-20) : plus de token/utilisateur dans la réponse — l'admin
+        // créé est email_verifie=FALSE et doit vérifier son adresse avant de pouvoir se connecter
+        // (voir la correction de conception dans le plan : l'auto-login contournait la vérification).
+        expect(res.body.token).toBeUndefined();
+        expect(res.body.utilisateur).toBeUndefined();
+        expect(res.body.message).toBeTruthy();
 
         const org = await pool.query(`SELECT * FROM organisations WHERE nom = 'Ferme Test'`);
         expect(org.rows).toHaveLength(1);
@@ -51,11 +63,13 @@ describe('inscription — création self-service d\'une nouvelle ferme', () => {
         expect(secteurs.rows.find((s) => s.nom === 'Avicole').suivi_recolte).toBe(false);
 
         const admin = await pool.query(
-            `SELECT u.email, r.nom as role FROM utilisateurs u JOIN roles r ON u.role_id = r.id WHERE u.tenant_id = $1`,
+            `SELECT u.email, r.nom as role, u.email_verifie, u.mfa_obligatoire FROM utilisateurs u JOIN roles r ON u.role_id = r.id WHERE u.tenant_id = $1`,
             [tenantId]
         );
         expect(admin.rows).toHaveLength(1);
         expect(admin.rows[0].role).toBe('admin');
+        expect(admin.rows[0].email_verifie).toBe(false);
+        expect(admin.rows[0].mfa_obligatoire).toBe(true);
     });
 
     test('rejette un code d\'invitation invalide sans rien créer', async () => {
@@ -102,31 +116,39 @@ describe('inscription — création self-service d\'une nouvelle ferme', () => {
         // pas via cette suite — même limite déjà documentée pour RLS (voir verify-rls.js).
     });
 
+    // Durcissement sécurité (migration-20) : la réponse ne porte plus tenant_id (plus de token de
+    // connexion immédiate) — l'organisation créée est retrouvée par son nom, unique dans ces tests.
+    async function tenantIdParNom(nom) {
+        const res = await pool.query(`SELECT id FROM organisations WHERE nom = $1`, [nom]);
+        return res.rows[0].id;
+    }
+
     test('génère un slug (sous-domaine) dérivé du nom de la ferme', async () => {
         const res = await request(app).post('/api/inscription').send(payloadValide({ nomFerme: 'Ferme Écologique du Sénégal', adminEmail: `slug-${Date.now()}@test.sn` }));
         expect(res.status).toBe(201);
-        const org = await pool.query(`SELECT slug FROM organisations WHERE id = $1`, [res.body.utilisateur.tenant_id]);
+        const tenantId = await tenantIdParNom('Ferme Écologique du Sénégal');
+        const org = await pool.query(`SELECT slug FROM organisations WHERE id = $1`, [tenantId]);
         expect(org.rows[0].slug).toBe('ferme-ecologique-du-senegal');
     });
 
     test('deux fermes de même nom reçoivent des slugs distincts (suffixe -2)', async () => {
-        const resA = await request(app).post('/api/inscription').send(payloadValide({ nomFerme: 'Même Nom', adminEmail: `meme-a-${Date.now()}@test.sn` }));
-        const resB = await request(app).post('/api/inscription').send(payloadValide({ nomFerme: 'Même Nom', adminEmail: `meme-b-${Date.now()}@test.sn` }));
+        await request(app).post('/api/inscription').send(payloadValide({ nomFerme: 'Même Nom', adminEmail: `meme-a-${Date.now()}@test.sn` }));
+        await request(app).post('/api/inscription').send(payloadValide({ nomFerme: 'Même Nom', adminEmail: `meme-b-${Date.now()}@test.sn` }));
 
-        const orgA = await pool.query(`SELECT slug FROM organisations WHERE id = $1`, [resA.body.utilisateur.tenant_id]);
-        const orgB = await pool.query(`SELECT slug FROM organisations WHERE id = $1`, [resB.body.utilisateur.tenant_id]);
-        expect(orgA.rows[0].slug).toBe('meme-nom');
-        expect(orgB.rows[0].slug).toBe('meme-nom-2');
+        const orgs = await pool.query(`SELECT slug FROM organisations WHERE nom = 'Même Nom' ORDER BY id`);
+        expect(orgs.rows.map((o) => o.slug)).toEqual(['meme-nom', 'meme-nom-2']);
     });
 
     test('deux fermes créées séparément sont bien isolées (secteurs et admin distincts)', async () => {
-        const resA = await request(app).post('/api/inscription').send(payloadValide({ nomFerme: 'Ferme Alpha', adminEmail: `alpha-${Date.now()}@test.sn` }));
-        const resB = await request(app).post('/api/inscription').send(payloadValide({ nomFerme: 'Ferme Beta', adminEmail: `beta-${Date.now()}@test.sn` }));
+        await request(app).post('/api/inscription').send(payloadValide({ nomFerme: 'Ferme Alpha', adminEmail: `alpha-${Date.now()}@test.sn` }));
+        await request(app).post('/api/inscription').send(payloadValide({ nomFerme: 'Ferme Beta', adminEmail: `beta-${Date.now()}@test.sn` }));
 
-        expect(resA.body.utilisateur.tenant_id).not.toBe(resB.body.utilisateur.tenant_id);
+        const tenantIdA = await tenantIdParNom('Ferme Alpha');
+        const tenantIdB = await tenantIdParNom('Ferme Beta');
+        expect(tenantIdA).not.toBe(tenantIdB);
 
-        const secteursA = await pool.query(`SELECT nom FROM secteurs WHERE tenant_id = $1`, [resA.body.utilisateur.tenant_id]);
-        const secteursB = await pool.query(`SELECT nom FROM secteurs WHERE tenant_id = $1`, [resB.body.utilisateur.tenant_id]);
+        const secteursA = await pool.query(`SELECT nom FROM secteurs WHERE tenant_id = $1`, [tenantIdA]);
+        const secteursB = await pool.query(`SELECT nom FROM secteurs WHERE tenant_id = $1`, [tenantIdB]);
         expect(secteursA.rows).toHaveLength(2);
         expect(secteursB.rows).toHaveLength(2);
     });

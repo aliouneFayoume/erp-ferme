@@ -17,7 +17,7 @@ window.Views.utilisateurs = {
         <form id="form-user" class="form-grid">
           <label>Nom complet<input type="text" name="nom_complet" required /></label>
           <label>Email<input type="email" name="email" required /></label>
-          <label>Mot de passe (8 caractères min.)<input type="password" name="password" required minlength="8" /></label>
+          <label>Mot de passe (10 caractères min., avec majuscule, minuscule, chiffre et caractère spécial)<input type="password" name="password" required minlength="10" /></label>
           <label>Rôle
             <select name="role" id="select-role-new" required>
               ${roles.map((r) => `<option value="${r.nom}">${esc(ROLE_LABEL[r.nom] || r.nom)}</option>`).join('')}
@@ -113,13 +113,9 @@ window.Views.utilisateurs = {
     container.querySelectorAll('button[data-mdp]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const values = await Modal.open('Changer le mot de passe', [
-          { name: 'password', label: 'Nouveau mot de passe (8 caractères min.)', type: 'password', value: '' },
+          { name: 'password', label: 'Nouveau mot de passe (10 caractères min., majuscule/minuscule/chiffre/caractère spécial)', type: 'password', value: '' },
         ]);
         if (!values) return;
-        if (values.password.length < 8) {
-          showToast('Le mot de passe doit contenir au moins 8 caractères.', 'error');
-          return;
-        }
         try {
           await Api.put(`/utilisateurs/${btn.dataset.mdp}/mot-de-passe`, { password: values.password });
           showToast('Mot de passe mis à jour.', 'success');

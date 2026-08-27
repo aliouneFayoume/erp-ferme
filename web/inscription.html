@@ -48,13 +48,14 @@
         <label>Email
           <input type="email" name="adminEmail" required autocomplete="email" />
         </label>
-        <label>Mot de passe (8 caractères minimum)
-          <input type="password" name="adminPassword" required minlength="8" autocomplete="new-password" />
+        <label>Mot de passe (10 caractères min., avec majuscule, minuscule, chiffre et caractère spécial)
+          <input type="password" name="adminPassword" required minlength="10" autocomplete="new-password" />
         </label>
 
         <div id="inscription-error" class="login-error hidden"></div>
         <button type="submit">Créer ma ferme</button>
       </form>
+      <div id="inscription-succes" class="login-success hidden"></div>
       <p class="sub" style="margin-top:16px;">Déjà un compte ? <a href="/">Se connecter</a></p>
     </div>
   </div>

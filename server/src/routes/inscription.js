@@ -1,6 +1,5 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { signToken } = require('../auth');
 const { creerNouvelleFerme } = require('../creerFerme');
 
 if (!process.env.SIGNUP_INVITE_CODE && process.env.DATABASE_URL) {
@@ -41,20 +40,13 @@ module.exports = function inscriptionRoutes(pool) {
         }
 
         try {
-            const { admin, nomFerme: nomFermeCree } = await creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, adminEmail, adminPassword });
-            const token = signToken({ ...admin, role_nom: 'admin' });
-            res.status(201).json({
-                token,
-                utilisateur: {
-                    id: admin.id,
-                    nom_complet: admin.nom_complet,
-                    email: admin.email,
-                    role: 'admin',
-                    secteur_id: admin.secteur_id,
-                    tenant_id: admin.tenant_id,
-                    organisation_nom: nomFermeCree,
-                },
-            });
+            // Durcissement sécurité (migration-20) : plus de connexion automatique ici — l'admin
+            // créé par cette route est email_verifie=FALSE (creerFerme.js), donc une connexion
+            // immédiate contournerait trivialement la vérification d'email bloquante pour le tout
+            // premier compte de chaque nouvelle organisation, précisément le chemin le plus exposé
+            // (données arbitraires côté appelant, aucune invitation d'un admin déjà de confiance).
+            await creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, adminEmail, adminPassword });
+            res.status(201).json({ message: 'Compte créé. Vérifiez votre boîte mail avant de vous connecter.' });
         } catch (err) {
             if (err.statut) return res.status(err.statut).json({ erreur: err.message });
             if (err.code === '23505') {

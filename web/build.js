@@ -39,6 +39,7 @@ const BUNDLES = {
     'js/views/tickets.js',
     'js/views/parametres-paiement.js',
     'js/views/utilisateurs.js',
+    'js/views/mon-compte.js',
     'js/views/audit.js',
     'js/views/plateforme.js',
     'js/app.js',
@@ -50,6 +51,8 @@ const BUNDLES = {
   'inscription.min.js': ['js/inscription.js'],
   // portail.html
   'portail.min.js': ['js/branding.js', 'js/portail.js'],
+  // verifier-email.html (lien reçu par email, voir server/src/email.js)
+  'verifier-email.min.js': ['js/verifier-email.js'],
 };
 
 fs.mkdirSync(SORTIE, { recursive: true });

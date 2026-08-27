@@ -208,9 +208,11 @@ function requireAuth(pool) {
             await attachTenantConnection(req, res, pool, req.user.tenant_id);
 
             const etat = await req.db.query(
-                `SELECT u.actif, u.deleted_at AS utilisateur_supprime_le, u.token_version,
+                `SELECT u.actif, u.deleted_at AS utilisateur_supprime_le, u.token_version, r.nom AS role,
+                        u.mfa_obligatoire, u.mfa_actif,
                         o.deleted_at AS organisation_supprimee_le, s.actif AS abonnement_actif
                  FROM utilisateurs u
+                 JOIN roles r ON r.id = u.role_id
                  LEFT JOIN organisations o ON o.id = u.tenant_id
                  LEFT JOIN organisation_abonnement_saas s ON s.tenant_id = o.id
                  WHERE u.id = $1`,
@@ -229,6 +231,22 @@ function requireAuth(pool) {
                     return res.status(403).json({ erreur: 'Accès suspendu pour cette organisation. Contactez le support.' });
                 }
             }
+
+            // Durcissement sécurité (migration-20) : un admin dont le compte exige le MFA
+            // (mfa_obligatoire, posé uniquement à la création — jamais rétroactif sur un compte
+            // déjà en production) mais qui ne l'a pas encore configuré (mfa_actif=FALSE) est confiné
+            // à un allowlist minimal — /me pour lire son propre statut, /mfa/* pour le configurer,
+            // /mot-de-passe pour le self-service — jusqu'à ce qu'il termine la configuration. Ceci
+            // est la garantie SERVEUR, non contournable même par un appel direct à l'API ; l'écran
+            // "Mon compte" forcé côté frontend n'est qu'une aide visuelle, pas la vraie barrière.
+            if (ligne.role === 'admin' && ligne.mfa_obligatoire && !ligne.mfa_actif) {
+                const chemin = req.originalUrl.split('?')[0];
+                const autorise = chemin === '/api/auth/me' || chemin.startsWith('/api/auth/mfa/') || chemin === '/api/auth/mot-de-passe';
+                if (!autorise) {
+                    return res.status(403).json({ erreur: 'Configuration MFA obligatoire avant de continuer.', code: 'MFA_SETUP_REQUIS' });
+                }
+            }
+
             next();
         } catch (err) {
             return res.status(401).json({ erreur: 'Session invalide ou expirée' });

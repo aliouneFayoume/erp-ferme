@@ -17,6 +17,7 @@ const TAB_DEFS = [
   { key: 'parametres-paiement', label: 'Réglages de la ferme', roles: ['admin'] },
   { key: 'utilisateurs', label: 'Utilisateurs', roles: ['admin'] },
   { key: 'audit', label: "Journal d'audit", roles: ['admin'] },
+  { key: 'mon-compte', label: 'Mon compte', roles: ['admin', 'comptable', 'chef_prod', 'livreur'] },
   // Réservé à un seul compte (voir migration-04-superviseur-plateforme.sql) — jamais visible pour
   // un admin normal, même si `roles` incluait 'admin' : voir tabsForRole ci-dessous.
   { key: 'plateforme', label: 'Support plateforme', roles: [], superviseurSeulement: true },
@@ -40,6 +41,7 @@ const TAB_ICONS = {
   'parametres-paiement': '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20"/><path d="M6 14h4"/>',
   utilisateurs: '<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="18" cy="9" r="2.6"/><path d="M15.5 14a5.5 5.5 0 0 1 6.5 5.4"/>',
   audit: '<path d="M9 3h6a1 1 0 0 1 1 1v1h1a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h1V4a1 1 0 0 1 1-1Z"/><path d="M9 11h6M9 15h6"/>',
+  'mon-compte': '<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>',
   plateforme: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
 };
 
@@ -350,16 +352,25 @@ function buildShell(user) {
   const tabs = tabsForRole(user);
   const nav = document.getElementById('tabs');
   nav.innerHTML = '';
+  // Durcissement sécurité (migration-20) : un admin dont le compte exige le MFA mais ne l'a pas
+  // encore configuré (mfaSetupRequis, voir POST /auth/login) est confiné à "Mon compte" côté
+  // écran — une aide visuelle seulement, la vraie barrière est côté serveur (requireAuth, auth.js).
+  const mfaSetupRequis = !!user.mfaSetupRequis;
   tabs.forEach((t) => {
     const btn = document.createElement('button');
     btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${TAB_ICONS[t.key] || ''}</svg><span>${t.label}</span>`;
     btn.dataset.key = t.key;
     btn.title = t.label;
-    btn.addEventListener('click', () => selectTab(t.key));
+    if (mfaSetupRequis && t.key !== 'mon-compte') {
+      btn.disabled = true;
+      btn.title = 'Configurez le MFA obligatoire avant de continuer.';
+    } else {
+      btn.addEventListener('click', () => selectTab(t.key));
+    }
     nav.appendChild(btn);
   });
 
-  selectTab(tabs[0]?.key || 'dashboard');
+  selectTab(mfaSetupRequis ? 'mon-compte' : tabs[0]?.key || 'dashboard');
 }
 
 function roleLabel(role) {
@@ -384,22 +395,77 @@ function showLogin() {
   document.getElementById('login-screen').classList.remove('hidden');
 }
 
+// Défi MFA (deuxième étape du login, voir routes/auth.js POST /mfa/verifier) : le challengeToken
+// n'est jamais persisté (localStorage) — il ne vit que le temps de cet échange en mémoire.
+let mfaChallengeToken = null;
+
 document.getElementById('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = new FormData(e.target);
   const errEl = document.getElementById('login-error');
+  const lienRenvoi = document.getElementById('login-renvoyer-verification');
   errEl.classList.add('hidden');
+  lienRenvoi.classList.add('hidden');
   try {
     const data = await Api.post('/auth/login', {
       email: form.get('email'),
       password: form.get('password'),
     });
+    if (data.mfaRequis) {
+      mfaChallengeToken = data.challengeToken;
+      document.getElementById('mfa-challenge-texte').textContent =
+        data.mfaMethode === 'WHATSAPP' ? 'Entrez le code reçu par WhatsApp.' : "Entrez le code de votre application d'authentification.";
+      document.getElementById('login-form').classList.add('hidden');
+      document.getElementById('mfa-challenge-form').classList.remove('hidden');
+      return;
+    }
+    Api.setSession(data.token, data.utilisateur);
+    showApp();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.classList.remove('hidden');
+    if (err.code === 'EMAIL_NON_VERIFIE') {
+      lienRenvoi.classList.remove('hidden');
+    }
+  }
+});
+
+document.getElementById('lien-renvoyer-verification').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const email = document.querySelector('#login-form input[name="email"]').value;
+  const errEl = document.getElementById('login-error');
+  try {
+    const data = await Api.post('/auth/renvoyer-verification', { email });
+    errEl.classList.remove('hidden');
+    errEl.textContent = data.message;
+  } catch (err) {
+    // Non atteignable en pratique (la route répond toujours 200) — filet de sécurité seulement.
+    errEl.classList.remove('hidden');
+    errEl.textContent = err.message;
+  }
+});
+
+document.getElementById('mfa-challenge-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = new FormData(e.target);
+  const errEl = document.getElementById('mfa-challenge-error');
+  errEl.classList.add('hidden');
+  try {
+    const data = await Api.post('/auth/mfa/verifier', { challengeToken: mfaChallengeToken, code: form.get('code') });
+    mfaChallengeToken = null;
     Api.setSession(data.token, data.utilisateur);
     showApp();
   } catch (err) {
     errEl.textContent = err.message;
     errEl.classList.remove('hidden');
   }
+});
+
+document.getElementById('btn-mfa-challenge-annuler').addEventListener('click', () => {
+  mfaChallengeToken = null;
+  document.getElementById('mfa-challenge-form').reset();
+  document.getElementById('mfa-challenge-form').classList.add('hidden');
+  document.getElementById('login-form').classList.remove('hidden');
 });
 
 document.getElementById('btn-logout').addEventListener('click', () => {

@@ -26,8 +26,23 @@
           <input type="password" name="password" required autocomplete="current-password" />
         </label>
         <div id="login-error" class="login-error hidden"></div>
+        <p id="login-renvoyer-verification" class="sub hidden" style="margin-top:-8px;">
+          <a href="#" id="lien-renvoyer-verification">Renvoyer l'email de vérification</a>
+        </p>
         <button type="submit">Se connecter</button>
       </form>
+
+      <!-- Deuxième étape du login quand le compte a le MFA actif (voir routes/auth.js POST /mfa/verifier). -->
+      <form id="mfa-challenge-form" class="hidden">
+        <p class="sub" id="mfa-challenge-texte"></p>
+        <label>Code de vérification
+          <input type="text" name="code" required autocomplete="one-time-code" inputmode="numeric" maxlength="6" />
+        </label>
+        <div id="mfa-challenge-error" class="login-error hidden"></div>
+        <button type="submit">Vérifier</button>
+        <button type="button" class="secondary" id="btn-mfa-challenge-annuler" style="margin-top:8px;">Annuler</button>
+      </form>
+
       <p class="sub" style="margin-top:16px;">Nouveau client ? <a href="/inscription.html">Créer votre ferme</a></p>
       <p class="sub" style="margin-top:4px;"><a href="/decouvrir">En savoir plus sur l'application</a></p>
       <p class="sub" style="margin-top:16px; font-size:0.75rem; opacity:0.6;">FAYSSALAME — Cité Castors Marine III Villa 48, Dakar, Sénégal</p>

@@ -34,7 +34,7 @@ describe('utilisateurs : révocation de session (token_version)', () => {
         await request(app)
             .put(`/api/utilisateurs/${cible.id}/mot-de-passe`)
             .set('Authorization', `Bearer ${tokenAdmin}`)
-            .send({ password: 'nouveau-mdp-2026' });
+            .send({ password: 'Nouveau-mdp-2026!' });
 
         const apres = await pool.query(`SELECT token_version FROM utilisateurs WHERE id = $1`, [cible.id]);
         expect(apres.rows[0].token_version).toBe(cible.token_version + 1);
@@ -79,7 +79,7 @@ describe('utilisateurs : révocation de session (token_version)', () => {
         await request(app)
             .put(`/api/utilisateurs/${cible.id}/mot-de-passe`)
             .set('Authorization', `Bearer ${tokenAdmin}`)
-            .send({ password: 'un-autre-mdp-2026' });
+            .send({ password: 'Un-autre-mdp-2026!' });
 
         const apres = await request(app).get('/api/utilisateurs/').set('Authorization', `Bearer ${jetonAvant}`);
         expect(apres.status).toBe(401);

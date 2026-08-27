@@ -1,7 +1,9 @@
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { logAudit } = require('./audit');
 const { genererSlugUnique } = require('./slug');
-const { nomSecteurValide } = require('./validation');
+const { nomSecteurValide, motDePasseValide, motDePasseErreurs } = require('./validation');
+const email = require('./email');
 
 /**
  * Crée une nouvelle organisation (ferme cliente) + ses secteurs + son premier compte admin, dans
@@ -35,8 +37,15 @@ async function creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, a
     if (!adminNomComplet || !adminEmail || !adminPassword) {
         throw { statut: 400, message: "Nom, email et mot de passe de l'administrateur sont requis." };
     }
-    if (adminPassword.length < 8) {
-        throw { statut: 400, message: 'Le mot de passe doit contenir au moins 8 caractères.' };
+    if (!motDePasseValide(adminPassword)) {
+        throw { statut: 400, message: `Le mot de passe doit contenir ${motDePasseErreurs(adminPassword).join(', ')}.` };
+    }
+    // Durcissement sécurité (migration-20) : la vérification d'email est bloquante pour tout
+    // nouveau compte — créer un admin sans pouvoir lui envoyer le lien de vérification le
+    // laisserait verrouillé hors de son propre compte fraîchement créé. Échec net et explicite
+    // plutôt qu'un compte silencieusement invérifiable (même philosophie que whatsapp.js).
+    if (!email.estConfigure()) {
+        throw { statut: 503, message: 'Vérification email indisponible pour le moment. Contactez le support.' };
     }
 
     const client = await pool.connect();
@@ -78,10 +87,18 @@ async function creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, a
         if (roleRes.rows.length === 0) throw new Error("Rôle 'admin' introuvable — la base n'est pas correctement initialisée.");
 
         const hash = await bcrypt.hash(adminPassword, 10);
+        // Durcissement sécurité (migration-20) : cette fonction ne crée que des admins (premier
+        // compte d'une nouvelle organisation) — email_verifie=FALSE et mfa_obligatoire=TRUE sont
+        // donc posés inconditionnellement ici, jamais hérités d'un défaut de colonne. Token de
+        // vérification en clair envoyé par email, seul son hash SHA-256 est stocké (voir email.js).
+        const tokenVerification = crypto.randomBytes(32).toString('hex');
+        const tokenVerificationHash = crypto.createHash('sha256').update(tokenVerification).digest('hex');
         const userRes = await client.query(
-            `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, actif)
-             VALUES ($1, $2, $3, $4, $5, TRUE) RETURNING id, nom_complet, email, secteur_id, tenant_id, token_version`,
-            [tenantId, adminNomComplet.trim(), adminEmail.trim().toLowerCase(), hash, roleRes.rows[0].id]
+            `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, actif,
+                                        email_verifie, email_verification_token_hash, email_verification_expire_le, mfa_obligatoire)
+             VALUES ($1, $2, $3, $4, $5, TRUE, FALSE, $6, now() + interval '24 hours', TRUE)
+             RETURNING id, nom_complet, email, secteur_id, tenant_id, token_version`,
+            [tenantId, adminNomComplet.trim(), adminEmail.trim().toLowerCase(), hash, roleRes.rows[0].id, tokenVerificationHash]
         );
         const admin = userRes.rows[0];
 
@@ -95,6 +112,16 @@ async function creerNouvelleFerme(pool, { nomFerme, secteurs, adminNomComplet, a
         });
 
         await client.query('COMMIT');
+
+        // Envoi APRÈS le COMMIT (jamais dans la transaction — appel HTTP externe). Échec non
+        // bloquant : l'organisation et l'admin existent déjà, l'utilisateur pourra toujours
+        // redemander un email via POST /auth/renvoyer-verification.
+        try {
+            await email.envoyerEmailVerification(admin.email, admin.nom_complet, tokenVerification);
+        } catch (err) {
+            console.error("Échec de l'envoi de l'email de vérification lors de la création de la ferme :", err);
+        }
+
         return { tenantId, admin, nomFerme: nomFerme.trim(), slug };
     } catch (err) {
         await client.query('ROLLBACK').catch(() => {});

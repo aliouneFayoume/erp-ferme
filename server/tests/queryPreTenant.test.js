@@ -51,7 +51,7 @@ describe('queryPreTenant — robustesse face à un contexte tenant résiduel', (
         const roleRes = await pool.query(`SELECT id FROM roles WHERE nom = 'admin'`);
         const hash = await bcrypt.hash('motdepasse123', 4);
         await pool.query(
-            `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, actif) VALUES ($1, 'Admin B', 'admin-b@test.sn', $2, $3, TRUE)`,
+            `INSERT INTO utilisateurs (tenant_id, nom_complet, email, mot_de_passe_hash, role_id, actif, email_verifie) VALUES ($1, 'Admin B', 'admin-b@test.sn', $2, $3, TRUE, TRUE)`,
             [tenantB, hash, roleRes.rows[0].id]
         );
         // Contexte résiduel pointant vers la MAUVAISE organisation (A, pas B où est le compte).

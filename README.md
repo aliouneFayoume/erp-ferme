@@ -55,6 +55,13 @@ WHATSAPP_PHONE_NUMBER_ID=...
 # toucher au code (voir server/src/whatsapp.js).
 WHATSAPP_TEMPLATE_NOM=hello_world
 WHATSAPP_TEMPLATE_LANGUE=en_US
+
+# Vérification d'adresse email à l'inscription/création d'utilisateur (obligatoire — sans ces
+# clés, la création de tout nouveau compte échoue proprement en 503 plutôt que de créer un compte
+# invérifiable). Nécessite un domaine vérifié côté Resend (DNS SPF/DKIM sur massla.sn).
+RESEND_API_KEY=...
+RESEND_FROM_EMAIL=ERP Ferme Massla <no-reply@massla.sn>
+APP_BASE_URL=https://massla.sn
 ```
 
 ⚠️ Utiliser la chaîne de connexion **pooler** (`*.pooler.supabase.com`), pas la connexion directe

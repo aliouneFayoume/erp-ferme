@@ -1,0 +1,54 @@
+// Envoi d'email transactionnel via Resend — vérification d'adresse email (migration-20). Même
+// philosophie que whatsapp.js/paydunya.js : une intégration non configurée échoue proprement
+// (erreur claire) plutôt que d'échouer silencieusement ou de simuler un envoi.
+const RESEND_API = 'https://api.resend.com/emails';
+// Même raisonnement que whatsapp.js/paydunya.js : pas de timeout par défaut sur fetch, un Resend
+// muet bloquerait indéfiniment la requête d'inscription/création d'utilisateur.
+const DELAI_MAX_MS = 10000;
+
+function lireConfig() {
+    return {
+        apiKey: process.env.RESEND_API_KEY,
+        // ex: "ERP Ferme Massla <no-reply@massla.sn>" — nécessite un domaine vérifié côté Resend.
+        from: process.env.RESEND_FROM_EMAIL,
+        baseUrl: process.env.APP_BASE_URL || 'http://localhost:4000',
+    };
+}
+
+function estConfigure() {
+    const { apiKey, from } = lireConfig();
+    return !!(apiKey && from);
+}
+
+async function envoyerEmailVerification(email, nomComplet, token) {
+    const { apiKey, from, baseUrl } = lireConfig();
+    if (!apiKey || !from) {
+        throw new Error("Intégration email non configurée (RESEND_API_KEY / RESEND_FROM_EMAIL manquants).");
+    }
+    const lien = `${baseUrl}/verifier-email.html?token=${encodeURIComponent(token)}`;
+    const res = await fetch(RESEND_API, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(DELAI_MAX_MS),
+        body: JSON.stringify({
+            from,
+            to: [email],
+            subject: 'Vérifiez votre adresse email — ERP Ferme',
+            html: `<p>Bonjour ${nomComplet},</p><p>Cliquez sur ce lien pour activer votre compte : <a href="${lien}">${lien}</a></p><p>Ce lien expire dans 24h.</p>`,
+        }),
+    });
+
+    let data = null;
+    try {
+        data = await res.json();
+    } catch (e) {
+        data = null;
+    }
+    if (!res.ok) {
+        const message = data?.message || `Erreur HTTP ${res.status}`;
+        throw new Error(`Échec de l'envoi de l'email de vérification : ${message}`);
+    }
+    return data;
+}
+
+module.exports = { envoyerEmailVerification, estConfigure };

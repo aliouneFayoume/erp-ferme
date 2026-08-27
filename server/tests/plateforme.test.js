@@ -4,6 +4,14 @@ const { createTestPool, buildApp, seedRolesEtSecteurs, creerOrganisation, creerU
 jest.mock('../src/whatsapp');
 const { envoyerMessageWhatsapp } = require('../src/whatsapp');
 
+// Durcissement sécurité (migration-20) : creerFerme.js (utilisé par POST /organisations) refuse de
+// créer un compte si l'envoi de l'email de vérification n'est pas configuré — jamais de vrai appel
+// réseau vers Resend en test.
+jest.mock('../src/email', () => ({
+    estConfigure: () => true,
+    envoyerEmailVerification: jest.fn().mockResolvedValue({}),
+}));
+
 async function creerTicket(pool, tenantId, clientId, overrides = {}) {
     const t = { sujet: 'Ticket Test', statut: 'OUVERT', ...overrides };
     const res = await pool.query(
@@ -159,7 +167,7 @@ describe('plateforme — création directe de ferme', () => {
             secteurs: [{ nom: 'Avicole', suiviRecolte: false }],
             adminNomComplet: 'Nouvel Admin',
             adminEmail: `nouvel-admin-${Date.now()}@test.sn`,
-            adminPassword: 'motdepasse123',
+            adminPassword: 'Motdepasse123!',
             ...overrides,
         };
     }
