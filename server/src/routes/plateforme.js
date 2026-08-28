@@ -4,6 +4,7 @@ const { logAudit } = require('../audit');
 const { SOCLE_ESSENTIEL, MODULES_SAAS, PACK_TOUT_COMPRIS, FRAIS_CONFIGURATION_DEFAUT } = require('../modulesSaas');
 const { creerNouvelleFerme } = require('../creerFerme');
 const { envoyerMessageWhatsapp } = require('../whatsapp');
+const { envoyerEmailRappelSaas } = require('../email');
 const { nomSecteurValide } = require('../validation');
 
 function dansNJours(n) {
@@ -516,6 +517,55 @@ module.exports = function plateformeRoutes(pool) {
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: err.message || "Erreur lors de l'envoi du rappel WhatsApp." });
+        }
+    });
+
+    /**
+     * Relance de facture SaaS par email (server/src/email.js) — alternative à la relance WhatsApp
+     * ci-dessus tant que le numéro WhatsApp Business de la plateforme reste bloqué (voir mémoire
+     * erp_ferme_whatsapp_status). Envoyée à tous les admins actifs de la ferme cliente : leur email
+     * est déjà connu (utilisateurs.email), pas besoin d'un telephone_contact configuré à part.
+     */
+    router.post('/factures-saas/:id/rappel-email', ...garde, async (req, res) => {
+        try {
+            const factureRes = await req.db.query(
+                `SELECT f.id, f.montant, f.type, f.date_echeance, f.tenant_id, o.nom as organisation_nom
+                 FROM factures_saas f
+                 JOIN organisations o ON f.tenant_id = o.id
+                 WHERE f.id = $1`,
+                [req.params.id]
+            );
+            if (factureRes.rows.length === 0) return res.status(404).json({ erreur: 'Facture introuvable.' });
+            const facture = factureRes.rows[0];
+
+            const adminsRes = await req.db.query(
+                `SELECT u.email FROM utilisateurs u JOIN roles r ON u.role_id = r.id
+                 WHERE u.tenant_id = $1 AND r.nom = 'admin' AND u.actif = TRUE AND u.deleted_at IS NULL`,
+                [facture.tenant_id]
+            );
+            const emails = adminsRes.rows.map((r) => r.email);
+            if (emails.length === 0) {
+                return res.status(400).json({ erreur: "Aucun administrateur actif trouvé pour cette ferme." });
+            }
+
+            await envoyerEmailRappelSaas(emails, {
+                organisationNom: facture.organisation_nom,
+                montant: facture.montant,
+                dateEcheance: facture.date_echeance,
+                type: facture.type,
+            });
+            await logAudit(req.db, { req,
+                table: 'factures_saas',
+                rowId: facture.id,
+                action: 'RAPPEL_EMAIL',
+                userId: req.user.id,
+                tenantId: facture.tenant_id,
+                details: { montant: facture.montant, emails, superviseur: req.user.nom },
+            });
+            res.json({ envoye: true });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: err.message || "Erreur lors de l'envoi du rappel par email." });
         }
     });
 

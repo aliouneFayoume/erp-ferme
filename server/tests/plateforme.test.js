@@ -10,7 +10,9 @@ const { envoyerMessageWhatsapp } = require('../src/whatsapp');
 jest.mock('../src/email', () => ({
     estConfigure: () => true,
     envoyerEmailVerification: jest.fn().mockResolvedValue({}),
+    envoyerEmailRappelSaas: jest.fn(),
 }));
+const { envoyerEmailRappelSaas } = require('../src/email');
 
 async function creerTicket(pool, tenantId, clientId, overrides = {}) {
     const t = { sujet: 'Ticket Test', statut: 'OUVERT', ...overrides };
@@ -645,5 +647,94 @@ describe('plateforme — relance de facture SaaS par WhatsApp', () => {
 
         expect(res.status).toBe(200);
         expect(res.body.telephone_contact).toBe('+221781112233');
+    });
+});
+
+describe('plateforme — relance de facture SaaS par email', () => {
+    let pool;
+    let app;
+    let tenantA;
+    let tokenSuperviseur;
+    let tokenAdminNormal;
+
+    beforeEach(async () => {
+        jest.clearAllMocks();
+        pool = createTestPool();
+        await seedRolesEtSecteurs(pool);
+        tenantA = await creerOrganisation(pool, 'Ferme A');
+        tokenSuperviseur = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantA, estSuperviseurPlateforme: true });
+        tokenAdminNormal = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantA, estSuperviseurPlateforme: false });
+        app = buildApp(pool, ['plateforme']);
+    });
+
+    afterEach(async () => {
+        await pool.end();
+    });
+
+    async function creerFacture() {
+        const facture = await pool.query(
+            `INSERT INTO factures_saas (tenant_id, type, montant, statut, date_echeance) VALUES ($1, 'ABONNEMENT', 40000, 'EN_RETARD', CURRENT_DATE) RETURNING id`,
+            [tenantA]
+        );
+        return facture.rows[0].id;
+    }
+
+    test('envoie un rappel email à tous les administrateurs actifs de la ferme', async () => {
+        envoyerEmailRappelSaas.mockResolvedValue({});
+        const factureId = await creerFacture();
+        const emailsRes = await pool.query('SELECT email FROM utilisateurs WHERE tenant_id = $1', [tenantA]);
+        const emailsAttendus = emailsRes.rows.map((r) => r.email).sort();
+
+        const res = await request(app)
+            .post(`/api/plateforme/factures-saas/${factureId}/rappel-email`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.envoye).toBe(true);
+        expect(envoyerEmailRappelSaas).toHaveBeenCalledTimes(1);
+        const [emailsEnvoyes] = envoyerEmailRappelSaas.mock.calls[0];
+        expect(emailsEnvoyes.slice().sort()).toEqual(emailsAttendus);
+    });
+
+    test("renvoie 400 si aucun administrateur actif n'existe pour la ferme ciblée", async () => {
+        const tenantB = await creerOrganisation(pool, 'Ferme B');
+        const tokenSuperviseurExterne = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantB, estSuperviseurPlateforme: true });
+        await pool.query(`UPDATE utilisateurs SET actif = FALSE WHERE tenant_id = $1`, [tenantA]);
+        const factureId = await creerFacture();
+
+        const res = await request(app)
+            .post(`/api/plateforme/factures-saas/${factureId}/rappel-email`)
+            .set('Authorization', `Bearer ${tokenSuperviseurExterne}`);
+
+        expect(res.status).toBe(400);
+        expect(envoyerEmailRappelSaas).not.toHaveBeenCalled();
+    });
+
+    test('renvoie 404 pour une facture inexistante', async () => {
+        const res = await request(app)
+            .post(`/api/plateforme/factures-saas/999999/rappel-email`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`);
+        expect(res.status).toBe(404);
+    });
+
+    test("propage l'erreur si l'envoi échoue", async () => {
+        envoyerEmailRappelSaas.mockRejectedValue(new Error('Intégration email non configurée (RESEND_API_KEY / RESEND_FROM_EMAIL manquants).'));
+        const factureId = await creerFacture();
+
+        const res = await request(app)
+            .post(`/api/plateforme/factures-saas/${factureId}/rappel-email`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`);
+
+        expect(res.status).toBe(500);
+        expect(res.body.erreur).toBe('Intégration email non configurée (RESEND_API_KEY / RESEND_FROM_EMAIL manquants).');
+    });
+
+    test('un admin sans le flag superviseur ne peut pas envoyer de rappel', async () => {
+        const factureId = await creerFacture();
+        const res = await request(app)
+            .post(`/api/plateforme/factures-saas/${factureId}/rappel-email`)
+            .set('Authorization', `Bearer ${tokenAdminNormal}`);
+        expect(res.status).toBe(403);
+        expect(envoyerEmailRappelSaas).not.toHaveBeenCalled();
     });
 });

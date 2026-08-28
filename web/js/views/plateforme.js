@@ -300,7 +300,8 @@ function renderLignesFacturesSaas(factures) {
         <td style="white-space:nowrap">${
           f.statut === 'A_PAYER' || f.statut === 'EN_RETARD'
             ? `<button class="secondary" data-marquer-payee="${f.id}">Marquer payée</button>
-               <button class="secondary" data-rappel-whatsapp="${f.id}">Envoyer un rappel WhatsApp</button>`
+               <button class="secondary" data-rappel-whatsapp="${f.id}">Envoyer un rappel WhatsApp</button>
+               <button class="secondary" data-rappel-email="${f.id}">Envoyer un rappel email</button>`
             : ''
         }</td>
       </tr>`
@@ -315,6 +316,9 @@ function attacherActionsFactures(scope, factures, container) {
   scope.querySelectorAll('button[data-rappel-whatsapp]').forEach((btn) => {
     btn.addEventListener('click', () => envoyerRappelWhatsapp(btn));
   });
+  scope.querySelectorAll('button[data-rappel-email]').forEach((btn) => {
+    btn.addEventListener('click', () => envoyerRappelEmail(btn));
+  });
 }
 
 async function envoyerRappelWhatsapp(btn) {
@@ -325,6 +329,22 @@ async function envoyerRappelWhatsapp(btn) {
   try {
     await Api.post(`/plateforme/factures-saas/${factureId}/rappel-whatsapp`, {});
     showToast('Rappel WhatsApp envoyé.', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = texteOriginal;
+  }
+}
+
+async function envoyerRappelEmail(btn) {
+  const factureId = btn.dataset.rappelEmail;
+  btn.disabled = true;
+  const texteOriginal = btn.textContent;
+  btn.textContent = 'Envoi…';
+  try {
+    await Api.post(`/plateforme/factures-saas/${factureId}/rappel-email`, {});
+    showToast('Rappel email envoyé.', 'success');
   } catch (err) {
     showToast(err.message, 'error');
   } finally {

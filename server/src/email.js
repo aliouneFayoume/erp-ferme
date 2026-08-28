@@ -61,4 +61,45 @@ async function envoyerEmailVerification(email, nomComplet, token) {
     return data;
 }
 
-module.exports = { envoyerEmailVerification, estConfigure };
+// Relance de facture SaaS par email — alternative à envoyerMessageWhatsapp (routes/plateforme.js)
+// tant que le numéro WhatsApp Business de la plateforme reste bloqué (voir mémoire
+// erp_ferme_whatsapp_status). Envoyée à tous les admins actifs de la ferme cliente : leur email
+// est déjà connu (utilisateurs.email), contrairement au numéro WhatsApp qui doit être saisi à part
+// dans organisation_abonnement_saas.telephone_contact.
+async function envoyerEmailRappelSaas(emails, { organisationNom, montant, dateEcheance, type }) {
+    const { apiKey, from } = lireConfig();
+    if (!apiKey || !from) {
+        throw new Error("Intégration email non configurée (RESEND_API_KEY / RESEND_FROM_EMAIL manquants).");
+    }
+    if (!emails || emails.length === 0) {
+        throw new Error('Aucun email administrateur trouvé pour cette organisation.');
+    }
+    const montantFormate = `${Number(montant).toLocaleString('fr-FR')} FCFA`;
+    const echeanceFormatee = new Date(dateEcheance).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    const libelleType = type === 'CONFIGURATION' ? 'de configuration' : "d'abonnement";
+    const res = await fetch(RESEND_API, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(DELAI_MAX_MS),
+        body: JSON.stringify({
+            from,
+            to: emails,
+            subject: `Facture ${libelleType} en attente — ${echapperHtml(organisationNom)}`,
+            html: `<p>Bonjour,</p><p>Votre facture ${libelleType} de <strong>${montantFormate}</strong> pour ${echapperHtml(organisationNom)} est à régler (échéance : ${echeanceFormatee}).</p><p>Merci de contacter votre interlocuteur habituel pour effectuer le règlement.</p>`,
+        }),
+    });
+
+    let data = null;
+    try {
+        data = await res.json();
+    } catch (e) {
+        data = null;
+    }
+    if (!res.ok) {
+        const message = data?.message || `Erreur HTTP ${res.status}`;
+        throw new Error(`Échec de l'envoi de l'email de rappel : ${message}`);
+    }
+    return data;
+}
+
+module.exports = { envoyerEmailVerification, envoyerEmailRappelSaas, estConfigure };
