@@ -3,19 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gestion de ferme avicole, piscicole et maraîchère au Sénégal — ERP Ferme</title>
-  <meta name="description" content="Logiciel de gestion pour fermes avicoles, piscicoles et maraîchères au Sénégal. Suivi de production et stock, paiement Wave/Orange Money, rappels WhatsApp, fonctionne hors ligne. Démonstration gratuite." />
+  <title>Gestion de ferme avicole, piscicole, maraîchère et d'élevage au Sénégal — ERP Ferme</title>
+  <meta name="description" content="Logiciel de gestion pour fermes avicoles, piscicoles, maraîchères et d'élevage au Sénégal. Suivi de production et stock, paiement Wave/Orange Money, rappels WhatsApp, fonctionne hors ligne. Démonstration gratuite." />
   <link rel="canonical" href="https://massla.sn/decouvrir" />
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="fr_SN" />
-  <meta property="og:title" content="Gestion de ferme avicole, piscicole et maraîchère au Sénégal — ERP Ferme" />
+  <meta property="og:title" content="Gestion de ferme avicole, piscicole, maraîchère et d'élevage au Sénégal — ERP Ferme" />
   <meta property="og:description" content="Suivez votre production, votre stock et vos paiements depuis votre téléphone, même sans connexion internet. Wave, Orange Money et rappels WhatsApp intégrés." />
   <meta property="og:url" content="https://massla.sn/decouvrir" />
   <meta property="og:image" content="https://massla.sn/icons/og-image.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:image:type" content="image/png" />
-  <meta property="og:image:alt" content="ERP Ferme Massla — gestion de ferme avicole, piscicole et maraîchère au Sénégal" />
+  <meta property="og:image:alt" content="ERP Ferme Massla — gestion de ferme avicole, piscicole, maraîchère et d'élevage au Sénégal" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:image" content="https://massla.sn/icons/og-image.png" />
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
@@ -39,6 +39,8 @@
     --piscicole-tint: #E4EFEE;
     --maraicher: #5B8C3A;
     --maraicher-tint: #EBF1E4;
+    --elevage: #8C5A3B;
+    --elevage-tint: #F1E6DD;
     --success: #2E7D46;
     --shadow: 0 1px 2px rgba(26, 26, 26, 0.05), 0 10px 28px rgba(26, 26, 26, 0.06);
     --display: "Avenir Next", "Century Gothic", "Futura", -apple-system, "Segoe UI", sans-serif;
@@ -62,6 +64,8 @@
     --piscicole-tint: #1B2B2A;
     --maraicher: #8FBE68;
     --maraicher-tint: #212D1B;
+    --elevage: #D9A87C;
+    --elevage-tint: #332318;
     --success: #6FBE86;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px rgba(0, 0, 0, 0.35);
   }
@@ -84,6 +88,8 @@
       --piscicole-tint: #1B2B2A;
       --maraicher: #8FBE68;
       --maraicher-tint: #212D1B;
+      --elevage: #D9A87C;
+      --elevage-tint: #332318;
       --success: #6FBE86;
       --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px rgba(0, 0, 0, 0.35);
     }
@@ -177,6 +183,7 @@
   .sector-pill.avicole { background: var(--avicole-tint); color: var(--avicole); }
   .sector-pill.piscicole { background: var(--piscicole-tint); color: var(--piscicole); }
   .sector-pill.maraicher { background: var(--maraicher-tint); color: var(--maraicher); }
+  .sector-pill.elevage { background: var(--elevage-tint); color: var(--elevage); }
 
   section { padding: 3.4rem 0; border-top: 1px solid var(--border); }
   .section-label {
@@ -207,6 +214,7 @@
   .sector-card.avicole .band { background: var(--avicole); }
   .sector-card.piscicole .band { background: var(--piscicole); }
   .sector-card.maraicher .band { background: var(--maraicher); }
+  .sector-card.elevage .band { background: var(--elevage); }
   .sector-card-body { padding: 1.4rem 1.5rem; }
   .sector-card h3 {
     font-family: var(--display); font-size: 1.15rem; font-weight: 700; margin: 0 0 0.7rem;
@@ -214,6 +222,7 @@
   .sector-card.avicole h3 { color: var(--avicole); }
   .sector-card.piscicole h3 { color: var(--piscicole); }
   .sector-card.maraicher h3 { color: var(--maraicher); }
+  .sector-card.elevage h3 { color: var(--elevage); }
   .sector-card ul { margin: 0; padding-left: 1.1rem; }
   .sector-card li { font-size: 0.92rem; color: var(--muted); margin-bottom: 0.4rem; }
   .sector-card li::marker { color: inherit; }
@@ -339,7 +348,7 @@
   <section class="hero" style="border-top:none;">
     <span class="eyebrow">Gestion de ferme au Sénégal</span>
     <h1>Le logiciel de gestion pensé pour les fermes <em>sénégalaises</em></h1>
-    <p class="lede">Avicole, piscicole, maraîcher — suivez votre production, votre stock et vos paiements depuis votre téléphone, même sans connexion internet stable. Encaissez par Wave et Orange Money, relancez vos clients par WhatsApp, automatiquement.</p>
+    <p class="lede">Avicole, piscicole, maraîcher, élevage — suivez votre production, votre stock et vos paiements depuis votre téléphone, même sans connexion internet stable. Encaissez par Wave et Orange Money, relancez vos clients par WhatsApp, automatiquement.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#contact" data-track="clic_cta_hero">Demander une démonstration gratuite</a>
       <a class="btn btn-ghost" href="#tarifs">Voir les tarifs</a>
@@ -349,6 +358,7 @@
       <span class="sector-pill avicole">Aviculture</span>
       <span class="sector-pill piscicole">Pisciculture</span>
       <span class="sector-pill maraicher">Maraîchage</span>
+      <span class="sector-pill elevage">Élevage</span>
     </div>
   </section>
 
@@ -367,7 +377,7 @@
   <section id="secteurs">
     <p class="section-label">La solution</p>
     <h2>Un outil de gestion agricole adapté à chaque secteur</h2>
-    <p class="section-lede">Pas un logiciel générique importé : chaque module est construit autour des besoins réels d'une ferme avicole, piscicole ou maraîchère au Sénégal.</p>
+    <p class="section-lede">Pas un logiciel générique importé : chaque module est construit autour des besoins réels d'une ferme avicole, piscicole, maraîchère ou d'élevage au Sénégal.</p>
     <div class="sector-grid">
       <div class="sector-card avicole">
         <div class="band"></div>
@@ -402,6 +412,17 @@
           </ul>
         </div>
       </div>
+      <div class="sector-card elevage">
+        <div class="band"></div>
+        <div class="sector-card-body">
+          <h3>Gestion d'élevage</h3>
+          <ul>
+            <li>Suivi individuel bovins, ovins et caprins</li>
+            <li>Généalogie et reproduction sur plusieurs générations</li>
+            <li>Historique complet par animal : santé, poids, mouvements</li>
+          </ul>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -425,6 +446,7 @@
       <div class="feature-card"><div class="feature-icon">☰</div><div><h4>Tableau de bord en temps réel</h4><p>Production, stock et finances visibles d'un coup d'œil, à jour à chaque instant.</p></div></div>
       <div class="feature-card"><div class="feature-icon">◎</div><div><h4>Toute votre équipe connectée</h4><p>Chaque employé voit la même information, même en votre absence de la ferme.</p></div></div>
       <div class="feature-card"><div class="feature-icon">＋</div><div><h4>Modules à la carte</h4><p>Activez uniquement ce dont votre ferme a besoin aujourd'hui, ajoutez le reste plus tard.</p></div></div>
+      <div class="feature-card"><div class="feature-icon">🔒</div><div><h4>Comptes sécurisés</h4><p>Mot de passe renforcé, vérification d'email et authentification à deux facteurs pour protéger vos données.</p></div></div>
     </div>
   </section>
 
@@ -483,7 +505,7 @@
 
     <details open>
       <summary>Quel est le meilleur logiciel de gestion pour une ferme au Sénégal ?</summary>
-      <p>Le meilleur outil est celui construit pour votre réalité de terrain, pas un logiciel générique importé. ERP Ferme est pensé spécifiquement pour les fermes avicoles, piscicoles et maraîchères sénégalaises, avec paiement mobile local et fonctionnement hors ligne.</p>
+      <p>Le meilleur outil est celui construit pour votre réalité de terrain, pas un logiciel générique importé. ERP Ferme est pensé spécifiquement pour les fermes avicoles, piscicoles, maraîchères et d'élevage sénégalaises, avec paiement mobile local et fonctionnement hors ligne.</p>
     </details>
 
     <details>
@@ -503,7 +525,12 @@
 
     <details>
       <summary>Combien coûte un logiciel de gestion agricole au Sénégal ?</summary>
-      <p>À partir de 25 000 FCFA par mois pour les fonctions essentielles, avec des modules additionnels entre 5 000 et 15 000 FCFA selon vos besoins, ou un pack tout compris à 85 000 FCFA par mois. Une mise en place unique de 75 000 FCFA est facturée au démarrage.</p>
+      <p>À partir de 25 000 FCFA par mois pour le Socle Essentiel (production, stock, tableau de bord), avec des modules additionnels selon vos besoins : Clients &amp; Abonnements, Commandes &amp; Fournisseurs, Comptabilité et Paie à 10 000 FCFA chacun, Support client à 5 000 FCFA, Logistique, Finance (paiement mobile) et Élevage à 15 000 FCFA chacun — ou un pack tout compris à 85 000 FCFA par mois avec tous les modules inclus. Une mise en place unique de 75 000 FCFA est facturée au démarrage.</p>
+    </details>
+
+    <details>
+      <summary>Mes données sont-elles en sécurité ?</summary>
+      <p>Oui. Chaque ferme a ses propres données, totalement isolées des autres fermes clientes au niveau de la base de données. Les comptes sont protégés par un mot de passe renforcé obligatoire, une vérification d'adresse email, et une authentification à deux facteurs disponible pour les comptes administrateurs.</p>
     </details>
 
     <details>
@@ -523,7 +550,7 @@
     <div class="final-cta">
       <h2>Voyez l'application tourner sur votre propre téléphone</h2>
       <p>Une démonstration gratuite de 15 minutes, sans engagement — le même outil utilisé chaque jour par la Ferme Massla.</p>
-      <a class="btn btn-primary" href="https://wa.me/221777786980" target="_blank" rel="noopener" data-track="contact_whatsapp">Écrire sur WhatsApp</a>
+      <a class="btn btn-primary" href="https://wa.me/14165266293" target="_blank" rel="noopener" data-track="contact_whatsapp">Écrire sur WhatsApp</a>
     </div>
   </section>
 
@@ -532,7 +559,7 @@
 <footer>
   <div class="wrap footer-row">
     <div class="logo">ERP <span>Ferme</span></div>
-    <p class="fine">Gestion de ferme avicole, piscicole et maraîchère — Sénégal</p>
+    <p class="fine">Gestion de ferme avicole, piscicole, maraîchère et d'élevage — Sénégal</p>
   </div>
   <div class="wrap">
     <p class="fine">FAYSSALAME — Cité Castors Marine III Villa 48, Dakar, Sénégal</p>
