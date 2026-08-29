@@ -16,7 +16,7 @@ window.Views['parametres-paiement'] = {
           définissent le dépôt de départ des tournées de livraison (module Logistique) — sans elles,
           un dépôt par défaut est utilisé.
         </p>
-        <form id="form-ferme" class="form-grid">
+        <form id="form-ferme" class="form-grid" autocomplete="off">
           <label>Adresse<input type="text" name="adresse" value="${esc(infoFerme.adresse || '')}" placeholder="Ex : Route de Diamniadio, Dakar" /></label>
           <label>Téléphone<input type="text" name="telephone" value="${esc(infoFerme.telephone || '')}" placeholder="Ex : 77 123 45 67" /></label>
           <label>Latitude du dépôt<input type="text" name="gps_lat" value="${esc(infoFerme.gps_lat ?? '')}" placeholder="Ex : 14.7247" /></label>
@@ -41,7 +41,7 @@ window.Views['parametres-paiement'] = {
               : `<span class="badge warn">Non configuré — les paiements PayDunya sont désactivés</span>`
           }
         </p>
-        <form id="form-paiement" class="form-grid">
+        <form id="form-paiement" class="form-grid" autocomplete="off">
           <label>Mode
             <select name="mode">
               <option value="test" ${config.mode === 'test' || !config.mode ? 'selected' : ''}>Test (sandbox)</option>
@@ -77,7 +77,7 @@ window.Views['parametres-paiement'] = {
               : `<span class="badge warn">Non configuré — les rappels WhatsApp sont désactivés pour vos clients</span>`
           }
         </p>
-        <form id="form-whatsapp" class="form-grid">
+        <form id="form-whatsapp" class="form-grid" autocomplete="off">
           <label>Jeton d'accès (Access Token)<input type="password" name="access_token" autocomplete="off" required /></label>
           <label>ID du numéro de téléphone (Phone Number ID)<input type="text" name="phone_number_id" autocomplete="off" required /></label>
           <button type="submit">${configWhatsapp.configure ? 'Remplacer les identifiants' : 'Enregistrer'}</button>

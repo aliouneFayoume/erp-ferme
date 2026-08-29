@@ -11,7 +11,7 @@ window.Views.tickets = {
     container.innerHTML = `
       <div class="panel">
         <h2>Nouveau ticket</h2>
-        <form id="form-ticket" class="form-grid">
+        <form id="form-ticket" class="form-grid" autocomplete="off">
           <label>Client
             <select name="client_id" required>
               <option value="">— Choisir —</option>
@@ -143,7 +143,7 @@ async function ouvrirTicket(container, ticket) {
               : '<p class="empty">Aucun échange pour l\'instant.</p>'
           }
         </div>
-        <form id="form-message" class="form-grid">
+        <form id="form-message" class="form-grid" autocomplete="off">
           <label class="span-2">Ajouter un message<textarea name="message" rows="2" required></textarea></label>
         </form>
         <div class="modal-actions">

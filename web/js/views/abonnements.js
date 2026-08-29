@@ -14,7 +14,7 @@ window.Views.abonnements = {
       <div class="panel">
         <h2>Nouvel abonnement (panier récurrent B2C)</h2>
         <p class="desc">Gestion des paniers récurrents et paiements associés — le client reçoit automatiquement le même produit chaque semaine/quinzaine/mois.</p>
-        <form id="form-abonnement" class="form-grid">
+        <form id="form-abonnement" class="form-grid" autocomplete="off">
           <label>Client
             <select name="client_id" required>${clients.map((c) => `<option value="${c.id}">${esc(c.nom)}</option>`).join('')}</select>
           </label>

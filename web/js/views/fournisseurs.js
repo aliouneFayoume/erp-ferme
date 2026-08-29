@@ -25,7 +25,7 @@ window.Views.fournisseurs = {
 
       <div class="panel">
         <h2>Nouveau fournisseur</h2>
-        <form id="form-fournisseur" class="form-grid">
+        <form id="form-fournisseur" class="form-grid" autocomplete="off">
           <label>Nom<input type="text" name="nom" required /></label>
           <label>Catégorie
             <select name="categorie">

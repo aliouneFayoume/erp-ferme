@@ -11,7 +11,7 @@ window.Views.catalogue = {
           ? `<div class="panel">
               <h2>Nouveau produit</h2>
               <p class="desc">Grille tarifaire à 3 niveaux : standard (B2C), restaurant (B2B), grossiste (B2B gros volumes).</p>
-              <form id="form-produit" class="form-grid">
+              <form id="form-produit" class="form-grid" autocomplete="off">
                 <label>Secteur
                   <select name="secteur_id" required>${secteurs.map((s) => `<option value="${s.id}">${esc(s.nom)}</option>`).join('')}</select>
                 </label>

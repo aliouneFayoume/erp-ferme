@@ -9,7 +9,7 @@ window.Views.clients = {
       <div class="panel">
         <h2>Nouveau client</h2>
         <p class="desc">Un point GPS précis est obligatoire (cliquez sur la carte pour le définir) — pas d'adresse textuelle seule.</p>
-        <form id="form-client" class="form-grid">
+        <form id="form-client" class="form-grid" autocomplete="off">
           <label>Nom<input type="text" name="nom" required /></label>
           <label>Type
             <select name="type_client" required>

@@ -47,7 +47,7 @@ window.Views.elevage = {
       <div class="panel">
         <h2>Nouvel animal</h2>
         <p class="desc" style="margin-bottom:0">Enregistrer un animal acheté ou né sur la ferme</p>
-        <form id="form-animal" class="form-grid">
+        <form id="form-animal" class="form-grid" autocomplete="off">
           <label>Secteur
             <select name="secteur_id" id="select-secteur-animal" required>
               ${secteursAutorises.map((s) => `<option value="${s.id}">${esc(s.nom)}</option>`).join('')}
@@ -355,7 +355,7 @@ async function openAnimalPanel(container, animalId) {
 
     ${
       animal.statut === 'VIVANT'
-        ? `<form id="form-releve" class="form-grid" style="margin-top:16px">
+        ? `<form id="form-releve" class="form-grid" autocomplete="off" style="margin-top:16px">
             <label>Date<input type="date" name="date_releve" required value="${new Date().toISOString().slice(0, 10)}" /></label>
             <label>Type
               <select name="type_evenement" id="select-type-releve">

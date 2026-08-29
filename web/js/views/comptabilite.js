@@ -168,7 +168,7 @@ window.Views.comptabilite = {
 
       <div class="panel">
         <h2>Nouvelle dépense</h2>
-        <form id="form-depense" class="form-grid">
+        <form id="form-depense" class="form-grid" autocomplete="off">
           <label>Pôle (optionnel)
             <select name="secteur_id">
               <option value="">Général</option>
@@ -220,7 +220,7 @@ window.Views.comptabilite = {
       <div class="panel">
         <h2>Immobilisations</h2>
         <p class="desc">Matériel de la ferme : inventaire, entretien, et amortissement des équipements achetés.</p>
-        <form id="form-equipement" class="form-grid">
+        <form id="form-equipement" class="form-grid" autocomplete="off">
           <label>Nom<input type="text" name="nom" required /></label>
           <label>Catégorie
             <select name="categorie">
@@ -297,7 +297,7 @@ window.Views.comptabilite = {
         </div>
         <div class="panel hidden" id="import-preview-panel" style="margin-top:14px"></div>
 
-        <form id="form-releve" class="form-grid" style="margin-top:16px">
+        <form id="form-releve" class="form-grid" autocomplete="off" style="margin-top:16px">
           <label>Date<input type="date" name="date_operation" required value="${aujourdhui}" /></label>
           <label>Libellé<input type="text" name="libelle" required placeholder="ex: VIR WAVE CLIENT X" /></label>
           <label>Montant (FCFA)<input type="number" name="montant" required /></label>

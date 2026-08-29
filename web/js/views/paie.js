@@ -23,7 +23,7 @@ window.Views.paie = {
     container.innerHTML = `
       <div class="panel">
         <h2>Nouvel employé</h2>
-        <form id="form-employe" class="form-grid">
+        <form id="form-employe" class="form-grid" autocomplete="off">
           <label>Nom complet<input type="text" name="nom_complet" required /></label>
           <label>Poste<input type="text" name="poste" /></label>
           <label>Secteur (optionnel)

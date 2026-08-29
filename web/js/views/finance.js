@@ -13,7 +13,7 @@ window.Views.finance = {
       <div class="panel">
         <h2>Initier un paiement Mobile Money</h2>
         <p class="desc">Crée une facture PayDunya réelle (Wave / Orange Money / carte). Le paiement reste "EN_ATTENTE" jusqu'à confirmation automatique par PayDunya.</p>
-        <form id="form-paiement" class="form-grid">
+        <form id="form-paiement" class="form-grid" autocomplete="off">
           <label>Commande
             <select name="commande_id" required>
               ${commandes.filter((c) => c.statut !== 'ANNULEE').map((c) => `<option value="${c.id}" data-client="${c.client_id}">${esc(c.numero_commande)} — ${esc(c.client_nom)} (${fmt(c.montant_total)} FCFA)</option>`).join('')}

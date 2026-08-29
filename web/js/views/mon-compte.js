@@ -9,7 +9,7 @@ window.Views['mon-compte'] = {
     container.innerHTML = `
       <div class="panel">
         <h2>Mot de passe</h2>
-        <form id="form-mdp" class="form-grid">
+        <form id="form-mdp" class="form-grid" autocomplete="off">
           <label>Mot de passe actuel<input type="password" name="currentPassword" required autocomplete="current-password" /></label>
           <label>Nouveau mot de passe (10 caractères min., avec majuscule, minuscule, chiffre et caractère spécial)
             <input type="password" name="newPassword" required minlength="10" autocomplete="new-password" />

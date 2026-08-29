@@ -49,7 +49,7 @@ window.Views.production = {
             <p class="desc" style="margin-bottom:0">Créer un lot / bande / cycle d'élevage</p>
           </div>
         </div>
-        <form id="form-lot" class="form-grid">
+        <form id="form-lot" class="form-grid" autocomplete="off">
           <label>Secteur
             <select name="secteur_id" id="select-secteur-lot" required>
               ${secteursAutorises.map((s) => `<option value="${s.id}" data-nom="${s.nom}">${s.nom}</option>`).join('')}
@@ -284,7 +284,7 @@ async function openRelevePanel(container, lot) {
     ${
       lot.statut && lot.statut !== 'EN_COURS'
         ? `<p class="desc" style="margin-top:16px">Ce lot est clôturé (${esc(LOT_STATUT_LABEL[lot.statut] || lot.statut)}) : aucun nouveau relevé ne peut être ajouté.</p>`
-        : `<form id="form-releve" class="form-grid" style="margin-top:16px">
+        : `<form id="form-releve" class="form-grid" autocomplete="off" style="margin-top:16px">
       <label>Date<input type="date" name="date_releve" required value="${new Date().toISOString().slice(0, 10)}" /></label>
       ${numberStepperHTML('Mortalité', 'mortalite', { step: 1, min: 0 })}
       ${numberStepperHTML('Conso. aliment (kg)', 'conso_aliment_kg', { step: 0.5, min: 0 })}

@@ -14,7 +14,7 @@ window.Views.utilisateurs = {
     container.innerHTML = `
       <div class="panel">
         <h2>Nouvel utilisateur</h2>
-        <form id="form-user" class="form-grid">
+        <form id="form-user" class="form-grid" autocomplete="off">
           <label>Nom complet<input type="text" name="nom_complet" required /></label>
           <label>Email<input type="email" name="email" required /></label>
           <label>Mot de passe (10 caractères min., avec majuscule, minuscule, chiffre et caractère spécial)<input type="password" name="password" required minlength="10" /></label>

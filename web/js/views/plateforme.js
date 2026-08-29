@@ -178,7 +178,7 @@ function ouvrirCreationFerme(container) {
       <div class="modal-box">
         <h3>Créer une nouvelle ferme</h3>
         <p class="desc">Même création que l'inscription self-service, sans code d'invitation — pratique pour configurer un client vous-même.</p>
-        <form id="form-creation-ferme" class="form-grid">
+        <form id="form-creation-ferme" class="form-grid" autocomplete="off">
           <label>Nom de la ferme<input type="text" name="nomFerme" required autocomplete="off" /></label>
 
           <div>
@@ -358,7 +358,7 @@ async function marquerFacturePayee(container, factureId) {
     <div class="modal-overlay">
       <div class="modal-box">
         <h3>Marquer la facture comme payée</h3>
-        <form id="form-paiement-saas" class="form-grid">
+        <form id="form-paiement-saas" class="form-grid" autocomplete="off">
           <label>Moyen de paiement reçu
             <select name="methodePaiement" required>
               <option value="WAVE">Wave</option>
@@ -416,7 +416,7 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
         <div class="panel" style="margin-bottom: 1rem;">
           <h4 style="margin-top:0;">Secteurs de production</h4>
           <p class="desc" id="liste-secteurs">${secteurs.length ? secteurs.map((s) => esc(s.nom)).join(', ') : 'Aucun secteur.'}</p>
-          <form id="form-ajout-secteur" class="form-grid" style="margin-bottom:0;">
+          <form id="form-ajout-secteur" class="form-grid" autocomplete="off" style="margin-bottom:0;">
             <label>Nouveau secteur<input type="text" name="nom" autocomplete="off" placeholder="ex: Élevage, Bovins, Ovins…" /></label>
             <label>Secteur parent (optionnel)
               <select name="parentSecteurId" id="select-secteur-parent">
@@ -438,7 +438,7 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
         </div>
 
         <p class="desc">${esc(catalogue.socleEssentiel.label)} — ${catalogue.socleEssentiel.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois (toujours inclus)</p>
-        <form id="form-abonnement-saas" class="form-grid">
+        <form id="form-abonnement-saas" class="form-grid" autocomplete="off">
           <label style="flex-direction: row; align-items: center; gap: 8px;">
             <input type="checkbox" name="pack" style="width:auto" ${surPack ? 'checked' : ''} />
             ${esc(catalogue.packToutCompris.label)} (${catalogue.packToutCompris.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois)
