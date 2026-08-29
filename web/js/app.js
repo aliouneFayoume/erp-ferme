@@ -214,7 +214,8 @@ const Modal = {
                     .map((o) => `<option value="${o.value}" ${String(o.value) === String(f.value) ? 'selected' : ''}>${o.label}</option>`)
                     .join('')}</select></label>`;
                 }
-                return `<label>${f.label}<input type="${f.type || 'text'}" data-field="${i}" value="${f.value ?? ''}" /></label>`;
+                const autocomplete = f.type === 'password' ? 'new-password' : 'off';
+                return `<label>${f.label}<input type="${f.type || 'text'}" data-field="${i}" value="${f.value ?? ''}" autocomplete="${autocomplete}" /></label>`;
               })
               .join('')}
           </div>

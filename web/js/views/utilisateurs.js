@@ -16,8 +16,8 @@ window.Views.utilisateurs = {
         <h2>Nouvel utilisateur</h2>
         <form id="form-user" class="form-grid" autocomplete="off">
           <label>Nom complet<input type="text" name="nom_complet" required /></label>
-          <label>Email<input type="email" name="email" required /></label>
-          <label>Mot de passe (10 caractères min., avec majuscule, minuscule, chiffre et caractère spécial)<input type="password" name="password" required minlength="10" /></label>
+          <label>Email<input type="email" name="email" required autocomplete="off" /></label>
+          <label>Mot de passe (10 caractères min., avec majuscule, minuscule, chiffre et caractère spécial)<input type="password" name="password" required minlength="10" autocomplete="new-password" /></label>
           <label>Rôle
             <select name="role" id="select-role-new" required>
               ${roles.map((r) => `<option value="${r.nom}">${esc(ROLE_LABEL[r.nom] || r.nom)}</option>`).join('')}

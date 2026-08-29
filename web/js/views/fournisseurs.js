@@ -37,7 +37,7 @@ window.Views.fournisseurs = {
             </select>
           </label>
           <label>Téléphone<input type="text" name="telephone" /></label>
-          <label>Email<input type="email" name="email" /></label>
+          <label>Email<input type="email" name="email" autocomplete="off" /></label>
           <label>Adresse<input type="text" name="adresse" /></label>
           <button type="submit">Créer le fournisseur</button>
         </form>
