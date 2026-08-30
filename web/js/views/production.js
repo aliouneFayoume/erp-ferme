@@ -286,16 +286,41 @@ async function openRelevePanel(container, lot) {
         ? `<p class="desc" style="margin-top:16px">Ce lot est clôturé (${esc(LOT_STATUT_LABEL[lot.statut] || lot.statut)}) : aucun nouveau relevé ne peut être ajouté.</p>`
         : `<form id="form-releve" class="form-grid" autocomplete="off" style="margin-top:16px">
       <label>Date<input type="date" name="date_releve" required value="${new Date().toISOString().slice(0, 10)}" /></label>
-      ${numberStepperHTML('Mortalité', 'mortalite', { step: 1, min: 0 })}
+      ${
+        lot.secteur_nom === 'Maraîcher'
+          ? ''
+          : `${numberStepperHTML('Mortalité', 'mortalite', { step: 1, min: 0 })}
       ${numberStepperHTML('Conso. aliment (kg)', 'conso_aliment_kg', { step: 0.5, min: 0 })}
-      ${numberStepperHTML('Poids moyen (g)', 'poids_moyen_g', { step: 10, min: 0 })}
+      ${numberStepperHTML('Poids moyen (g)', 'poids_moyen_g', { step: 10, min: 0 })}`
+      }
       ${champsSecteur}
       <label>Notes<input type="text" name="notes" /></label>
       <button type="submit">Enregistrer le relevé</button>
     </form>`
     }
 
-    <table style="margin-top:18px">
+    ${
+      lot.secteur_nom === 'Maraîcher'
+        ? `<table style="margin-top:18px">
+      <thead><tr><th>Date</th><th>Intrants utilisés</th><th>Récolte (kg)</th><th>Notes</th></tr></thead>
+      <tbody>
+        ${
+          releves.length
+            ? releves
+                .map(
+                  (r) => `<tr>
+                    <td>${fmtDate(r.date_releve)}</td>
+                    <td>${r.intrants_utilises ? esc(r.intrants_utilises) : '-'}</td>
+                    <td class="num">${r.quantite_recoltee_kg ? fmt(r.quantite_recoltee_kg) : '-'}</td>
+                    <td>${r.notes ? esc(r.notes) : '-'}</td>
+                  </tr>`
+                )
+                .join('')
+            : '<tr><td colspan="4" class="empty">Aucun relevé.</td></tr>'
+        }
+      </tbody>
+    </table>`
+        : `<table style="margin-top:18px">
       <thead><tr><th>Date</th><th>Mortalité</th><th>Aliment (kg)</th><th>Poids (g)</th><th>Taille (cm)</th><th>Autres</th></tr></thead>
       <tbody>
         ${
@@ -315,7 +340,8 @@ async function openRelevePanel(container, lot) {
             : '<tr><td colspan="6" class="empty">Aucun relevé.</td></tr>'
         }
       </tbody>
-    </table>
+    </table>`
+    }
   `;
 
   panel.querySelector('#close-releve').addEventListener('click', () => panel.classList.add('hidden'));
