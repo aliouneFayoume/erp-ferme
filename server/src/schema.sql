@@ -568,6 +568,8 @@ CREATE TABLE employes (
     date_embauche DATE,
     date_depart DATE, -- renseignée quand l'employé quitte, sans supprimer l'historique de paie
     salaire_brut_mensuel NUMERIC,
+    type_contrat VARCHAR(10) NOT NULL DEFAULT 'MENSUEL' CHECK (type_contrat IN ('MENSUEL', 'JOURNALIER')),
+    taux_journalier NUMERIC, -- renseigné seulement pour les journaliers (voir migration-21)
     actif BOOLEAN NOT NULL DEFAULT TRUE,
     notes TEXT,
     deleted_at TIMESTAMP,
@@ -590,6 +592,17 @@ CREATE TABLE bulletins_paie (
     cree_par INT REFERENCES utilisateurs(id),
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (employe_id, periode)
+);
+
+-- Pointage des journaliers : une ligne = un jour travaillé (absence de ligne = absent). Alimente
+-- le calcul du bulletin de paie (jours_travailles x taux_journalier), fait côté frontend.
+CREATE TABLE pointages_journaliers (
+    id SERIAL PRIMARY KEY,
+    employe_id INT REFERENCES employes(id) ON DELETE CASCADE,
+    date_pointage DATE NOT NULL,
+    cree_par INT REFERENCES utilisateurs(id),
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (employe_id, date_pointage)
 );
 
 -- --------------------------------------------------------

@@ -130,3 +130,96 @@ describe('paie — employés et bulletins', () => {
         expect(liste.body).toHaveLength(0);
     });
 });
+
+describe('paie — journaliers et pointages', () => {
+    let pool;
+    let app;
+    let token;
+    let tenantId;
+
+    beforeEach(async () => {
+        pool = createTestPool();
+        await seedRolesEtSecteurs(pool);
+        tenantId = await creerOrganisation(pool);
+        app = buildApp(pool, ['paie', 'comptabilite']);
+        token = await creerUtilisateurEtToken(pool, { role: 'comptable', tenant_id: tenantId });
+    });
+
+    afterEach(async () => {
+        await pool.end();
+    });
+
+    async function creerJournalier(overrides = {}) {
+        const res = await request(app)
+            .post('/api/paie/employes')
+            .set('Authorization', `Bearer ${token}`)
+            .send({ nom_complet: 'Ibrahima Ba', type_contrat: 'JOURNALIER', taux_journalier: 2000, ...overrides });
+        return res.body;
+    }
+
+    test('un employé créé sans type_contrat reste MENSUEL par défaut', async () => {
+        const emp = await creerEmploye(app, token);
+        expect(emp.type_contrat).toBe('MENSUEL');
+    });
+
+    test('rejette un journalier sans taux_journalier', async () => {
+        const res = await request(app)
+            .post('/api/paie/employes')
+            .set('Authorization', `Bearer ${token}`)
+            .send({ nom_complet: 'Ibrahima Ba', type_contrat: 'JOURNALIER' });
+        expect(res.status).toBe(400);
+    });
+
+    test('crée un journalier avec son taux', async () => {
+        const emp = await creerJournalier();
+        expect(emp.type_contrat).toBe('JOURNALIER');
+        expect(Number(emp.taux_journalier)).toBe(2000);
+    });
+
+    test('un journalier n\'apparaît pas encore pointé', async () => {
+        await creerJournalier();
+        const res = await request(app).get('/api/paie/pointages?date=2026-09-05').set('Authorization', `Bearer ${token}`);
+        expect(res.status).toBe(200);
+        expect(res.body).toHaveLength(1);
+        expect(res.body[0].pointe).toBe(false);
+    });
+
+    test('basculer le pointage marque présent puis absent', async () => {
+        const emp = await creerJournalier();
+
+        const present = await request(app)
+            .post('/api/paie/pointages/toggle')
+            .set('Authorization', `Bearer ${token}`)
+            .send({ employe_id: emp.id, date: '2026-09-05' });
+        expect(present.status).toBe(200);
+        expect(present.body.pointe).toBe(true);
+
+        const absent = await request(app)
+            .post('/api/paie/pointages/toggle')
+            .set('Authorization', `Bearer ${token}`)
+            .send({ employe_id: emp.id, date: '2026-09-05' });
+        expect(absent.body.pointe).toBe(false);
+    });
+
+    test('le récapitulatif compte les jours du mois demandé et exclut les autres mois', async () => {
+        const emp = await creerJournalier();
+        for (const date of ['2026-09-01', '2026-09-05', '2026-10-01']) {
+            await request(app)
+                .post('/api/paie/pointages/toggle')
+                .set('Authorization', `Bearer ${token}`)
+                .send({ employe_id: emp.id, date });
+        }
+
+        const septembre = await request(app).get('/api/paie/pointages/recapitulatif?periode=2026-09').set('Authorization', `Bearer ${token}`);
+        expect(septembre.body).toEqual([{ employe_id: emp.id, jours_travailles: 2 }]);
+
+        const octobre = await request(app).get('/api/paie/pointages/recapitulatif?periode=2026-10').set('Authorization', `Bearer ${token}`);
+        expect(octobre.body).toEqual([{ employe_id: emp.id, jours_travailles: 1 }]);
+    });
+
+    test('un rôle non autorisé (chef_prod) ne peut pas accéder aux pointages', async () => {
+        const tokenChefProd = await creerUtilisateurEtToken(pool, { role: 'chef_prod', tenant_id: tenantId });
+        const res = await request(app).get('/api/paie/pointages?date=2026-09-05').set('Authorization', `Bearer ${tokenChefProd}`);
+        expect(res.status).toBe(403);
+    });
+});
