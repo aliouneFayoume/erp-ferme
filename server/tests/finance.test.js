@@ -229,7 +229,7 @@ describe('finance — relance de facture client par WhatsApp (Ferme Massla, iden
         expect(res.body.envoye).toBe(true);
         // config: undefined -> whatsapp.js retombe sur les identifiants globaux (server/.env),
         // jamais une configuration par ferme pour Ferme Massla elle-même.
-        expect(envoyerMessageWhatsapp).toHaveBeenCalledWith('+221771112233', { config: undefined });
+        expect(envoyerMessageWhatsapp).toHaveBeenCalledWith('+221771112233', { config: undefined, montant: 5000 });
 
         const audit = await pool.query(`SELECT * FROM audit_logs WHERE tenant_id = $1 AND action = 'RAPPEL_WHATSAPP'`, [tenantId]);
         expect(audit.rows).toHaveLength(1);

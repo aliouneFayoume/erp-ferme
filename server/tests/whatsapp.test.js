@@ -59,4 +59,43 @@ describe('whatsapp — envoyerMessageWhatsapp', () => {
         process.env.WHATSAPP_PHONE_NUMBER_ID = '123456';
         await expect(envoyerMessageWhatsapp('   ')).rejects.toThrow('invalide');
     });
+
+    test('ignore `montant` tant que le modèle de secours "hello_world" est actif (évite un échec Graph API)', async () => {
+        process.env.WHATSAPP_ACCESS_TOKEN = 'faux-jeton';
+        process.env.WHATSAPP_PHONE_NUMBER_ID = '123456';
+        // WHATSAPP_TEMPLATE_NOM volontairement absent -> retombe sur hello_world (voir lireConfigGlobale).
+        global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ messages: [{ id: 'wamid.test' }] }) });
+
+        await envoyerMessageWhatsapp('+221771234567', { montant: 25000 });
+
+        const bodyEnvoye = JSON.parse(global.fetch.mock.calls[0][1].body);
+        expect(bodyEnvoye.template.name).toBe('hello_world');
+        expect(bodyEnvoye.template.components).toBeUndefined();
+    });
+
+    test('utilise `montant` pour construire les composants une fois un vrai modèle configuré', async () => {
+        process.env.WHATSAPP_ACCESS_TOKEN = 'faux-jeton';
+        process.env.WHATSAPP_PHONE_NUMBER_ID = '123456';
+        process.env.WHATSAPP_TEMPLATE_NOM = 'rappel_facture';
+        process.env.WHATSAPP_TEMPLATE_LANGUE = 'fr';
+        global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ messages: [{ id: 'wamid.test' }] }) });
+
+        await envoyerMessageWhatsapp('+221771234567', { montant: 25000 });
+
+        const bodyEnvoye = JSON.parse(global.fetch.mock.calls[0][1].body);
+        expect(bodyEnvoye.template.name).toBe('rappel_facture');
+        expect(bodyEnvoye.template.components).toEqual([{ type: 'body', parameters: [{ type: 'text', text: '25000' }] }]);
+    });
+
+    test('`composants` fourni directement par l\'appelant reste prioritaire sur `montant` (ex. mfa.js)', async () => {
+        process.env.WHATSAPP_ACCESS_TOKEN = 'faux-jeton';
+        process.env.WHATSAPP_PHONE_NUMBER_ID = '123456';
+        // Même sans modèle personnalisé configuré (hello_world), un composants explicite doit passer.
+        global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ messages: [{ id: 'wamid.test' }] }) });
+
+        await envoyerMessageWhatsapp('+221771234567', { composants: [{ type: 'body', parameters: [{ type: 'text', text: '123456' }] }] });
+
+        const bodyEnvoye = JSON.parse(global.fetch.mock.calls[0][1].body);
+        expect(bodyEnvoye.template.components).toEqual([{ type: 'body', parameters: [{ type: 'text', text: '123456' }] }]);
+    });
 });

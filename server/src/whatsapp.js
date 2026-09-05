@@ -33,14 +33,19 @@ function estConfigure() {
 /**
  * Envoie un message WhatsApp basé sur un modèle pré-approuvé par Meta — obligatoire pour un message
  * initié par l'entreprise (hors de la fenêtre de service client de 24h), ce qui est toujours le cas
- * pour une relance de facturation. `composants` (optionnel) correspond aux paramètres du modèle une
- * fois qu'un vrai modèle personnalisé (avec variables : nom de la ferme, montant, échéance) est
- * approuvé — voir la documentation Meta sur les "template components". `config` (optionnel) permet
- * à l'appelant de fournir les identifiants d'UNE organisation précise (déjà déchiffrés via
- * whatsappConfig.js) au lieu des identifiants globaux de Massla — c'est l'appelant qui décide
- * lesquels utiliser, ce module ne fait aucune hypothèse sur le tenant.
+ * pour une relance de facturation ou un code MFA. Deux façons de fournir les variables du modèle :
+ * - `composants` : l'appelant fournit directement la structure Meta ("template components"), pour
+ *   un usage déjà lié à un modèle précis (ex. mfa.js pour le code de vérification WhatsApp).
+ * - `montant` : raccourci pour la relance de facture (variable {{1}} = montant restant dû) — voir
+ *   DEPLOIEMENT.md pour la marche à suivre une fois "rappel_facture" approuvé. Volontairement
+ *   IGNORÉ tant que `WHATSAPP_TEMPLATE_NOM` pointe encore vers le modèle de secours "hello_world"
+ *   (qui n'a aucune variable) : lui envoyer des `components` ferait échouer l'appel côté Graph API
+ *   ("nombre de paramètres ne correspond pas au modèle"). Ignoré si `composants` est déjà fourni.
+ * `config` (optionnel) permet à l'appelant de fournir les identifiants d'UNE organisation précise
+ * (déjà déchiffrés via whatsappConfig.js) au lieu des identifiants globaux de Massla — c'est
+ * l'appelant qui décide lesquels utiliser, ce module ne fait aucune hypothèse sur le tenant.
  */
-async function envoyerMessageWhatsapp(telephone, { composants, config: configFournie } = {}) {
+async function envoyerMessageWhatsapp(telephone, { composants: composantsFournis, montant, config: configFournie } = {}) {
     const config = configFournie || lireConfigGlobale();
     if (!config.accessToken || !config.phoneNumberId) {
         throw new Error("Intégration WhatsApp non configurée (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID manquants).");
@@ -49,6 +54,11 @@ async function envoyerMessageWhatsapp(telephone, { composants, config: configFou
     if (!numero) {
         throw new Error('Numéro de téléphone invalide.');
     }
+    const modeleAvecVariables = config.templateNom !== 'hello_world';
+    const composants = composantsFournis
+        || (modeleAvecVariables && montant != null
+            ? [{ type: 'body', parameters: [{ type: 'text', text: String(montant) }] }]
+            : null);
 
     const res = await fetch(`https://graph.facebook.com/${WHATSAPP_API_VERSION}/${config.phoneNumberId}/messages`, {
         method: 'POST',

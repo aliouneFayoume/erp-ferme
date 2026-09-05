@@ -590,7 +590,7 @@ describe('plateforme — relance de facture SaaS par WhatsApp', () => {
 
         expect(res.status).toBe(200);
         expect(res.body.envoye).toBe(true);
-        expect(envoyerMessageWhatsapp).toHaveBeenCalledWith('+221771234567');
+        expect(envoyerMessageWhatsapp).toHaveBeenCalledWith('+221771234567', { montant: 40000 });
 
         const audit = await pool.query(`SELECT * FROM audit_logs WHERE tenant_id = $1 AND action = 'RAPPEL_WHATSAPP'`, [tenantA]);
         expect(audit.rows).toHaveLength(1);

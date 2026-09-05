@@ -504,7 +504,7 @@ module.exports = function plateformeRoutes(pool) {
                 return res.status(400).json({ erreur: "Aucun numéro WhatsApp configuré pour cette ferme (voir la fenêtre Abonnement SaaS)." });
             }
 
-            await envoyerMessageWhatsapp(facture.telephone_contact);
+            await envoyerMessageWhatsapp(facture.telephone_contact, { montant: facture.montant });
             await logAudit(req.db, { req,
                 table: 'factures_saas',
                 rowId: facture.id,

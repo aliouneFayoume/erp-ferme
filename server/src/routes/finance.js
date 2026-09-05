@@ -86,7 +86,7 @@ module.exports = function financeRoutes(pool) {
                 config = configFerme;
             }
 
-            await envoyerMessageWhatsapp(facture.client_telephone, { config });
+            await envoyerMessageWhatsapp(facture.client_telephone, { config, montant: facture.montant_restant });
             await logAudit(req.db, { req,
                 table: 'factures',
                 rowId: facture.id,
