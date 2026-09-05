@@ -18,6 +18,7 @@ const TAB_DEFS = [
   { key: 'utilisateurs', label: 'Utilisateurs', roles: ['admin'] },
   { key: 'audit', label: "Journal d'audit", roles: ['admin'] },
   { key: 'mon-compte', label: 'Mon compte', roles: ['admin', 'comptable', 'chef_prod', 'livreur'] },
+  { key: 'assistant', label: 'Assistant IA', roles: ['admin', 'comptable', 'chef_prod', 'livreur'] },
   // Réservé à un seul compte (voir migration-04-superviseur-plateforme.sql) — jamais visible pour
   // un admin normal, même si `roles` incluait 'admin' : voir tabsForRole ci-dessous.
   { key: 'plateforme', label: 'Support plateforme', roles: [], superviseurSeulement: true },
@@ -42,6 +43,7 @@ const TAB_ICONS = {
   utilisateurs: '<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="18" cy="9" r="2.6"/><path d="M15.5 14a5.5 5.5 0 0 1 6.5 5.4"/>',
   audit: '<path d="M9 3h6a1 1 0 0 1 1 1v1h1a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h1V4a1 1 0 0 1 1-1Z"/><path d="M9 11h6M9 15h6"/>',
   'mon-compte': '<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>',
+  assistant: '<path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/><path d="M8 9h8M8 12h5"/>',
   plateforme: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
 };
 

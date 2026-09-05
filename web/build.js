@@ -40,6 +40,7 @@ const BUNDLES = {
     'js/views/parametres-paiement.js',
     'js/views/utilisateurs.js',
     'js/views/mon-compte.js',
+    'js/views/assistant.js',
     'js/views/audit.js',
     'js/views/plateforme.js',
     'js/app.js',

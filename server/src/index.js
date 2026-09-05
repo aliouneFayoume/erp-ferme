@@ -109,6 +109,7 @@ async function main() {
     app.use('/api/parametres-whatsapp', require('./routes/parametres-whatsapp')(pool));
     app.use('/api/parametres-ferme', require('./routes/parametres-ferme')(pool));
     app.use('/api/plateforme', require('./routes/plateforme')(pool));
+    app.use('/api/assistant', require('./routes/assistant')(pool));
 
     // Interroge réellement la base plutôt que de renvoyer un texte statique : c'est cette route
     // qu'utilisent deploy/monitor.sh et l'étape de vérification post-déploiement (GitHub Actions).
