@@ -1,0 +1,1 @@
+ssh -i "C:\Users\adrame\Desktop\Societe\Projet ferme\ssh-key-2026-07-24.key" ubuntu@40.233.98.20

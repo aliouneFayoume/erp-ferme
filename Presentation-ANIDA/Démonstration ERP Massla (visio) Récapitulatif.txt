@@ -1,0 +1,72 @@
+Démonstration ERP Massla (visio)
+mar. 1 sept. 2026
+
+Résumé:
+
+La réunion a évalué l’adéquation de Massla aux besoins des exploitations agricoles accompagnées par ANIDA.
+• Massla couvre production, stocks, ventes, finances et logistique.
+• L’application fonctionne sur smartphone, ordinateur et hors ligne.
+• L’adoption nécessitera formation et accompagnement des producteurs.
+• L’offre complète est annoncée à 115 000, remisée à 85 000.
+• Un tarif de groupe et une phase pilote sont envisageables.
+• ANIDA doit évaluer un partenariat avec Massla.
+
+
+Tâches:
+
+* Équipe ANIDA: Étudier les modalités de collaboration avec Massla, notamment le modèle d’utilisation, la maintenance et la complémentarité avec les services publics existants
+* Alioune: Assister les fermes dans la configuration de leurs intégrations WhatsApp et de leurs moyens de paiement après leur abonnement
+* Meeting participant: Présenter la démonstration et les suites possibles au directeur général
+* Meeting participant: Revenir vers l’équipe Masla après consultation du directeur général sur les prochaines étapes de la collaboration
+* Alioune: Envoyer une synthèse de l’entretien aux participants
+* Alioune: Explorer une mise en relation avec les exploitations ou la cellule informatique selon les orientations retenues
+
+
+Points de discussion clés:
+
+Contexte d’ANIDA et enjeux de collaboration
+Après les échanges techniques liés au démarrage de la visioconférence, les participants d’ANIDA ont présenté leur organisation, créée en 2008, ainsi que son accompagnement d’environ 500 fermes et sa mission d’insertion professionnelle. Ils ont expliqué que Massla pourrait compléter les outils de suivi existants, tout en soulignant que l’adoption par les producteurs, la maintenance et les modalités de collaboration doivent être étudiées.
+
+Présentation de Massla et lancement de la démonstration
+Alioune a remercié les participants et présenté l’origine de Massla, développé pour répondre aux limites de la gestion sur papier et par fichiers Excel. Il a ensuite partagé une ferme fictive et lancé la démonstration en direct de l’application.
+
+Tableau de bord et suivi des productions
+La démonstration a commencé par le tableau de bord, qui regroupe les principaux indicateurs de l’exploitation, les commandes, les lots et les rappels de récolte. Alioune a ensuite montré la création d’un lot maraîcher et son suivi quotidien, notamment pour les observations, les intrants et les actions réalisées.
+
+Suivi de la pisciculture, de l’aviculture et de l’élevage
+Massla permet de créer et de suivre différents types de lots, notamment les lots de poulets et de poissons, avec l’enregistrement des vaccinations et des mesures. Le module d’élevage ajoute une fiche individuelle par animal, la gestion des données zootechniques et le suivi généalogique.
+
+Gestion commerciale, fournisseurs et logistique
+Alioune a présenté les modules de stock, de catalogue, de clients, d’abonnements, de commandes et de fournisseurs. La solution comprend également un module de gestion des employés et un volet logistique consacré aux livraisons.
+
+Finance, configuration et sécurité
+Les fonctions financières couvrent les paiements, les factures, les rappels, la comptabilité et les immobilisations. La configuration de la ferme, les paiements via Wavy et Orange Money, l’intégration WhatsApp, le support client et la double authentification ont également été présentés.
+
+Invitation aux questions
+Alioune a récapitulé la couverture fonctionnelle de Massla pour le maraîchage, l’agriculture, l’élevage et la pisciculture, ainsi que son objectif de fournir une vision claire de l’exploitation. Il a ensuite invité les participants à poser leurs questions, sans que la suite de la discussion ne soit incluse dans l’extrait disponible.
+
+Accessibilité et utilisation de l’application
+Les participants ont évalué la facilité d’utilisation de l’application pour des producteurs peu familiarisés avec les outils numériques. L’équipe a présenté les interfaces simplifiées, la compatibilité avec les smartphones et ordinateurs, ainsi que le fonctionnement hors ligne avec synchronisation ultérieure.
+
+Couverture fonctionnelle et appropriation par les producteurs
+La discussion a précisé que les utilisateurs peuvent renseigner des données essentielles via des formulaires simples, tandis que les traitements sont réalisés automatiquement dans la base. Les participants ont souligné l’étendue fonctionnelle de l’outil et la nécessité d’une formation pour faciliter son adoption par les producteurs.
+
+Modularité et tarification
+L’équipe a expliqué que l’ERP Masla propose un socle de base et des modules additionnels sélectionnables selon les besoins de chaque exploitation. Les échanges ont porté sur l’abonnement mensuel, les frais de mise en place et les tarifs associés aux différents packages.
+
+Modèle SaaS et évolution de l’outil
+Les participants ont questionné le choix de l’abonnement plutôt qu’une vente définitive du logiciel. L’équipe a justifié le modèle SaaS par la prise en charge des mises à jour, de l’accompagnement et du développement continu, notamment l’ajout de fonctionnalités d’intelligence artificielle.
+
+Confidentialité, sauvegarde et restitution des données
+Les participants ont demandé des précisions sur la politique de gestion des données et les risques liés à leur utilisation pour l’intelligence artificielle. L’équipe a affirmé que les données restent privées, qu’elles sont sauvegardées sur le serveur et une infrastructure externe, et qu’elles peuvent être exportées à la fin du contrat.
+
+Conditions tarifaires et perspectives de partenariat
+Les participants ont comparé le tarif annoncé à celui d’autres solutions et ont évoqué l’effet de masse. L’équipe a indiqué qu’un tarif de groupe pourrait être négocié dans le cadre d’un partenariat.
+
+Suites institutionnelles et suivi
+L’organisation a jugé la présentation utile et alignée sur ses missions, et a indiqué qu’elle rendrait compte au directeur général avant de revenir vers l’équipe. Alioune a prévu d’envoyer une synthèse et de poursuivre les échanges sur une mise en relation avec les exploitations ou la cellule informatique.
+
+
+Bloc-notes:
+
+* Pas de notes
