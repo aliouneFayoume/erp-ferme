@@ -283,6 +283,44 @@
   .price-period { font-size: 0.8rem; color: var(--muted-2); margin-bottom: 1rem; }
   .price-card p.desc { font-size: 0.87rem; color: var(--muted); margin: 0; }
   .price-note { font-size: 0.85rem; color: var(--muted); margin-top: 1.2rem; }
+  .price-savings {
+    font-size: 0.82rem; font-weight: 600; color: var(--success); margin: 0.6rem 0 0;
+    padding-top: 0.6rem; border-top: 1px dashed var(--border);
+  }
+
+  .price-breakdown { margin-top: 1.1rem; }
+  .price-breakdown summary { font-size: 0.92rem; }
+  .module-table { margin-top: 0.9rem; }
+  .module-row {
+    display: flex; justify-content: space-between; gap: 1rem;
+    padding: 0.55rem 0; border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+  .module-row span:first-child { color: var(--text); }
+  .module-row span:last-child { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+  .module-row em { font-style: normal; color: var(--muted-2); font-size: 0.82rem; }
+  .module-row.total {
+    border-bottom: none; border-top: 2px solid var(--text); margin-top: 0.2rem;
+    padding-top: 0.7rem; font-weight: 700;
+  }
+  .module-row.total span:last-child { color: var(--text); font-size: 1rem; }
+
+  .price-compare {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.4rem;
+    margin-top: 1.4rem; padding: 1.1rem 1.2rem; background: var(--surface-2);
+    border-radius: 10px;
+  }
+  .compare-side { display: flex; flex-direction: column; gap: 0.15rem; }
+  .compare-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-2); }
+  .compare-amount { font-family: var(--display); font-weight: 700; font-size: 1.15rem; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .compare-side--pack .compare-amount { color: var(--primary-strong); }
+  .compare-arrow { color: var(--muted-2); font-size: 1.3rem; }
+  .savings-badge {
+    margin-left: auto; font-size: 0.78rem; font-weight: 700; color: var(--success);
+    background: color-mix(in srgb, var(--success) 16%, transparent);
+    border-radius: 20px; padding: 0.3rem 0.7rem; white-space: nowrap;
+  }
+  @media (max-width: 560px) { .savings-badge { margin-left: 0; } }
 
   details {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
@@ -487,15 +525,45 @@
         <div class="price-amount">85 000 F</div>
         <div class="price-period">par mois</div>
         <p class="desc">Tous les modules inclus (dont Élevage et Paie), rappels WhatsApp et paiement mobile compris.</p>
+        <p class="price-savings">Économie de 30 000 F/mois (≈26%) par rapport à l'achat des modules à la carte.</p>
       </div>
       <div class="price-card">
         <span class="price-tag">Une seule fois</span>
         <h3>Mise en place</h3>
         <div class="price-amount">75 000 F</div>
-        <div class="price-period">au démarrage</div>
-        <p class="desc">Configuration de votre ferme, import de vos données et formation de votre équipe.</p>
+        <div class="price-period">à la signature</div>
+        <p class="desc">Configuration de votre ferme, import de vos données et formation de votre équipe — en plus de l'abonnement mensuel.</p>
       </div>
     </div>
+
+    <details class="price-breakdown">
+      <summary>Voir le détail, module par module</summary>
+      <div class="module-table">
+        <div class="module-row"><span>Socle Essentiel <em>— inclus dans tout abonnement</em></span><span>25 000 F</span></div>
+        <div class="module-row"><span>Clients &amp; Abonnements</span><span>10 000 F</span></div>
+        <div class="module-row"><span>Commandes &amp; Fournisseurs</span><span>10 000 F</span></div>
+        <div class="module-row"><span>Comptabilité</span><span>10 000 F</span></div>
+        <div class="module-row"><span>Support client</span><span>5 000 F</span></div>
+        <div class="module-row"><span>Logistique</span><span>15 000 F</span></div>
+        <div class="module-row"><span>Finance <em>— encaissement Wave / Orange Money</em></span><span>15 000 F</span></div>
+        <div class="module-row"><span>Élevage <em>— suivi individuel bovins, ovins, caprins</em></span><span>15 000 F</span></div>
+        <div class="module-row"><span>Paie</span><span>10 000 F</span></div>
+        <div class="module-row total"><span>Total à la carte</span><span>115 000 F / mois</span></div>
+      </div>
+      <div class="price-compare">
+        <div class="compare-side">
+          <span class="compare-label">Sans le pack</span>
+          <span class="compare-amount">115 000 F/mois</span>
+        </div>
+        <span class="compare-arrow" aria-hidden="true">→</span>
+        <div class="compare-side compare-side--pack">
+          <span class="compare-label">Avec le Pack tout compris</span>
+          <span class="compare-amount">85 000 F/mois</span>
+        </div>
+        <span class="savings-badge">− 30 000 F/mois (≈26%)</span>
+      </div>
+      <p class="price-note">Un tarif de groupe est possible pour un réseau de fermes accompagné par une même structure (coopérative, ONG, institution) — à discuter lors de la démonstration.</p>
+    </details>
     <p class="price-note">Les tarifs peuvent varier selon la taille de votre exploitation — confirmés lors de la démonstration gratuite.</p>
   </section>
 
