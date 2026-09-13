@@ -569,5 +569,50 @@ module.exports = function plateformeRoutes(pool) {
         }
     });
 
+    /**
+     * Modération des avis publics (site vitrine massla.sn/decouvrir, section "Avis clients") — un
+     * visiteur peut soumettre un avis (routes/avis.js, public) mais seul le superviseur peut le
+     * publier. Tous les avis (approuvés et en attente) sont renvoyés ici, contrairement à
+     * GET /api/avis (public) qui ne renvoie que les approuvés.
+     */
+    router.get('/avis', ...garde, async (req, res) => {
+        try {
+            const result = await req.db.query(
+                `SELECT id, nom, nom_ferme, note, commentaire, approuve, cree_le FROM avis_publics ORDER BY cree_le DESC`
+            );
+            res.json(result.rows);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la récupération des avis.' });
+        }
+    });
+
+    router.put('/avis/:id', ...garde, async (req, res) => {
+        try {
+            const result = await req.db.query(
+                `UPDATE avis_publics SET approuve = $1 WHERE id = $2 RETURNING id, approuve`,
+                [!!req.body.approuve, req.params.id]
+            );
+            if (result.rows.length === 0) return res.status(404).json({ erreur: 'Avis introuvable.' });
+            await logAudit(req.db, { req, table: 'avis_publics', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: null, details: { approuve: !!req.body.approuve, superviseur: req.user.nom } });
+            res.json(result.rows[0]);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: "Erreur lors de la mise à jour de l'avis." });
+        }
+    });
+
+    router.delete('/avis/:id', ...garde, async (req, res) => {
+        try {
+            const result = await req.db.query(`DELETE FROM avis_publics WHERE id = $1 RETURNING id`, [req.params.id]);
+            if (result.rows.length === 0) return res.status(404).json({ erreur: 'Avis introuvable.' });
+            await logAudit(req.db, { req, table: 'avis_publics', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: null, details: { superviseur: req.user.nom } });
+            res.status(204).end();
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: "Erreur lors de la suppression de l'avis." });
+        }
+    });
+
     return router;
 };

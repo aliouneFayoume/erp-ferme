@@ -102,4 +102,93 @@ async function envoyerEmailRappelSaas(emails, { organisationNom, montant, dateEc
     return data;
 }
 
-module.exports = { envoyerEmailVerification, envoyerEmailRappelSaas, estConfigure };
+const PREFERENCES_CONTACT = { whatsapp: 'WhatsApp', telephone: 'Appel téléphonique', email: 'Email' };
+
+// Formulaire public massla.sn/decouvrir (routes/contact.js) : simple notification à l'équipe, pas
+// de compte ni de tenant à ce stade (visiteur pas encore client). reply_to pointe vers l'adresse du
+// visiteur pour que répondre depuis la boîte de réception aille directement à lui, sans copier-coller.
+async function envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp, preference }) {
+    const { apiKey, from } = lireConfig();
+    if (!apiKey || !from) {
+        throw new Error("Intégration email non configurée (RESEND_API_KEY / RESEND_FROM_EMAIL manquants).");
+    }
+    const destinataire = process.env.CONTACT_NOTIFICATION_EMAIL || 'admin@massla.sn';
+    const res = await fetch(RESEND_API, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(DELAI_MAX_MS),
+        body: JSON.stringify({
+            from,
+            to: [destinataire],
+            reply_to: emailVisiteur,
+            subject: `Nouvelle demande de contact — ${echapperHtml(nom)}`,
+            html: `<p>Nouvelle demande depuis massla.sn/decouvrir :</p>
+                   <ul>
+                     <li><strong>Nom :</strong> ${echapperHtml(nom)}</li>
+                     <li><strong>Email :</strong> ${echapperHtml(emailVisiteur)}</li>
+                     <li><strong>WhatsApp :</strong> ${echapperHtml(whatsapp)}</li>
+                     <li><strong>Préfère être recontacté par :</strong> ${echapperHtml(PREFERENCES_CONTACT[preference] || preference)}</li>
+                   </ul>`,
+        }),
+    });
+
+    let data = null;
+    try {
+        data = await res.json();
+    } catch (e) {
+        data = null;
+    }
+    if (!res.ok) {
+        const message = data?.message || `Erreur HTTP ${res.status}`;
+        throw new Error(`Échec de l'envoi de la notification de contact : ${message}`);
+    }
+    return data;
+}
+
+// Nouvel avis en attente (routes/avis.js) : notifie l'équipe avec un lien d'approbation en un
+// clic, même pattern que envoyerEmailVerification (jeton en clair dans le lien, seul son hash est
+// stocké côté serveur) — évite d'avoir à se connecter à la vue Support plateforme pour un simple
+// avis positif. La modération depuis cette vue reste possible dans tous les cas (dépublier/supprimer,
+// ou approuver si le lien a expiré).
+async function envoyerNotificationAvis({ nom, nomFerme, note, commentaire, token }) {
+    const { apiKey, from, baseUrl } = lireConfig();
+    if (!apiKey || !from) {
+        throw new Error("Intégration email non configurée (RESEND_API_KEY / RESEND_FROM_EMAIL manquants).");
+    }
+    const destinataire = process.env.CONTACT_NOTIFICATION_EMAIL || 'admin@massla.sn';
+    const lienApprobation = `${baseUrl}/approuver-avis.html?token=${encodeURIComponent(token)}`;
+    const etoiles = '★'.repeat(note) + '☆'.repeat(5 - note);
+    const res = await fetch(RESEND_API, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(DELAI_MAX_MS),
+        body: JSON.stringify({
+            from,
+            to: [destinataire],
+            subject: `Nouvel avis en attente — ${echapperHtml(nom)} (${etoiles})`,
+            html: `<p>Nouvel avis soumis depuis massla.sn/decouvrir, en attente de validation :</p>
+                   <ul>
+                     <li><strong>Nom :</strong> ${echapperHtml(nom)}</li>
+                     ${nomFerme ? `<li><strong>Ferme :</strong> ${echapperHtml(nomFerme)}</li>` : ''}
+                     <li><strong>Note :</strong> ${etoiles}</li>
+                     <li><strong>Commentaire :</strong> ${echapperHtml(commentaire)}</li>
+                   </ul>
+                   <p><a href="${lienApprobation}">Approuver et publier cet avis</a></p>
+                   <p>Ce lien est valable 30 jours. Pour dépublier ou supprimer un avis, utilisez la vue Support plateforme.</p>`,
+        }),
+    });
+
+    let data = null;
+    try {
+        data = await res.json();
+    } catch (e) {
+        data = null;
+    }
+    if (!res.ok) {
+        const message = data?.message || `Erreur HTTP ${res.status}`;
+        throw new Error(`Échec de l'envoi de la notification d'avis : ${message}`);
+    }
+    return data;
+}
+
+module.exports = { envoyerEmailVerification, envoyerEmailRappelSaas, envoyerNotificationContact, envoyerNotificationAvis, estConfigure };

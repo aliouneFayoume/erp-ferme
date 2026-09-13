@@ -42,6 +42,7 @@
     --elevage: #8C5A3B;
     --elevage-tint: #F1E6DD;
     --success: #2E7D46;
+    --danger: #C0392B;
     --shadow: 0 1px 2px rgba(26, 26, 26, 0.05), 0 10px 28px rgba(26, 26, 26, 0.06);
     --display: "Avenir Next", "Century Gothic", "Futura", -apple-system, "Segoe UI", sans-serif;
     --body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -91,6 +92,7 @@
       --elevage: #D9A87C;
       --elevage-tint: #332318;
       --success: #6FBE86;
+      --danger: #E2867A;
       --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px rgba(0, 0, 0, 0.35);
     }
   }
@@ -264,6 +266,25 @@
   .case-study cite { font-size: 0.85rem; color: var(--muted); font-style: normal; }
   @media (max-width: 560px) { .case-study { grid-template-columns: 1fr; text-align: left; } .case-badge { width: 3.5rem; height: 3.5rem; font-size: 1rem; } }
 
+  .avis-header {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+    gap: 1rem; margin: 2.2rem 0 1.2rem;
+  }
+  .avis-header h3 { margin: 0; font-size: 1.02rem; }
+  .avis-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1.1rem; }
+  .avis-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 1.3rem 1.4rem;
+  }
+  .avis-stars { color: var(--primary); font-size: 0.95rem; letter-spacing: 0.12em; margin-bottom: 0.6rem; }
+  .avis-card p { margin: 0 0 0.8rem; font-size: 0.9rem; color: var(--text); }
+  .avis-card cite { font-size: 0.8rem; color: var(--muted); font-style: normal; }
+  .modal-box textarea {
+    width: 100%; padding: 0.65rem 0.8rem; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: 0.95rem; font-family: inherit; resize: vertical;
+  }
+  .modal-box textarea:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+
   .price-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.1rem; }
   .price-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
@@ -348,6 +369,38 @@
   }
   .final-cta h2 { max-width: none; }
   .final-cta p { max-width: 50ch; margin: 0 auto 1.6rem; color: var(--muted); }
+  .final-cta .cta-row { justify-content: center; margin-bottom: 0; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(20, 20, 20, 0.55);
+    display: flex; align-items: center; justify-content: center;
+    padding: 1.2rem; z-index: 100;
+  }
+  .modal-overlay[hidden] { display: none; }
+  .modal-box {
+    background: var(--surface); border-radius: 16px; box-shadow: var(--shadow);
+    max-width: 440px; width: 100%; padding: 2rem; text-align: left;
+    max-height: 90vh; overflow-y: auto; position: relative;
+  }
+  .modal-box h3 { margin: 0 0 0.4rem; font-family: var(--display); font-size: 1.25rem; }
+  .modal-lede { margin: 0 0 1.5rem; color: var(--muted); font-size: 0.92rem; }
+  .modal-close {
+    position: absolute; top: 1.1rem; right: 1.1rem; background: none; border: none;
+    font-size: 1.4rem; line-height: 1; color: var(--muted-2); cursor: pointer; padding: 0.2rem;
+  }
+  .modal-close:hover { color: var(--text); }
+  .form-field { margin-bottom: 1.1rem; }
+  .form-field label { display: block; font-size: 0.82rem; font-weight: 700; margin-bottom: 0.4rem; }
+  .form-field input, .form-field select {
+    width: 100%; padding: 0.65rem 0.8rem; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: 0.95rem; font-family: inherit;
+  }
+  .form-field input:focus, .form-field select:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+  .modal-box form .btn { width: 100%; border: none; cursor: pointer; font-family: inherit; justify-content: center; }
+  .modal-box form .btn:disabled { opacity: 0.6; cursor: default; }
+  .form-error { color: var(--danger); font-size: 0.85rem; margin: -0.4rem 0 1rem; }
+  .form-success p:first-child { color: var(--success); font-weight: 700; margin: 0 0 0.4rem; }
+  .form-success p:last-child { color: var(--muted); margin: 0; }
 
   footer {
     border-top: 1px solid var(--border); padding: 2.4rem 0; margin-top: 1rem;
@@ -498,6 +551,12 @@
         <cite>Ferme Massla — utilisatrice quotidienne de l'ERP</cite>
       </div>
     </div>
+
+    <div class="avis-header">
+      <h3>Avis clients</h3>
+      <button type="button" class="btn btn-ghost" id="btn-open-avis-modal" data-track="clic_ouvrir_modal_avis">Laisser un avis</button>
+    </div>
+    <div class="avis-grid" id="avis-grid" hidden></div>
   </section>
 
   <section id="tarifs">
@@ -618,7 +677,10 @@
     <div class="final-cta">
       <h2>Voyez l'application tourner sur votre propre téléphone</h2>
       <p>Une démonstration gratuite de 15 minutes, sans engagement — le même outil utilisé chaque jour par la Ferme Massla.</p>
-      <a class="btn btn-primary" href="https://wa.me/14165266293" target="_blank" rel="noopener" data-track="contact_whatsapp">Écrire sur WhatsApp</a>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://wa.me/14165266293" target="_blank" rel="noopener" data-track="contact_whatsapp">Écrire sur WhatsApp</a>
+        <button type="button" class="btn btn-ghost" id="btn-open-contact-modal" data-track="clic_ouvrir_modal_contact">Être recontacté</button>
+      </div>
     </div>
   </section>
 
@@ -635,5 +697,80 @@
   </div>
 </footer>
 
+<div class="modal-overlay" id="modal-contact" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-contact-title">
+    <button type="button" class="modal-close" id="modal-contact-close" aria-label="Fermer">&times;</button>
+    <h3 id="modal-contact-title">Être recontacté</h3>
+    <p class="modal-lede">Laissez vos coordonnées, nous vous recontactons rapidement pour organiser votre démonstration gratuite.</p>
+    <form id="form-contact" novalidate>
+      <div class="form-field">
+        <label for="contact-nom">Nom et prénom</label>
+        <input type="text" id="contact-nom" name="nom" required maxlength="100" autocomplete="name" />
+      </div>
+      <div class="form-field">
+        <label for="contact-email">Adresse email</label>
+        <input type="email" id="contact-email" name="email" required autocomplete="email" />
+      </div>
+      <div class="form-field">
+        <label for="contact-whatsapp">Numéro de téléphone WhatsApp</label>
+        <input type="tel" id="contact-whatsapp" name="whatsapp" required autocomplete="tel" placeholder="+221 77 000 00 00" />
+      </div>
+      <div class="form-field">
+        <label for="contact-preference">Comment préférez-vous être contacté ?</label>
+        <select id="contact-preference" name="preference" required>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="telephone">Appel téléphonique</option>
+          <option value="email">Email</option>
+        </select>
+      </div>
+      <p class="form-error" id="contact-error" hidden></p>
+      <button type="submit" class="btn btn-primary" id="contact-submit">Envoyer ma demande</button>
+    </form>
+    <div class="form-success" id="contact-success" hidden>
+      <p>Merci ! Votre demande a bien été envoyée.</p>
+      <p>Nous vous recontacterons très vite.</p>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-avis" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-avis-title">
+    <button type="button" class="modal-close" id="modal-avis-close" aria-label="Fermer">&times;</button>
+    <h3 id="modal-avis-title">Laisser un avis</h3>
+    <p class="modal-lede">Votre avis sera publié après vérification par notre équipe.</p>
+    <form id="form-avis" novalidate>
+      <div class="form-field">
+        <label for="avis-nom">Nom et prénom</label>
+        <input type="text" id="avis-nom" name="nom" required maxlength="100" autocomplete="name" />
+      </div>
+      <div class="form-field">
+        <label for="avis-ferme">Nom de votre ferme (optionnel)</label>
+        <input type="text" id="avis-ferme" name="nomFerme" maxlength="100" />
+      </div>
+      <div class="form-field">
+        <label for="avis-note">Votre note</label>
+        <select id="avis-note" name="note" required>
+          <option value="5">★★★★★ — Excellent</option>
+          <option value="4">★★★★☆ — Très bien</option>
+          <option value="3">★★★☆☆ — Correct</option>
+          <option value="2">★★☆☆☆ — Décevant</option>
+          <option value="1">★☆☆☆☆ — Insuffisant</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label for="avis-commentaire">Votre commentaire</label>
+        <textarea id="avis-commentaire" name="commentaire" required maxlength="600" rows="4"></textarea>
+      </div>
+      <p class="form-error" id="avis-error" hidden></p>
+      <button type="submit" class="btn btn-primary" id="avis-submit">Envoyer mon avis</button>
+    </form>
+    <div class="form-success" id="avis-success" hidden>
+      <p>Merci pour votre avis !</p>
+      <p>Il sera publié après vérification par notre équipe.</p>
+    </div>
+  </div>
+</div>
+
+<script src="/js/dist/contact-decouvrir.min.js"></script>
 </body>
 </html>

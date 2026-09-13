@@ -696,6 +696,30 @@ CREATE TABLE factures_saas (
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- --------------------------------------------------------
+-- AVIS PUBLICS (site vitrine massla.sn/decouvrir)
+-- --------------------------------------------------------
+-- Avis laissés par les visiteurs du site vitrine — délibérément SANS tenant_id : un avis ne
+-- concerne aucune ferme cliente précise, c'est un visiteur qui commente son expérience. Pas de RLS
+-- ici (voir rls-policies.sql), comme `roles` : donnée globale à la plateforme, pas au tenant. Un
+-- formulaire public sans validation humaine est une invitation au spam/contenu abusif — approuve
+-- vaut FALSE par défaut, seul un superviseur peut publier (routes/plateforme.js), jamais le visiteur
+-- lui-même (routes/avis.js force approuve=FALSE côté serveur, ignore toute valeur envoyée).
+-- token_approbation_hash : approbation en un clic depuis l'email de notification (routes/avis.js),
+-- même pattern que utilisateurs.email_verification_token_hash — jeton en clair envoyé par email,
+-- seul son hash SHA-256 est stocké ; effacé après usage (lien à usage unique).
+CREATE TABLE avis_publics (
+    id SERIAL PRIMARY KEY,
+    nom VARCHAR(100) NOT NULL,
+    nom_ferme VARCHAR(100),
+    note SMALLINT NOT NULL CHECK (note BETWEEN 1 AND 5),
+    commentaire VARCHAR(600) NOT NULL,
+    approuve BOOLEAN NOT NULL DEFAULT FALSE,
+    token_approbation_hash VARCHAR(64),
+    token_approbation_expire_le TIMESTAMP,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ==============================================================================
 -- INDEX POUR OPTIMISER LES PERFORMANCES DES REQUÊTES DU DASHBOARD
 -- ==============================================================================

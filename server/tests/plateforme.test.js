@@ -737,4 +737,63 @@ describe('plateforme — relance de facture SaaS par email', () => {
         expect(res.status).toBe(403);
         expect(envoyerEmailRappelSaas).not.toHaveBeenCalled();
     });
+
+    describe('avis publics — modération (site vitrine)', () => {
+        async function creerAvis(overrides = {}) {
+            const a = { nom: 'Visiteur Test', nom_ferme: null, note: 5, commentaire: 'Très bon outil.', approuve: false, ...overrides };
+            const res = await pool.query(
+                `INSERT INTO avis_publics (nom, nom_ferme, note, commentaire, approuve) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+                [a.nom, a.nom_ferme, a.note, a.commentaire, a.approuve]
+            );
+            return res.rows[0];
+        }
+
+        test('le superviseur voit tous les avis, approuvés et en attente', async () => {
+            await creerAvis({ nom: 'En attente', approuve: false });
+            await creerAvis({ nom: 'Déjà publié', approuve: true });
+
+            const res = await request(app).get('/api/plateforme/avis').set('Authorization', `Bearer ${tokenSuperviseur}`);
+
+            expect(res.status).toBe(200);
+            expect(res.body).toHaveLength(2);
+        });
+
+        test('un admin sans le flag superviseur ne peut pas lister les avis', async () => {
+            const res = await request(app).get('/api/plateforme/avis').set('Authorization', `Bearer ${tokenAdminNormal}`);
+            expect(res.status).toBe(403);
+        });
+
+        test('approuver un avis le fait apparaître sur GET /api/avis (public)', async () => {
+            const avis = await creerAvis({ approuve: false });
+
+            const resUpdate = await request(app)
+                .put(`/api/plateforme/avis/${avis.id}`)
+                .set('Authorization', `Bearer ${tokenSuperviseur}`)
+                .send({ approuve: true });
+            expect(resUpdate.status).toBe(200);
+            expect(resUpdate.body.approuve).toBe(true);
+
+            const appPublic = buildApp(pool, ['avis']);
+            const resPublic = await request(appPublic).get('/api/avis');
+            expect(resPublic.status).toBe(200);
+            expect(resPublic.body.map((a) => a.id)).toContain(avis.id);
+        });
+
+        test('supprimer un avis le retire définitivement', async () => {
+            const avis = await creerAvis();
+            const resDelete = await request(app).delete(`/api/plateforme/avis/${avis.id}`).set('Authorization', `Bearer ${tokenSuperviseur}`);
+            expect(resDelete.status).toBe(204);
+
+            const resGet = await pool.query(`SELECT id FROM avis_publics WHERE id = $1`, [avis.id]);
+            expect(resGet.rows).toHaveLength(0);
+        });
+
+        test('mettre à jour un avis inexistant renvoie 404', async () => {
+            const res = await request(app)
+                .put('/api/plateforme/avis/999999')
+                .set('Authorization', `Bearer ${tokenSuperviseur}`)
+                .send({ approuve: true });
+            expect(res.status).toBe(404);
+        });
+    });
 });

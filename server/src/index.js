@@ -86,6 +86,8 @@ async function main() {
     }
 
     app.use('/api/public', require('./routes/public')(pool));
+    app.use('/api/contact', require('./routes/contact')(pool));
+    app.use('/api/avis', require('./routes/avis')(pool));
     app.use('/api/auth', require('./routes/auth')(pool));
     app.use('/api/inscription', require('./routes/inscription')(pool));
     app.use('/api/dashboard', require('./routes/dashboard')(pool));

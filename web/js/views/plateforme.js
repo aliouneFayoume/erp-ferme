@@ -9,11 +9,12 @@ const FACTURE_SAAS_STATUT_BADGE = { A_PAYER: 'warn', PAYEE: 'ok', EN_RETARD: 'da
 
 window.Views.plateforme = {
   async render(container) {
-    const [organisations, tickets, catalogue, facturesSaas] = await Promise.all([
+    const [organisations, tickets, catalogue, facturesSaas, avis] = await Promise.all([
       Api.get('/plateforme/organisations'),
       Api.get('/plateforme/tickets'),
       Api.get('/plateforme/modules-saas'),
       Api.get('/plateforme/factures-saas'),
+      Api.get('/plateforme/avis'),
     ]);
 
     container.innerHTML = `
@@ -56,6 +57,17 @@ window.Views.plateforme = {
           <thead><tr><th>Ferme</th><th>Type</th><th>Période</th><th>Montant</th><th>Échéance</th><th>Statut</th><th></th></tr></thead>
           <tbody id="factures-saas-body">
             ${renderLignesFacturesSaas(facturesSaas)}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h2>Avis clients (${avis.filter((a) => !a.approuve).length} en attente)</h2>
+        <p class="desc">Un avis soumis depuis massla.sn/decouvrir n'est visible publiquement qu'une fois approuvé ici.</p>
+        <table>
+          <thead><tr><th>Auteur</th><th>Ferme</th><th>Note</th><th>Commentaire</th><th>Soumis le</th><th>Statut</th><th></th></tr></thead>
+          <tbody id="avis-body">
+            ${renderLignesAvis(avis)}
           </tbody>
         </table>
       </div>
@@ -114,8 +126,69 @@ window.Views.plateforme = {
 
     attacherOuvrirTicket(container.querySelector('#plateforme-tickets-body'), tickets);
     attacherActionsFactures(container.querySelector('#factures-saas-body'), facturesSaas, container);
+    attacherActionsAvis(container.querySelector('#avis-body'), container);
   },
 };
+
+const AVIS_ETOILES = { 1: '★☆☆☆☆', 2: '★★☆☆☆', 3: '★★★☆☆', 4: '★★★★☆', 5: '★★★★★' };
+
+function renderLignesAvis(avisList) {
+  if (avisList.length === 0) return '<tr><td colspan="7" class="empty">Aucun avis pour le moment.</td></tr>';
+  return avisList
+    .map(
+      (a) => `<tr>
+        <td>${esc(a.nom)}</td>
+        <td>${a.nom_ferme ? esc(a.nom_ferme) : '<span class="desc">—</span>'}</td>
+        <td>${AVIS_ETOILES[a.note] || a.note}</td>
+        <td style="max-width:320px;white-space:normal;">${esc(a.commentaire)}</td>
+        <td>${fmtDate(a.cree_le)}</td>
+        <td><span class="badge ${a.approuve ? 'ok' : 'warn'}">${a.approuve ? 'Publié' : 'En attente'}</span></td>
+        <td style="white-space:nowrap">
+          ${a.approuve
+            ? `<button class="secondary" data-depublier="${a.id}">Dépublier</button>`
+            : `<button data-approuver="${a.id}">Approuver</button>`}
+          <button class="danger" data-supprimer-avis="${a.id}">Supprimer</button>
+        </td>
+      </tr>`
+    )
+    .join('');
+}
+
+function attacherActionsAvis(scope, container) {
+  scope.querySelectorAll('button[data-approuver]').forEach((btn) => {
+    btn.addEventListener('click', () => changerApprobationAvis(container, btn.dataset.approuver, true));
+  });
+  scope.querySelectorAll('button[data-depublier]').forEach((btn) => {
+    btn.addEventListener('click', () => changerApprobationAvis(container, btn.dataset.depublier, false));
+  });
+  scope.querySelectorAll('button[data-supprimer-avis]').forEach((btn) => {
+    btn.addEventListener('click', () => supprimerAvis(container, btn.dataset.supprimerAvis));
+  });
+}
+
+async function changerApprobationAvis(container, avisId, approuve) {
+  try {
+    await Api.put(`/plateforme/avis/${avisId}`, { approuve });
+    showToast(approuve ? 'Avis publié.' : 'Avis dépublié.', 'success');
+    window.Views.plateforme.render(container);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function supprimerAvis(container, avisId) {
+  const values = await Modal.open('Supprimer cet avis ?', [
+    { name: 'confirmer', label: 'Cette action est définitive. Tapez "OUI" pour confirmer', type: 'text', value: '' },
+  ]);
+  if (!values || values.confirmer.trim().toUpperCase() !== 'OUI') return;
+  try {
+    await Api.del(`/plateforme/avis/${avisId}`);
+    showToast('Avis supprimé.', 'success');
+    window.Views.plateforme.render(container);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
 
 function renderLignesTickets(tickets) {
   if (tickets.length === 0) return '<tr><td colspan="7" class="empty">Aucun ticket.</td></tr>';
