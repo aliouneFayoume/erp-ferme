@@ -483,7 +483,7 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
 
   const overlay = el(`
     <div class="modal-overlay">
-      <div class="modal-box">
+      <div class="modal-box modal-box-lg">
         <h3>Abonnement SaaS — ${esc(org.nom)}</h3>
 
         <div class="panel" style="margin-bottom: 1rem;">

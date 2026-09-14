@@ -312,6 +312,11 @@ td.num { font-family: ui-monospace, monospace; }
 .modal-box .modal-fields { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }
 .modal-box .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
+/* Panneaux plus riches qu'une simple confirmation (ex: Abonnement SaaS — secteurs + catalogue de
+   modules + tarification) : la largeur fixe de .modal-box (360px) forçait un empilement très
+   étroit et sans limite de hauteur, débordant largement l'écran au lieu de défiler proprement. */
+.modal-box.modal-box-lg { max-width: 640px; max-height: 90vh; overflow-y: auto; }
+
 /* ---------- Responsive (terrain mobile : livreurs) ---------- */
 /* ---------- Sidebar hors-canvas (tablette/mobile) ---------- */
 @media (max-width: 880px) {
