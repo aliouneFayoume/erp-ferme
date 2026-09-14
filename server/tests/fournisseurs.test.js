@@ -208,4 +208,79 @@ describe('fournisseurs — annuaire, commandes d\'achat, alertes de réappro', (
         const res = await request(app).get('/api/fournisseurs').set('Authorization', `Bearer ${token}`);
         expect(res.body.find((f) => f.nom === 'Fournisseur Autre Ferme')).toBeUndefined();
     });
+
+    describe('lien avec le stock d\'intrants (migration 23)', () => {
+        async function creerIntrant(overrides = {}) {
+            const i = { nom: 'Aliment ponte', categorie: 'Aliment', unite: 'kg', quantite_stock: 0, ...overrides };
+            const res = await pool.query(
+                `INSERT INTO intrants (tenant_id, nom, categorie, unite, quantite_stock) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+                [tenantId, i.nom, i.categorie, i.unite, i.quantite_stock]
+            );
+            return res.rows[0];
+        }
+
+        test('réceptionner une commande dont une ligne est liée à un intrant augmente son stock', async () => {
+            const fournisseur = await creerFournisseur(app, token);
+            const intrant = await creerIntrant({ quantite_stock: 10 });
+
+            const commande = (
+                await request(app)
+                    .post('/api/fournisseurs/commandes')
+                    .set('Authorization', `Bearer ${token}`)
+                    .send({
+                        fournisseur_id: fournisseur.id,
+                        lignes: [
+                            { designation: 'Aliment ponte 25kg', quantite: 40, prix_unitaire: 500, intrant_id: intrant.id },
+                            { designation: 'Pince à sertir (matériel)', quantite: 1, prix_unitaire: 5000 },
+                        ],
+                    })
+            ).body;
+
+            const res = await request(app).put(`/api/fournisseurs/commandes/${commande.id}/recevoir`).set('Authorization', `Bearer ${token}`).send({});
+            expect(res.status).toBe(200);
+
+            const apres = await pool.query(`SELECT quantite_stock FROM intrants WHERE id = $1`, [intrant.id]);
+            expect(Number(apres.rows[0].quantite_stock)).toBe(50);
+
+            const mouvements = await pool.query(`SELECT * FROM mouvements_intrants WHERE intrant_id = $1`, [intrant.id]);
+            expect(mouvements.rows).toHaveLength(1);
+            expect(mouvements.rows[0].type).toBe('ENTREE');
+            expect(mouvements.rows[0].motif).toBe('RECEPTION_COMMANDE');
+            expect(Number(mouvements.rows[0].quantite)).toBe(40);
+        });
+
+        test('rejette un intrant_id invalide (autre organisation)', async () => {
+            const autreTenantId = await creerOrganisation(pool, 'Autre Ferme');
+            const intrantAutreFerme = await pool.query(
+                `INSERT INTO intrants (tenant_id, nom, unite, quantite_stock) VALUES ($1, 'Aliment', 'kg', 0) RETURNING id`,
+                [autreTenantId]
+            );
+            const fournisseur = await creerFournisseur(app, token);
+
+            const res = await request(app)
+                .post('/api/fournisseurs/commandes')
+                .set('Authorization', `Bearer ${token}`)
+                .send({
+                    fournisseur_id: fournisseur.id,
+                    lignes: [{ designation: 'Aliment', quantite: 10, prix_unitaire: 500, intrant_id: intrantAutreFerme.rows[0].id }],
+                });
+            expect(res.status).toBe(400);
+        });
+
+        test('une ligne sans intrant_id ne touche à aucun stock', async () => {
+            const fournisseur = await creerFournisseur(app, token);
+            const commande = (
+                await request(app)
+                    .post('/api/fournisseurs/commandes')
+                    .set('Authorization', `Bearer ${token}`)
+                    .send({ fournisseur_id: fournisseur.id, lignes: [{ designation: 'Matériel divers', quantite: 1, prix_unitaire: 1000 }] })
+            ).body;
+
+            const res = await request(app).put(`/api/fournisseurs/commandes/${commande.id}/recevoir`).set('Authorization', `Bearer ${token}`).send({});
+            expect(res.status).toBe(200);
+
+            const mouvements = await pool.query(`SELECT * FROM mouvements_intrants`);
+            expect(mouvements.rows).toHaveLength(0);
+        });
+    });
 });

@@ -498,6 +498,60 @@ CREATE TABLE lignes_commande_fournisseur (
 CREATE INDEX idx_commandes_fournisseurs_statut ON commandes_fournisseurs(statut);
 
 -- --------------------------------------------------------
+-- STOCK D'INTRANTS (aliment, engrais, phytosanitaires, vétérinaire...)
+-- --------------------------------------------------------
+-- Distinct du catalogue `produits`/`stocks` (destinés à la VENTE) : ici on suit ce que la ferme
+-- CONSOMME pour produire — jusqu'ici uniquement suivi côté achat (lignes_commande_fournisseur, en
+-- texte libre) et côté usage (releves_journaliers.conso_aliment_kg / intrants_utilises, jamais
+-- déduit d'un quelconque stock). quantite_stock ici est la source de vérité, mise à jour UNIQUEMENT
+-- via des mouvements (jamais modifiée directement), pour garder un historique auditable de chaque
+-- entrée/sortie — même philosophie que `stocks` mais avec un vrai grand livre au lieu d'un seul
+-- compteur.
+CREATE TABLE intrants (
+    id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
+    secteur_id INT REFERENCES secteurs(id), -- optionnel : intrant générique (ex: gasoil) si NULL
+    nom VARCHAR(150) NOT NULL,
+    -- IS NULL OR ... explicite (pas juste CHECK (categorie IN (...))) : categorie est optionnelle et
+    -- pg-mem (tests) rejette à tort une ligne NULL sur un simple CHECK IN, contrairement à PostgreSQL
+    -- où NULL passe silencieusement un CHECK — voir memory erp_ferme_pgmem_limitations.
+    categorie VARCHAR(30) CHECK (categorie IS NULL OR categorie IN ('Aliment', 'Engrais', 'Phytosanitaire', 'Vétérinaire', 'Semences', 'Autre')),
+    unite VARCHAR(30) NOT NULL, -- 'kg', 'L', 'sac', 'dose'...
+    quantite_stock NUMERIC NOT NULL DEFAULT 0, -- peut devenir négatif (signal d'écart à investiguer), jamais bloqué de force
+    seuil_alerte NUMERIC,
+    deleted_at TIMESTAMP,
+    cree_par INT REFERENCES utilisateurs(id),
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Grand livre des mouvements de stock — jamais modifié/supprimé après coup, seule façon de faire
+-- varier intrants.quantite_stock (voir routes/intrants.js). motif distingue une entrée manuelle
+-- d'une réception de commande fournisseur, et une sortie manuelle d'une déduction automatique
+-- déclenchée par un relevé journalier (aliment consommé).
+CREATE TABLE mouvements_intrants (
+    id SERIAL PRIMARY KEY,
+    intrant_id INT REFERENCES intrants(id) ON DELETE CASCADE,
+    type VARCHAR(10) NOT NULL CHECK (type IN ('ENTREE', 'SORTIE')),
+    quantite NUMERIC NOT NULL CHECK (quantite > 0), -- toujours positif ; `type` porte le sens
+    motif VARCHAR(30) NOT NULL CHECK (motif IN ('MANUEL', 'RECEPTION_COMMANDE', 'RELEVE_JOURNALIER', 'AJUSTEMENT')),
+    lot_id INT REFERENCES lots_production(id),
+    commande_fournisseur_id INT REFERENCES commandes_fournisseurs(id),
+    notes TEXT,
+    cree_par INT REFERENCES utilisateurs(id),
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Intrant "aliment par défaut" d'un secteur (Avicole/Piscicole) : quand renseigné, chaque relevé
+-- journalier avec un aliment consommé > 0 pour un lot de ce secteur déduit automatiquement cette
+-- quantité de cet intrant (routes/production.js, POST /sync) — évite une double saisie manuelle.
+ALTER TABLE secteurs ADD COLUMN intrant_alimentation_id INT REFERENCES intrants(id);
+
+-- Lien optionnel d'une ligne d'achat vers le stock (ajouté ici, après `intrants`, plutôt que dans sa
+-- définition ci-dessus, pour une raison purement d'ordre de création) : une ligne de matériel ou de
+-- service n'a pas vocation à alimenter un stock, seule une ligne qui EST un intrant le fait.
+ALTER TABLE lignes_commande_fournisseur ADD COLUMN intrant_id INT REFERENCES intrants(id);
+
+-- --------------------------------------------------------
 -- 7ter. IMMOBILISATIONS (inventaire, entretien, amortissement — section de l'onglet Comptabilité)
 -- --------------------------------------------------------
 

@@ -172,9 +172,15 @@ module.exports = function fournisseursRoutes(pool) {
                 if (!(quantite > 0) || !(prixUnitaire >= 0)) {
                     throw { statut: 400, message: 'Quantité et prix unitaire doivent être positifs.' };
                 }
+                let intrantId = null;
+                if (ligne.intrant_id) {
+                    const intrantRes = await client.query(`SELECT id FROM intrants WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, [ligne.intrant_id, tenantId]);
+                    if (intrantRes.rows.length === 0) throw { statut: 400, message: 'Intrant invalide.' };
+                    intrantId = intrantRes.rows[0].id;
+                }
                 const sousTotal = quantite * prixUnitaire;
                 montantTotal += sousTotal;
-                lignesPreparees.push({ designation, unite: ligne.unite || null, quantite, prixUnitaire, sousTotal });
+                lignesPreparees.push({ designation, unite: ligne.unite || null, quantite, prixUnitaire, sousTotal, intrantId });
             }
 
             const numero = await genererNumeroUnique(client, 'commandes_fournisseurs', 'CMF', tenantId);
@@ -193,9 +199,9 @@ module.exports = function fournisseursRoutes(pool) {
 
             for (const l of lignesPreparees) {
                 await client.query(
-                    `INSERT INTO lignes_commande_fournisseur (commande_fournisseur_id, designation, unite, quantite, prix_unitaire, sous_total)
-                     VALUES ($1, $2, $3, $4, $5, $6)`,
-                    [commande.id, l.designation, l.unite, l.quantite, l.prixUnitaire, l.sousTotal]
+                    `INSERT INTO lignes_commande_fournisseur (commande_fournisseur_id, designation, unite, quantite, prix_unitaire, sous_total, intrant_id)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                    [commande.id, l.designation, l.unite, l.quantite, l.prixUnitaire, l.sousTotal, l.intrantId]
                 );
             }
 
@@ -256,6 +262,21 @@ module.exports = function fournisseursRoutes(pool) {
                     req.user.id,
                 ]
             );
+
+            // Alimente le stock pour chaque ligne liée à un intrant du catalogue — les lignes de
+            // matériel/service (intrant_id NULL) n'ont aucun effet sur le stock.
+            const lignesIntrants = await client.query(
+                `SELECT intrant_id, quantite FROM lignes_commande_fournisseur WHERE commande_fournisseur_id = $1 AND intrant_id IS NOT NULL`,
+                [commande.id]
+            );
+            for (const ligne of lignesIntrants.rows) {
+                await client.query(`UPDATE intrants SET quantite_stock = quantite_stock + $1 WHERE id = $2`, [ligne.quantite, ligne.intrant_id]);
+                await client.query(
+                    `INSERT INTO mouvements_intrants (intrant_id, type, quantite, motif, commande_fournisseur_id, cree_par)
+                     VALUES ($1, 'ENTREE', $2, 'RECEPTION_COMMANDE', $3, $4)`,
+                    [ligne.intrant_id, ligne.quantite, commande.id, req.user.id]
+                );
+            }
 
             await client.query('COMMIT');
             await logAudit(req.db, { req,

@@ -22,6 +22,25 @@ module.exports = function productionRoutes(pool) {
         res.json(result.rows);
     });
 
+    /**
+     * Définit (ou retire, avec intrant_id null) l'intrant "aliment par défaut" d'un secteur — voir
+     * la déduction automatique dans POST /sync ci-dessous.
+     */
+    router.put('/secteurs/:id/aliment-defaut', requireAuth(pool), checkRole(['chef_prod', 'comptable']), async (req, res) => {
+        const intrantId = req.body.intrant_id || null;
+        if (intrantId) {
+            const intrantRes = await req.db.query(`SELECT id FROM intrants WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, [intrantId, req.user.tenant_id]);
+            if (intrantRes.rows.length === 0) return res.status(400).json({ erreur: 'Intrant invalide.' });
+        }
+        const result = await req.db.query(
+            `UPDATE secteurs SET intrant_alimentation_id = $1 WHERE id = $2 AND tenant_id = $3 RETURNING *`,
+            [intrantId, req.params.id, req.user.tenant_id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ erreur: 'Secteur introuvable.' });
+        await logAudit(req.db, { req, table: 'secteurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { intrant_alimentation_id: intrantId } });
+        res.json(result.rows[0]);
+    });
+
     // Un chef de prod ne voit que les lots de son secteur ; admin/comptable voient tout ceux de leur organisation.
     router.get('/lots', requireAuth(pool), async (req, res) => {
         try {
@@ -198,6 +217,27 @@ module.exports = function productionRoutes(pool) {
                         `UPDATE lots_production SET quantite_initiale = quantite_initiale + $1 WHERE id = $2`,
                         [-releve.mortalite, releve.lot_id]
                     );
+                }
+
+                // Déduction automatique du stock d'intrants (aliment) — best-effort, jamais bloquant :
+                // un relevé de terrain (souvent saisi hors ligne) ne doit jamais échouer à cause d'une
+                // histoire de stock. Ne s'applique que si le secteur du lot a un "aliment par défaut"
+                // configuré (routes/intrants.js) ; le stock peut devenir négatif (signal à
+                // investiguer) plutôt que de bloquer.
+                if (releve.conso_aliment_kg > 0) {
+                    const secteurRes = await client.query(
+                        `SELECT s.intrant_alimentation_id FROM lots_production l JOIN secteurs s ON s.id = l.secteur_id WHERE l.id = $1`,
+                        [releve.lot_id]
+                    );
+                    const intrantAlimentationId = secteurRes.rows[0]?.intrant_alimentation_id;
+                    if (intrantAlimentationId) {
+                        await client.query(`UPDATE intrants SET quantite_stock = quantite_stock - $1 WHERE id = $2`, [releve.conso_aliment_kg, intrantAlimentationId]);
+                        await client.query(
+                            `INSERT INTO mouvements_intrants (intrant_id, type, quantite, motif, lot_id, cree_par)
+                             VALUES ($1, 'SORTIE', $2, 'RELEVE_JOURNALIER', $3, $4)`,
+                            [intrantAlimentationId, releve.conso_aliment_kg, releve.lot_id, req.user.id]
+                        );
+                    }
                 }
             }
 

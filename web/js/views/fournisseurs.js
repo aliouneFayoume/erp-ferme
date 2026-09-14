@@ -2,10 +2,11 @@ window.Views = window.Views || {};
 
 window.Views.fournisseurs = {
   async render(container) {
-    const [fournisseurs, commandes, alertes] = await Promise.all([
+    const [fournisseurs, commandes, alertes, intrants] = await Promise.all([
       Api.get('/fournisseurs'),
       Api.get('/fournisseurs/commandes'),
       Api.get('/fournisseurs/reappro-alertes'),
+      Api.get('/intrants'),
     ]);
     const moi = Api.getUser();
 
@@ -74,7 +75,7 @@ window.Views.fournisseurs = {
           </select>
         </label>
         <label>Livraison prévue le<input type="date" id="date-livraison-prevue" /></label>
-        <p class="desc">Articles achetés (aliment, vaccins, semences, matériel...) — distincts du catalogue des produits vendus aux clients.</p>
+        <p class="desc">Articles achetés (aliment, vaccins, semences, matériel...) — distincts du catalogue des produits vendus aux clients. Reliez une ligne à un intrant du stock (onglet Intrants &amp; Stock) pour que sa réception l'ajoute automatiquement au stock.</p>
         <div class="lignes-builder" id="lignes-builder" style="margin-top:14px"></div>
         <button type="button" class="secondary" id="btn-add-ligne">+ Ajouter un article</button>
         <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center">
@@ -157,6 +158,10 @@ window.Views.fournisseurs = {
           <input type="text" class="ligne-unite" placeholder="Unité (sac, L...)" style="max-width:100px" />
           <input type="number" class="ligne-qte" min="1" value="1" placeholder="Qté" />
           <input type="number" class="ligne-prix" min="0" step="0.01" placeholder="Prix unitaire" />
+          <select class="ligne-intrant" title="Ajouter au stock d'intrants à la réception (optionnel)">
+            <option value="">Pas de suivi de stock</option>
+            ${intrants.map((i) => `<option value="${i.id}">→ ${esc(i.nom)} (${esc(i.unite)})</option>`).join('')}
+          </select>
           <button type="button" class="secondary btn-remove-ligne">✕</button>
         </div>
       `);
@@ -191,6 +196,7 @@ window.Views.fournisseurs = {
         unite: row.querySelector('.ligne-unite').value.trim() || null,
         quantite: Number(row.querySelector('.ligne-qte').value),
         prix_unitaire: Number(row.querySelector('.ligne-prix').value),
+        intrant_id: row.querySelector('.ligne-intrant').value || null,
       }));
       try {
         const commande = await Api.post('/fournisseurs/commandes', { fournisseur_id, date_livraison_prevue, lignes });

@@ -104,6 +104,7 @@ async function main() {
     app.use('/api/tickets', require('./routes/tickets')(pool));
     app.use('/api/portail', require('./routes/portail')(pool));
     app.use('/api/fournisseurs', require('./routes/fournisseurs')(pool));
+    app.use('/api/intrants', require('./routes/intrants')(pool));
     app.use('/api/immobilisations', require('./routes/immobilisations')(pool));
     app.use('/api/paie', require('./routes/paie')(pool));
     app.use('/api/elevage', require('./routes/elevage')(pool));

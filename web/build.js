@@ -32,6 +32,7 @@ const BUNDLES = {
     'js/views/abonnements.js',
     'js/views/commandes.js',
     'js/views/fournisseurs.js',
+    'js/views/intrants.js',
     'js/views/paie.js',
     'js/views/logistique.js',
     'js/views/finance.js',
