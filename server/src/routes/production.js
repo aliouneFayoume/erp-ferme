@@ -69,6 +69,35 @@ module.exports = function productionRoutes(pool) {
         }
     });
 
+    // Correction de l'effectif/date de démarrage d'un lot — utile quand la valeur saisie à la
+    // création était provisoire (ex. configuration d'une ferme avant d'avoir les vrais chiffres du
+    // client) ou simplement une erreur de saisie. Ne touche jamais au statut (voir route dédiée
+    // ci-dessous) ni à l'historique des relevés déjà enregistrés.
+    router.put('/lots/:id', requireAuth(pool), checkRole(['chef_prod']), async (req, res) => {
+        const { quantite_initiale, date_demarrage } = req.body;
+        if (quantite_initiale !== undefined && !(Number(quantite_initiale) > 0)) {
+            return res.status(400).json({ erreur: 'La quantité doit être un nombre positif.' });
+        }
+        if (!(await verifierAccesLot(req.db, req.params.id, req.user))) {
+            return res.status(403).json({ erreur: 'Ce lot ne relève pas de votre secteur.' });
+        }
+        try {
+            const result = await req.db.query(
+                `UPDATE lots_production SET
+                    quantite_initiale = COALESCE($1, quantite_initiale),
+                    date_demarrage = COALESCE($2, date_demarrage)
+                 WHERE id = $3 AND tenant_id = $4 AND deleted_at IS NULL RETURNING *`,
+                [quantite_initiale ?? null, date_demarrage || null, req.params.id, req.user.tenant_id]
+            );
+            if (result.rows.length === 0) return res.status(404).json({ erreur: 'Lot introuvable.' });
+            await logAudit(req.db, { req, table: 'lots_production', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { quantite_initiale, date_demarrage } });
+            res.json(result.rows[0]);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la mise à jour du lot.' });
+        }
+    });
+
     // Clôture d'un lot une fois la récolte/l'abattage effectué (ou déclaration de perte).
     router.put('/lots/:id/statut', requireAuth(pool), checkRole(['chef_prod']), async (req, res) => {
         const { statut } = req.body;

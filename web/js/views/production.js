@@ -158,6 +158,9 @@ function renderLotsList(container, lots) {
           <button class="secondary" style="margin-top:10px;width:100%" data-lot='${lotDataAttr(l)}'>
             Saisir un relevé / voir le FCR
           </button>
+          <button class="secondary btn-modifier-lot" style="margin-top:6px;width:100%" data-lot-id="${l.id}" data-quantite="${l.quantite_initiale}" data-date="${l.date_demarrage ? String(l.date_demarrage).slice(0, 10) : ''}">
+            Modifier
+          </button>
           <div style="margin-top:8px;display:flex;gap:6px">
             <select class="select-cloture" data-lot-id="${l.id}" style="flex:1">
               ${optionFin}
@@ -192,6 +195,23 @@ function renderLotsList(container, lots) {
 
   container.querySelectorAll('button[data-lot]').forEach((btn) => {
     btn.addEventListener('click', () => openRelevePanel(container, JSON.parse(btn.dataset.lot)));
+  });
+
+  container.querySelectorAll('button.btn-modifier-lot').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const values = await Modal.open('Modifier le lot', [
+        { name: 'quantite_initiale', label: 'Effectif / quantité', type: 'number', value: btn.dataset.quantite },
+        { name: 'date_demarrage', label: 'Date de démarrage', type: 'date', value: btn.dataset.date },
+      ]);
+      if (!values) return;
+      try {
+        await Api.put(`/production/lots/${btn.dataset.lotId}`, values);
+        showToast('Lot mis à jour.', 'success');
+        window.Views.production.render(container);
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
   });
 
   container.querySelectorAll('button.btn-cloturer').forEach((btn) => {

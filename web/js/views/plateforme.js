@@ -516,7 +516,7 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
             <input type="checkbox" name="pack" style="width:auto" ${surPack ? 'checked' : ''} />
             ${esc(catalogue.packToutCompris.label)} (${catalogue.packToutCompris.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois)
           </label>
-          <div id="modules-a-la-carte" style="${surPack ? 'opacity: 0.4; pointer-events: none;' : ''}">
+          <div id="modules-a-la-carte" style="${surPack ? 'opacity: 0.4;' : ''}">
             ${catalogue.modules
               .map(
                 (m) => `<label style="flex-direction: row; align-items: center; gap: 8px;">
@@ -587,12 +587,27 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
 
   overlay.querySelector('input[name="pack"]').addEventListener('change', (e) => {
     overlay.querySelector('#modules-a-la-carte').style.opacity = e.target.checked ? '0.4' : '1';
-    overlay.querySelector('#modules-a-la-carte').style.pointerEvents = e.target.checked ? 'none' : 'auto';
     // Coche/décoche visuellement chaque module pour que "Pack tout compris" se lise vraiment comme
     // "tout est inclus" — jusqu'ici les cases restaient grisées mais décochées, ce qui donnait
     // l'impression trompeuse que rien n'était sélectionné alors que l'enregistrement était correct.
     overlay.querySelectorAll('#modules-a-la-carte input[name="module"]').forEach((cb) => {
       cb.checked = e.target.checked;
+    });
+  });
+
+  // Bug corrigé (2026-09-14) : les cases des modules étaient rendues non cliquables
+  // (pointer-events: none) tant que "Pack tout compris" était coché — impossible de retirer UN
+  // module d'une ferme sur le pack, il fallait décocher le pack en entier puis tout recocher à la
+  // main. Elles restent maintenant cliquables même sur le pack : décocher un module en sort
+  // automatiquement (bascule vers une sélection à la carte) sans toucher aux autres modules déjà
+  // cochés, ce qui donne le geste attendu "retirer juste celui-ci".
+  overlay.querySelectorAll('#modules-a-la-carte input[name="module"]').forEach((cb) => {
+    cb.addEventListener('change', (e) => {
+      const packCb = overlay.querySelector('input[name="pack"]');
+      if (!e.target.checked && packCb.checked) {
+        packCb.checked = false;
+        overlay.querySelector('#modules-a-la-carte').style.opacity = '1';
+      }
     });
   });
 
