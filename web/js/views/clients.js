@@ -63,7 +63,11 @@ window.Views.clients = {
     let picked = null;
     if (window.L) {
       const map = L.map('pick-map').setView([14.7167, -17.4677], 11);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap contributors © CARTO',
+        subdomains: 'abcd',
+        maxZoom: 20,
+      }).addTo(map);
       let marker = null;
       clients.forEach((c) => {
         L.marker([c.gps_lat, c.gps_lng]).addTo(map).bindPopup(`${esc(c.nom)} (${esc(c.type_client)})`);

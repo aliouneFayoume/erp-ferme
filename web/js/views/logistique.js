@@ -82,7 +82,11 @@ async function renderLivreur(container) {
 
   if (window.L) {
     const map = L.map('tournee-map').setView([depot.lat, depot.lng], 11);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap contributors © CARTO',
+      subdomains: 'abcd',
+      maxZoom: 20,
+    }).addTo(map);
 
     const depotIcon = L.divIcon({
       className: '',
