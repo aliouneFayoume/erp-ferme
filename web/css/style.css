@@ -252,6 +252,11 @@ th { color: var(--muted-2); font-weight: 600; font-size: 11px; text-transform: u
 tbody tr { transition: background var(--ease); }
 tbody tr:hover { background: rgba(0, 0, 0, 0.03); }
 tr:last-child td { border-bottom: none; }
+
+/* Colonne d'actions d'un tableau (plusieurs boutons) : passe à la ligne au lieu de forcer le
+   tableau entier à s'élargir hors de l'écran — voir la colonne "Fermes" de Support plateforme,
+   qui avec 3 boutons sur une seule ligne (white-space:nowrap) rendait tout le tableau trop large. */
+.actions-cell { display: flex; flex-wrap: wrap; gap: 6px; }
 td.num { font-family: ui-monospace, monospace; }
 
 .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.01em; }

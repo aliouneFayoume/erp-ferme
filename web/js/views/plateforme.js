@@ -37,9 +37,9 @@ window.Views.plateforme = {
                   <td>${o.utilisateurs_actifs}</td>
                   <td>${o.tickets_ouverts > 0 ? `<span class="badge warn">${o.tickets_ouverts}</span>` : '0'}</td>
                   <td>${o.tickets_total}</td>
-                  <td style="white-space:nowrap">
+                  <td class="actions-cell">
                     <button class="secondary" data-abonnement="${o.id}">Abonnement SaaS</button>
-                    <button class="secondary" data-connecter="${o.id}">Se connecter en tant qu'administrateur</button>
+                    <button class="secondary" data-connecter="${o.id}">Se connecter (admin)</button>
                     <button class="danger" data-supprimer="${o.id}" data-nom="${esc(o.nom)}">Supprimer</button>
                   </td>
                 </tr>`
