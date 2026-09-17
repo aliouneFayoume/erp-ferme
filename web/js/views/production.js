@@ -265,6 +265,8 @@ async function openRelevePanel(container, lot) {
         <label>Intrants utilisés<input type="text" name="intrants_utilises" placeholder="ex: NPK 20kg" /></label>
         ${numberStepperHTML('Récolte du jour (kg)', 'quantite_recoltee_kg', { step: 0.5, min: 0 })}
       `
+      : lot.secteur_nom === 'Avicole'
+      ? `${numberStepperHTML('Œufs collectés (jour)', 'oeufs_collectes', { step: 1, min: 0 })}`
       : '';
 
   panel.innerHTML = `
@@ -353,7 +355,7 @@ async function openRelevePanel(container, lot) {
                     <td class="num">${fmt(r.conso_aliment_kg)}</td>
                     <td class="num">${fmt(r.poids_moyen_g)}</td>
                     <td class="num">${r.taille_moyenne_cm ? fmt(r.taille_moyenne_cm) : '-'}</td>
-                    <td>${[r.temperature_eau ? `${r.temperature_eau}°C` : '', r.ph_eau ? `pH ${r.ph_eau}` : '', r.quantite_recoltee_kg ? `${r.quantite_recoltee_kg}kg récoltés` : ''].filter(Boolean).join(' · ')}</td>
+                    <td>${[r.temperature_eau ? `${r.temperature_eau}°C` : '', r.ph_eau ? `pH ${r.ph_eau}` : '', r.quantite_recoltee_kg ? `${r.quantite_recoltee_kg}kg récoltés` : '', r.oeufs_collectes ? `${fmt(r.oeufs_collectes)} œufs` : ''].filter(Boolean).join(' · ')}</td>
                   </tr>`
                 )
                 .join('')
@@ -383,6 +385,7 @@ async function openRelevePanel(container, lot) {
       ph_eau: fd.get('ph_eau') ? Number(fd.get('ph_eau')) : null,
       intrants_utilises: fd.get('intrants_utilises') || null,
       quantite_recoltee_kg: fd.get('quantite_recoltee_kg') ? Number(fd.get('quantite_recoltee_kg')) : null,
+      oeufs_collectes: fd.get('oeufs_collectes') ? Number(fd.get('oeufs_collectes')) : null,
       notes: fd.get('notes') || null,
     };
 

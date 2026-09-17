@@ -1,5 +1,5 @@
 const request = require('supertest');
-const { createTestPool, buildApp, seedRolesEtSecteurs, creerOrganisation, creerUtilisateurEtToken } = require('./helpers/testApp');
+const { createTestPool, buildApp, seedRolesEtSecteurs, creerOrganisation, creerUtilisateurEtToken, creerProduitAvecStock } = require('./helpers/testApp');
 
 async function creerSecteurPourTenant(pool, tenantId, nom = 'Piscicole') {
     const res = await pool.query(`INSERT INTO secteurs (tenant_id, nom) VALUES ($1, $2) RETURNING id`, [tenantId, nom]);
@@ -212,5 +212,107 @@ describe('production — stock d\'intrants (aliment par défaut + déduction aut
 
         const apres = await pool.query(`SELECT quantite_stock FROM intrants WHERE id = $1`, [intrant.id]);
         expect(Number(apres.rows[0].quantite_stock)).toBe(-10);
+    });
+});
+
+// PUT /secteurs/:id/produit-oeufs + alimentation automatique du stock vendable dans POST /sync
+// (migration 24) — le ramassage du jour (oeufs_collectes) n'alimente le stock que si le secteur du
+// lot a un "produit œufs par défaut" configuré ; conversion en plateaux avec report du reste pour ne
+// jamais perdre d'œufs à l'arrondi.
+describe('production — ramassage des œufs (produit par défaut + conversion en plateaux)', () => {
+    let pool;
+    let app;
+    let tenantId;
+    let secteurId;
+    let tokenChefProd;
+
+    beforeEach(async () => {
+        pool = createTestPool();
+        await seedRolesEtSecteurs(pool);
+        tenantId = await creerOrganisation(pool, 'Ferme Avicole Test');
+        secteurId = await creerSecteurPourTenant(pool, tenantId, 'Avicole');
+        tokenChefProd = await creerUtilisateurEtToken(pool, { role: 'chef_prod', tenant_id: tenantId, secteur_id: secteurId });
+        app = buildApp(pool, ['production']);
+    });
+
+    afterEach(async () => {
+        await pool.end();
+    });
+
+    test('définit le produit œufs par défaut d\'un secteur', async () => {
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId, secteur_id: secteurId, nom: 'Œufs (plateau de 30)' });
+        const res = await request(app)
+            .put(`/api/production/secteurs/${secteurId}/produit-oeufs`)
+            .set('Authorization', `Bearer ${tokenChefProd}`)
+            .send({ produit_id: produit.id, oeufs_par_plateau: 30 });
+        expect(res.status).toBe(200);
+        expect(res.body.produit_oeufs_id).toBe(produit.id);
+        expect(res.body.oeufs_par_plateau).toBe(30);
+    });
+
+    test('rejette un produit_id invalide', async () => {
+        const res = await request(app)
+            .put(`/api/production/secteurs/${secteurId}/produit-oeufs`)
+            .set('Authorization', `Bearer ${tokenChefProd}`)
+            .send({ produit_id: 999999 });
+        expect(res.status).toBe(400);
+    });
+
+    test('rejette un nombre d\'œufs par plateau nul ou négatif', async () => {
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId, secteur_id: secteurId });
+        const res = await request(app)
+            .put(`/api/production/secteurs/${secteurId}/produit-oeufs`)
+            .set('Authorization', `Bearer ${tokenChefProd}`)
+            .send({ produit_id: produit.id, oeufs_par_plateau: 0 });
+        expect(res.status).toBe(400);
+    });
+
+    test('un relevé avec des œufs collectés alimente le stock (plateaux complets seulement)', async () => {
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId, secteur_id: secteurId, quantite_disponible: 10 });
+        await request(app).put(`/api/production/secteurs/${secteurId}/produit-oeufs`).set('Authorization', `Bearer ${tokenChefProd}`).send({ produit_id: produit.id, oeufs_par_plateau: 30 });
+        const lot = await creerLot(pool, tenantId, secteurId);
+
+        const res = await request(app)
+            .post('/api/production/sync')
+            .set('Authorization', `Bearer ${tokenChefProd}`)
+            .send({ releves: [{ lot_id: lot.id, date_releve: '2026-09-14', oeufs_collectes: 45 }] });
+        expect(res.status).toBe(200);
+
+        // 45 œufs / 30 = 1 plateau complet + 15 en reste, jamais perdus.
+        const stock = await pool.query(`SELECT quantite_disponible FROM stocks WHERE produit_id = $1`, [produit.id]);
+        expect(Number(stock.rows[0].quantite_disponible)).toBe(11);
+        const secteur = await pool.query(`SELECT oeufs_non_conditionnes FROM secteurs WHERE id = $1`, [secteurId]);
+        expect(Number(secteur.rows[0].oeufs_non_conditionnes)).toBe(15);
+    });
+
+    test('le reste non conditionné se cumule entre deux relevés jusqu\'à former un nouveau plateau', async () => {
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId, secteur_id: secteurId, quantite_disponible: 0 });
+        await request(app).put(`/api/production/secteurs/${secteurId}/produit-oeufs`).set('Authorization', `Bearer ${tokenChefProd}`).send({ produit_id: produit.id, oeufs_par_plateau: 30 });
+        const lot = await creerLot(pool, tenantId, secteurId);
+
+        await request(app).post('/api/production/sync').set('Authorization', `Bearer ${tokenChefProd}`).send({ releves: [{ lot_id: lot.id, date_releve: '2026-09-14', oeufs_collectes: 20 }] });
+        let stock = await pool.query(`SELECT quantite_disponible FROM stocks WHERE produit_id = $1`, [produit.id]);
+        expect(Number(stock.rows[0].quantite_disponible)).toBe(0); // 20 œufs, aucun plateau complet
+
+        await request(app).post('/api/production/sync').set('Authorization', `Bearer ${tokenChefProd}`).send({ releves: [{ lot_id: lot.id, date_releve: '2026-09-15', oeufs_collectes: 25 }] });
+        // 20 (reporté) + 25 = 45 -> 1 plateau complet + 15 reportés
+        stock = await pool.query(`SELECT quantite_disponible FROM stocks WHERE produit_id = $1`, [produit.id]);
+        expect(Number(stock.rows[0].quantite_disponible)).toBe(1);
+        const secteur = await pool.query(`SELECT oeufs_non_conditionnes FROM secteurs WHERE id = $1`, [secteurId]);
+        expect(Number(secteur.rows[0].oeufs_non_conditionnes)).toBe(15);
+    });
+
+    test('un relevé sans produit œufs configuré ne touche à aucun stock (comportement historique)', async () => {
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId, secteur_id: secteurId, quantite_disponible: 5 }); // créé mais jamais lié au secteur
+        const lot = await creerLot(pool, tenantId, secteurId);
+
+        const res = await request(app)
+            .post('/api/production/sync')
+            .set('Authorization', `Bearer ${tokenChefProd}`)
+            .send({ releves: [{ lot_id: lot.id, date_releve: '2026-09-14', oeufs_collectes: 45 }] });
+        expect(res.status).toBe(200);
+
+        const stock = await pool.query(`SELECT quantite_disponible FROM stocks WHERE produit_id = $1`, [produit.id]);
+        expect(Number(stock.rows[0].quantite_disponible)).toBe(5);
     });
 });

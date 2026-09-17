@@ -220,6 +220,7 @@ CREATE TABLE releves_journaliers (
     ph_eau NUMERIC, -- Piscicole : qualité de l'eau
     intrants_utilises TEXT, -- Maraîcher : semences/engrais/phytosanitaires
     quantite_recoltee_kg NUMERIC, -- Maraîcher : récolte du jour
+    oeufs_collectes INT, -- Avicole : ramassage du jour (converti en plateaux, voir secteurs.produit_oeufs_id)
     notes TEXT,
     est_synchronise BOOLEAN DEFAULT TRUE, -- Essentiel pour la PWA (gestion offline)
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -550,6 +551,15 @@ ALTER TABLE secteurs ADD COLUMN intrant_alimentation_id INT REFERENCES intrants(
 -- définition ci-dessus, pour une raison purement d'ordre de création) : une ligne de matériel ou de
 -- service n'a pas vocation à alimenter un stock, seule une ligne qui EST un intrant le fait.
 ALTER TABLE lignes_commande_fournisseur ADD COLUMN intrant_id INT REFERENCES intrants(id);
+
+-- Ramassage automatique (œufs Avicole, extensible à d'autres récoltes converties en unité de vente) :
+-- quand renseigné, chaque relevé journalier avec oeufs_collectes > 0 pour un lot de ce secteur
+-- alimente automatiquement le stock de ce produit du catalogue, converti en plateaux
+-- (routes/production.js, POST /sync). oeufs_non_conditionnes reporte le reste (< 1 plateau) d'un
+-- relevé à l'autre pour ne jamais perdre d'œufs à l'arrondi.
+ALTER TABLE secteurs ADD COLUMN produit_oeufs_id INT REFERENCES produits(id);
+ALTER TABLE secteurs ADD COLUMN oeufs_par_plateau INT NOT NULL DEFAULT 30 CHECK (oeufs_par_plateau > 0);
+ALTER TABLE secteurs ADD COLUMN oeufs_non_conditionnes INT NOT NULL DEFAULT 0;
 
 -- --------------------------------------------------------
 -- 7ter. IMMOBILISATIONS (inventaire, entretien, amortissement — section de l'onglet Comptabilité)

@@ -41,6 +41,28 @@ module.exports = function productionRoutes(pool) {
         res.json(result.rows[0]);
     });
 
+    /**
+     * Définit (ou retire, avec produit_id null) le produit du catalogue alimenté automatiquement
+     * par le ramassage du jour d'un secteur (ex: Avicole → "Œufs (plateau de 30)") — voir la
+     * conversion automatique dans POST /sync ci-dessous.
+     */
+    router.put('/secteurs/:id/produit-oeufs', requireAuth(pool), checkRole(['chef_prod', 'comptable']), async (req, res) => {
+        const produitId = req.body.produit_id || null;
+        const oeufsParPlateau = req.body.oeufs_par_plateau != null ? Number(req.body.oeufs_par_plateau) : 30;
+        if (!(oeufsParPlateau > 0)) return res.status(400).json({ erreur: 'Le nombre d\'œufs par plateau doit être supérieur à zéro.' });
+        if (produitId) {
+            const produitRes = await req.db.query(`SELECT id FROM produits WHERE id = $1 AND tenant_id = $2`, [produitId, req.user.tenant_id]);
+            if (produitRes.rows.length === 0) return res.status(400).json({ erreur: 'Produit invalide.' });
+        }
+        const result = await req.db.query(
+            `UPDATE secteurs SET produit_oeufs_id = $1, oeufs_par_plateau = $2 WHERE id = $3 AND tenant_id = $4 RETURNING *`,
+            [produitId, oeufsParPlateau, req.params.id, req.user.tenant_id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ erreur: 'Secteur introuvable.' });
+        await logAudit(req.db, { req, table: 'secteurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { produit_oeufs_id: produitId, oeufs_par_plateau: oeufsParPlateau } });
+        res.json(result.rows[0]);
+    });
+
     // Un chef de prod ne voit que les lots de son secteur ; admin/comptable voient tout ceux de leur organisation.
     router.get('/lots', requireAuth(pool), async (req, res) => {
         try {
@@ -194,8 +216,8 @@ module.exports = function productionRoutes(pool) {
 
                 await client.query(
                     `INSERT INTO releves_journaliers
-                     (lot_id, utilisateur_id, date_releve, mortalite, conso_aliment_kg, poids_moyen_g, taille_moyenne_cm, temperature_eau, ph_eau, intrants_utilises, quantite_recoltee_kg, notes, est_synchronise)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, TRUE)`,
+                     (lot_id, utilisateur_id, date_releve, mortalite, conso_aliment_kg, poids_moyen_g, taille_moyenne_cm, temperature_eau, ph_eau, intrants_utilises, quantite_recoltee_kg, oeufs_collectes, notes, est_synchronise)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE)`,
                     [
                         releve.lot_id,
                         req.user.id,
@@ -208,6 +230,7 @@ module.exports = function productionRoutes(pool) {
                         releve.ph_eau || null,
                         releve.intrants_utilises || null,
                         releve.quantite_recoltee_kg || null,
+                        releve.oeufs_collectes || null,
                         releve.notes || null,
                     ]
                 );
@@ -237,6 +260,32 @@ module.exports = function productionRoutes(pool) {
                              VALUES ($1, 'SORTIE', $2, 'RELEVE_JOURNALIER', $3, $4)`,
                             [intrantAlimentationId, releve.conso_aliment_kg, releve.lot_id, req.user.id]
                         );
+                    }
+                }
+
+                // Alimentation automatique du stock vendable (ramassage — ex: œufs Avicole) — même
+                // philosophie best-effort/non-bloquante que la déduction d'aliment ci-dessus. Le reste
+                // non conditionné (< 1 plateau) est reporté sur le secteur pour ne jamais perdre
+                // d'œufs à l'arrondi (45 œufs avec un plateau de 30 = +1 plateau en stock, 15 reportés).
+                if (releve.oeufs_collectes > 0) {
+                    const secteurOeufsRes = await client.query(
+                        `SELECT s.id AS secteur_id, s.produit_oeufs_id, s.oeufs_par_plateau, s.oeufs_non_conditionnes
+                         FROM lots_production l JOIN secteurs s ON s.id = l.secteur_id WHERE l.id = $1`,
+                        [releve.lot_id]
+                    );
+                    const secteurOeufs = secteurOeufsRes.rows[0];
+                    if (secteurOeufs?.produit_oeufs_id) {
+                        const parPlateau = Number(secteurOeufs.oeufs_par_plateau) || 30;
+                        const totalOeufs = Number(secteurOeufs.oeufs_non_conditionnes || 0) + Number(releve.oeufs_collectes);
+                        const plateauxComplets = Math.floor(totalOeufs / parPlateau);
+                        const reste = totalOeufs % parPlateau;
+                        if (plateauxComplets > 0) {
+                            await client.query(
+                                `UPDATE stocks SET quantite_disponible = quantite_disponible + $1, derniere_mise_a_jour = CURRENT_TIMESTAMP WHERE produit_id = $2`,
+                                [plateauxComplets, secteurOeufs.produit_oeufs_id]
+                            );
+                        }
+                        await client.query(`UPDATE secteurs SET oeufs_non_conditionnes = $1 WHERE id = $2`, [reste, secteurOeufs.secteur_id]);
                     }
                 }
             }

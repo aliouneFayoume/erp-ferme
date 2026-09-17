@@ -4,6 +4,9 @@ window.Views.catalogue = {
   async render(container) {
     const user = Api.getUser();
     const [produits, secteurs] = await Promise.all([Api.get('/catalogue/produits'), Api.get('/production/secteurs')]);
+    // Mêmes secteurs éligibles que "l'aliment par défaut" (Intrants & Stock) : secteurs de premier
+    // niveau portant des lots_production, pas un suivi individuel (voir web/js/views/intrants.js).
+    const secteursRamassage = secteurs.filter((s) => !s.suivi_individuel && !s.parent_secteur_id);
 
     container.innerHTML = `
       ${
@@ -62,6 +65,34 @@ window.Views.catalogue = {
           </tbody>
         </table>
       </div>
+
+      <div class="panel">
+        <h2>Ramassage automatique (œufs)</h2>
+        <p class="desc">Un secteur (ex: Avicole) peut être lié à un produit du catalogue : chaque relevé journalier avec des "œufs collectés" alimente alors automatiquement son stock, converti en plateaux — sans mise à jour manuelle.</p>
+        <table>
+          <thead><tr><th>Secteur</th><th>Produit alimenté</th><th>Œufs par plateau</th><th></th></tr></thead>
+          <tbody>
+            ${secteursRamassage
+              .map(
+                (s) => `<tr>
+                  <td>${esc(s.nom)}</td>
+                  <td>
+                    <select class="select-produit-oeufs" data-secteur="${s.id}" style="max-width:280px">
+                      <option value="">Aucun</option>
+                      ${produits
+                        .map((p) => `<option value="${p.id}" ${Number(s.produit_oeufs_id) === p.id ? 'selected' : ''}>${esc(p.nom)}</option>`)
+                        .join('')}
+                    </select>
+                  </td>
+                  <td><input type="number" class="input-oeufs-par-plateau" data-secteur="${s.id}" min="1" value="${s.oeufs_par_plateau || 30}" style="max-width:90px" /></td>
+                  <td><button class="secondary btn-enregistrer-produit-oeufs" data-secteur="${s.id}">Enregistrer</button></td>
+                </tr>`
+              )
+              .join('')}
+          </tbody>
+        </table>
+        ${secteursRamassage.length === 0 ? '<p class="empty">Aucun secteur éligible.</p>' : ''}
+      </div>
     `;
 
     const formProduit = container.querySelector('#form-produit');
@@ -103,6 +134,22 @@ window.Views.catalogue = {
           });
           showToast('Tarifs mis à jour.', 'success');
           window.Views.catalogue.render(container);
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+    });
+
+    container.querySelectorAll('.btn-enregistrer-produit-oeufs').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const select = container.querySelector(`.select-produit-oeufs[data-secteur="${btn.dataset.secteur}"]`);
+        const inputPlateau = container.querySelector(`.input-oeufs-par-plateau[data-secteur="${btn.dataset.secteur}"]`);
+        try {
+          await Api.put(`/production/secteurs/${btn.dataset.secteur}/produit-oeufs`, {
+            produit_id: select.value || null,
+            oeufs_par_plateau: Number(inputPlateau.value) || 30,
+          });
+          showToast('Ramassage automatique enregistré.', 'success');
         } catch (err) {
           showToast(err.message, 'error');
         }
