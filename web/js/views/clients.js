@@ -48,7 +48,8 @@ window.Views.clients = {
                   <td>${esc(c.telephone)}</td>
                   <td class="num">${c.type_client === 'B2B' ? `${fmt(c.solde_encours)} / ${fmt(c.limite_credit)}` : '-'}</td>
                   <td class="num">${Number(c.gps_lat).toFixed(4)}, ${Number(c.gps_lng).toFixed(4)}</td>
-                  <td>
+                  <td class="actions-cell">
+                    <button class="secondary" data-modifier="${c.id}">Modifier</button>
                     <button class="secondary" data-generer-pin="${c.id}">Code portail</button>
                     ${moi.role === 'admin' ? `<button class="danger" data-supprimer="${c.id}">Supprimer</button>` : ''}
                   </td>
@@ -101,6 +102,45 @@ window.Views.clients = {
       } catch (err) {
         showToast(err.message, 'error');
       }
+    });
+
+    container.querySelectorAll('button[data-modifier]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const c = clients.find((x) => x.id === Number(btn.dataset.modifier));
+        const values = await Modal.open(`Modifier ${c.nom}`, [
+          { name: 'nom', label: 'Nom', type: 'text', value: c.nom },
+          { name: 'telephone', label: 'Téléphone', type: 'text', value: c.telephone },
+          {
+            name: 'categorie_tarifaire', label: 'Catégorie tarifaire', type: 'select', value: c.categorie_tarifaire || 'standard',
+            options: [
+              { value: 'standard', label: 'Standard' },
+              { value: 'restaurant', label: 'Restaurant' },
+              { value: 'grossiste', label: 'Grossiste' },
+            ],
+          },
+          { name: 'adresse', label: 'Adresse (repère)', type: 'text', value: c.adresse || '' },
+          { name: 'gps_lat', label: 'Latitude GPS', type: 'number', value: c.gps_lat },
+          { name: 'gps_lng', label: 'Longitude GPS', type: 'number', value: c.gps_lng },
+          { name: 'limite_credit', label: 'Limite de crédit (B2B, FCFA)', type: 'number', value: c.limite_credit || 0 },
+        ]);
+        if (!values) return;
+        if (!values.gps_lat || !values.gps_lng) {
+          showToast("Un point GPS précis est obligatoire pour l'adressage client.", 'error');
+          return;
+        }
+        try {
+          await Api.put(`/clients/${c.id}`, {
+            ...values,
+            gps_lat: Number(values.gps_lat),
+            gps_lng: Number(values.gps_lng),
+            limite_credit: Number(values.limite_credit) || 0,
+          });
+          showToast('Client mis à jour.', 'success');
+          window.Views.clients.render(container);
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
     });
 
     container.querySelectorAll('button[data-generer-pin]').forEach((btn) => {
