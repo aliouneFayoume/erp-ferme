@@ -317,6 +317,11 @@ td.num { font-family: ui-monospace, monospace; }
    étroit et sans limite de hauteur, débordant largement l'écran au lieu de défiler proprement. */
 .modal-box.modal-box-lg { max-width: 640px; max-height: 90vh; overflow-y: auto; }
 
+/* Sélecteur de point GPS en grand plan (MapPicker, app.js) : la carte doit occuper la majorité de
+   l'écran pour permettre de cliquer précisément, contrairement à un simple formulaire de confirmation. */
+.modal-box.modal-box-map { max-width: 900px; width: 92vw; }
+.map-picker-canvas { height: 60vh; min-height: 320px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); margin: 12px 0 18px; }
+
 /* ---------- Responsive (terrain mobile : livreurs) ---------- */
 /* ---------- Sidebar hors-canvas (tablette/mobile) ---------- */
 @media (max-width: 880px) {

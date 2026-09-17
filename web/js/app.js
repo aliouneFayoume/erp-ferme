@@ -251,6 +251,67 @@ const Modal = {
 };
 window.Modal = Modal;
 
+// Sélecteur de point GPS en grand plan (remplace une petite carte toujours visible et minuscule) :
+// on l'ouvre seulement au moment de choisir, la carte occupe presque tout l'écran pour cliquer
+// précisément, puis on la referme explicitement une fois le point validé (ou annulé).
+// Usage : MapPicker.open({ lat, lng, markers: [{ lat, lng, label }] }) -> Promise<{lat,lng}|null>
+const MapPicker = {
+  open({ lat, lng, markers = [] } = {}) {
+    return new Promise((resolve) => {
+      if (!window.L) { resolve(null); return; }
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.innerHTML = `
+        <div class="modal-box modal-box-map">
+          <h3>Choisir le point GPS</h3>
+          <p class="desc">Cliquez sur la carte à l'emplacement exact — vous pourrez zoomer pour affiner.</p>
+          <div class="map-picker-canvas"></div>
+          <div class="modal-actions">
+            <button class="secondary" data-action="cancel">Fermer</button>
+            <button data-action="ok" ${lat && lng ? '' : 'disabled'}>Valider ce point</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      const map = L.map(overlay.querySelector('.map-picker-canvas')).setView(
+        [lat || 14.7167, lng || -17.4677],
+        lat && lng ? 16 : 11
+      );
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles © Esri — Source: Esri, DeLorme, NAVTEQ',
+        maxZoom: 19,
+      }).addTo(map);
+      markers.forEach((m) => L.marker([m.lat, m.lng]).addTo(map).bindPopup(m.label || ''));
+
+      const btnOk = overlay.querySelector('[data-action="ok"]');
+      let picked = lat && lng ? { lat, lng } : null;
+      let marker = picked ? L.marker([picked.lat, picked.lng]).addTo(map) : null;
+      map.on('click', (e) => {
+        picked = e.latlng;
+        if (marker) marker.remove();
+        marker = L.marker([picked.lat, picked.lng]).addTo(map);
+        btnOk.disabled = false;
+      });
+      // La carte est créée juste après son insertion dans le DOM : un recalcul de taille garantit
+      // qu'elle occupe bien tout le conteneur même si le tout premier rendu l'a mesurée à 0.
+      setTimeout(() => map.invalidateSize(), 50);
+
+      const close = (result) => {
+        map.remove();
+        overlay.remove();
+        resolve(result);
+      };
+      overlay.querySelector('[data-action="cancel"]').addEventListener('click', () => close(null));
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) close(null);
+      });
+      btnOk.addEventListener('click', () => close(picked));
+    });
+  },
+};
+window.MapPicker = MapPicker;
+
 // Champ numérique avec boutons +/- (saisie terrain au doigt : mortalité, aliment, récolte...).
 // L'input reste éditable au clavier normalement ; les boutons ne font que le nudger.
 function numberStepperHTML(label, name, { value = 0, min, step = 1 } = {}) {

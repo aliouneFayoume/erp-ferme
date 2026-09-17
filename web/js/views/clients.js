@@ -8,7 +8,7 @@ window.Views.clients = {
     container.innerHTML = `
       <div class="panel">
         <h2>Nouveau client</h2>
-        <p class="desc">Un point GPS précis est obligatoire (cliquez sur la carte pour le définir) — pas d'adresse textuelle seule.</p>
+        <p class="desc">Un point GPS précis est obligatoire — pas d'adresse textuelle seule. Utilisez le bouton "Choisir sur la carte" (ou collez des coordonnées, par exemple une position partagée sur WhatsApp).</p>
         <form id="form-client" class="form-grid" autocomplete="off">
           <label>Nom<input type="text" name="nom" required /></label>
           <label>Type
@@ -29,9 +29,11 @@ window.Views.clients = {
           <label>Latitude GPS<input type="number" step="0.00000001" name="gps_lat" required /></label>
           <label>Longitude GPS<input type="number" step="0.00000001" name="gps_lng" required /></label>
           <label>Limite de crédit (B2B, FCFA)<input type="number" name="limite_credit" value="0" /></label>
-          <button type="submit">Créer le client</button>
         </form>
-        <div id="pick-map" class="gps-map"></div>
+        <div class="panel-row" style="margin-top:12px">
+          <button type="button" class="secondary" id="btn-choisir-carte">📍 Choisir le point sur la carte</button>
+          <button type="submit" form="form-client">Créer le client</button>
+        </div>
       </div>
 
       <div class="panel">
@@ -61,26 +63,24 @@ window.Views.clients = {
       </div>
     `;
 
-    let picked = null;
+    const btnChoisirCarte = container.querySelector('#btn-choisir-carte');
     if (window.L) {
-      const map = L.map('pick-map').setView([14.7167, -17.4677], 11);
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles © Esri — Source: Esri, DeLorme, NAVTEQ',
-        maxZoom: 19,
-      }).addTo(map);
-      let marker = null;
-      clients.forEach((c) => {
-        L.marker([c.gps_lat, c.gps_lng]).addTo(map).bindPopup(`${esc(c.nom)} (${esc(c.type_client)})`);
-      });
-      map.on('click', (e) => {
-        picked = e.latlng;
-        if (marker) marker.remove();
-        marker = L.marker([picked.lat, picked.lng]).addTo(map);
-        container.querySelector('input[name="gps_lat"]').value = picked.lat.toFixed(8);
-        container.querySelector('input[name="gps_lng"]').value = picked.lng.toFixed(8);
+      btnChoisirCarte.addEventListener('click', async () => {
+        const latInput = container.querySelector('input[name="gps_lat"]');
+        const lngInput = container.querySelector('input[name="gps_lng"]');
+        const point = await MapPicker.open({
+          lat: latInput.value ? Number(latInput.value) : null,
+          lng: lngInput.value ? Number(lngInput.value) : null,
+          markers: clients.map((c) => ({ lat: c.gps_lat, lng: c.gps_lng, label: `${esc(c.nom)} (${esc(c.type_client)})` })),
+        });
+        if (point) {
+          latInput.value = point.lat.toFixed(8);
+          lngInput.value = point.lng.toFixed(8);
+        }
       });
     } else {
-      container.querySelector('#pick-map').outerHTML = '<p class="empty">Carte indisponible (hors-ligne).</p>';
+      btnChoisirCarte.disabled = true;
+      btnChoisirCarte.title = 'Carte indisponible (hors-ligne).';
     }
 
     container.querySelector('#form-client').addEventListener('submit', async (e) => {
