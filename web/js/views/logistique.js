@@ -82,10 +82,9 @@ async function renderLivreur(container) {
 
   if (window.L) {
     const map = L.map('tournee-map').setView([depot.lat, depot.lng], 11);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© OpenStreetMap contributors © CARTO',
-      subdomains: 'abcd',
-      maxZoom: 20,
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles © Esri — Source: Esri, DeLorme, NAVTEQ',
+      maxZoom: 19,
     }).addTo(map);
 
     const depotIcon = L.divIcon({

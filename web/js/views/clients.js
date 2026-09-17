@@ -63,10 +63,9 @@ window.Views.clients = {
     let picked = null;
     if (window.L) {
       const map = L.map('pick-map').setView([14.7167, -17.4677], 11);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap contributors © CARTO',
-        subdomains: 'abcd',
-        maxZoom: 20,
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles © Esri — Source: Esri, DeLorme, NAVTEQ',
+        maxZoom: 19,
       }).addTo(map);
       let marker = null;
       clients.forEach((c) => {
