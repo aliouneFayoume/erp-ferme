@@ -53,7 +53,9 @@ app.use(
                 defaultSrc: ["'self'"],
                 scriptSrc: ["'self'", 'https://unpkg.com'],
                 styleSrc: ["'self'", 'https://unpkg.com', "'unsafe-inline'"], // styles inline ponctuels (frontend) + Leaflet
-                imgSrc: ["'self'", 'data:', 'https://*.tile.openstreetmap.org', 'https://server.arcgisonline.com'],
+                // https://unpkg.com : icônes de marqueur par défaut de Leaflet (marker-icon.png,
+                // marker-shadow.png), chargées via des url() relatives dans leaflet.css.
+                imgSrc: ["'self'", 'data:', 'https://*.tile.openstreetmap.org', 'https://server.arcgisonline.com', 'https://unpkg.com'],
                 fontSrc: ["'self'"],
                 connectSrc: ["'self'"],
                 objectSrc: ["'none'"],
