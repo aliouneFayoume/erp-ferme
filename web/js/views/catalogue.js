@@ -4,9 +4,11 @@ window.Views.catalogue = {
   async render(container) {
     const user = Api.getUser();
     const [produits, secteurs] = await Promise.all([Api.get('/catalogue/produits'), Api.get('/production/secteurs')]);
-    // Mêmes secteurs éligibles que "l'aliment par défaut" (Intrants & Stock) : secteurs de premier
-    // niveau portant des lots_production, pas un suivi individuel (voir web/js/views/intrants.js).
-    const secteursRamassage = secteurs.filter((s) => !s.suivi_individuel && !s.parent_secteur_id);
+    // Contrairement à "l'aliment par défaut" (générique à tout secteur portant des lots_production,
+    // voir intrants.js), le ramassage d'œufs n'a de sens que pour un secteur Avicole — lister tous
+    // les secteurs ici (comme le fait le panneau aliment) serait confus pour l'utilisateur (pourquoi
+    // lier son Maraîcher ou sa Piscicole aux œufs ?).
+    const secteursRamassage = secteurs.filter((s) => s.nom === 'Avicole');
 
     container.innerHTML = `
       ${
