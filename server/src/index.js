@@ -40,7 +40,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // CSP alignée sur les ressources externes réellement utilisées par le frontend (Leaflet via unpkg,
-// tuiles OpenStreetMap) : aucune autre origine externe n'est chargée, donc pas de relâchement au-delà.
+// tuiles de fond de carte Esri) : aucune autre origine externe n'est chargée, donc pas de
+// relâchement au-delà. https://*.tile.openstreetmap.org gardé en plus d'Esri : ce serveur OSM a
+// commencé à bloquer les requêtes de massla.sn (politique d'usage, voir migration des vues clients/
+// logistique vers Esri) mais un navigateur peut avoir un vieux app.min.js en cache qui le référence
+// encore juste après un déploiement — éviter un CSP-blocage en plus du blocage OSM le temps que le
+// cache expire.
 app.use(
     helmet({
         contentSecurityPolicy: {
@@ -48,7 +53,7 @@ app.use(
                 defaultSrc: ["'self'"],
                 scriptSrc: ["'self'", 'https://unpkg.com'],
                 styleSrc: ["'self'", 'https://unpkg.com', "'unsafe-inline'"], // styles inline ponctuels (frontend) + Leaflet
-                imgSrc: ["'self'", 'data:', 'https://*.tile.openstreetmap.org'],
+                imgSrc: ["'self'", 'data:', 'https://*.tile.openstreetmap.org', 'https://server.arcgisonline.com'],
                 fontSrc: ["'self'"],
                 connectSrc: ["'self'"],
                 objectSrc: ["'none'"],
