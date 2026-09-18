@@ -9,7 +9,7 @@ module.exports = function paieRoutes(pool) {
 
     // -------------------- Employés --------------------
 
-    router.get('/employes', requireAuth(pool), checkRole(ROLES_PAIE), async (req, res) => {
+    router.get('/employes', requireAuth(pool, { module: 'paie' }), checkRole(ROLES_PAIE), async (req, res) => {
         const result = await req.db.query(
             `SELECT e.*, s.nom as secteur_nom FROM employes e
              LEFT JOIN secteurs s ON s.id = e.secteur_id
@@ -19,7 +19,7 @@ module.exports = function paieRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.post('/employes', requireAuth(pool), checkRole(ROLES_PAIE), async (req, res) => {
+    router.post('/employes', requireAuth(pool, { module: 'paie' }), checkRole(ROLES_PAIE), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { nom_complet, poste, secteur_id, telephone, date_embauche, salaire_brut_mensuel, type_contrat, taux_journalier, notes } = req.body;
         if (!nom_complet) return res.status(400).json({ erreur: "Le nom de l'employé est requis." });
@@ -45,7 +45,7 @@ module.exports = function paieRoutes(pool) {
         }
     });
 
-    router.put('/employes/:id', requireAuth(pool), checkRole(ROLES_PAIE), async (req, res) => {
+    router.put('/employes/:id', requireAuth(pool, { module: 'paie' }), checkRole(ROLES_PAIE), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { nom_complet, poste, secteur_id, telephone, date_embauche, date_depart, salaire_brut_mensuel, type_contrat, taux_journalier, actif, notes } = req.body;
         if (type_contrat === 'JOURNALIER' && taux_journalier != null && !(Number(taux_journalier) > 0)) {
@@ -72,7 +72,7 @@ module.exports = function paieRoutes(pool) {
         }
     });
 
-    router.delete('/employes/:id', requireAuth(pool), checkRole(['admin']), async (req, res) => {
+    router.delete('/employes/:id', requireAuth(pool, { module: 'paie' }), checkRole(['admin']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const result = await req.db.query(
             `UPDATE employes SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL RETURNING id`,
@@ -89,7 +89,7 @@ module.exports = function paieRoutes(pool) {
     // routes/immobilisations.js (entretien) et routes/fournisseurs.js (réception de commande) :
     // création "en attente" séparée de l'action qui poste réellement la dépense.
 
-    router.get('/bulletins', requireAuth(pool), checkRole(ROLES_PAIE), async (req, res) => {
+    router.get('/bulletins', requireAuth(pool, { module: 'paie' }), checkRole(ROLES_PAIE), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { periode } = req.query;
         const conditions = [`emp.tenant_id = $1`];
@@ -109,7 +109,7 @@ module.exports = function paieRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.post('/bulletins', requireAuth(pool), checkRole(ROLES_PAIE), async (req, res) => {
+    router.post('/bulletins', requireAuth(pool, { module: 'paie' }), checkRole(ROLES_PAIE), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { employe_id, periode, salaire_brut, charges_sociales } = req.body;
         if (!employe_id || !periode || salaire_brut == null) {
@@ -136,7 +136,7 @@ module.exports = function paieRoutes(pool) {
         }
     });
 
-    router.put('/bulletins/:id/payer', requireAuth(pool), checkRole(ROLES_PAIE), async (req, res) => {
+    router.put('/bulletins/:id/payer', requireAuth(pool, { module: 'paie' }), checkRole(ROLES_PAIE), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const client = req.db;
         try {
@@ -188,7 +188,7 @@ module.exports = function paieRoutes(pool) {
     // migration-21). Le calcul jours_travailles x taux_journalier pour le bulletin de paie se fait
     // côté frontend, à partir de /pointages/recapitulatif — bulletins_paie reste inchangé.
 
-    router.get('/pointages', requireAuth(pool), checkRole(ROLES_PAIE), async (req, res) => {
+    router.get('/pointages', requireAuth(pool, { module: 'paie' }), checkRole(ROLES_PAIE), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const date = String(req.query.date || '').slice(0, 10);
         if (!date) return res.status(400).json({ erreur: 'La date est requise.' });
@@ -203,7 +203,7 @@ module.exports = function paieRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.post('/pointages/toggle', requireAuth(pool), checkRole(ROLES_PAIE), async (req, res) => {
+    router.post('/pointages/toggle', requireAuth(pool, { module: 'paie' }), checkRole(ROLES_PAIE), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { employe_id, date } = req.body;
         const dateNormalisee = String(date || '').slice(0, 10);
@@ -238,7 +238,7 @@ module.exports = function paieRoutes(pool) {
         }
     });
 
-    router.get('/pointages/recapitulatif', requireAuth(pool), checkRole(ROLES_PAIE), async (req, res) => {
+    router.get('/pointages/recapitulatif', requireAuth(pool, { module: 'paie' }), checkRole(ROLES_PAIE), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const periode = String(req.query.periode || '').slice(0, 7);
         if (!periode) return res.status(400).json({ erreur: 'La période est requise.' });

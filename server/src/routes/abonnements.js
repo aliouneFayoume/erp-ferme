@@ -5,7 +5,7 @@ const { logAudit } = require('../audit');
 module.exports = function abonnementsRoutes(pool) {
     const router = express.Router();
 
-    router.get('/', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.get('/', requireAuth(pool, { module: 'clients_abonnements' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const result = await req.db.query(
             `SELECT a.*, c.nom as client_nom, c.telephone, p.nom as produit_nom, p.prix_unitaire_b2c
              FROM abonnements a
@@ -18,7 +18,7 @@ module.exports = function abonnementsRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.post('/', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/', requireAuth(pool, { module: 'clients_abonnements' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const { client_id, produit_id, quantite, frequence, jour_livraison } = req.body;
         if (!client_id || !produit_id || !jour_livraison) {
             return res.status(400).json({ erreur: 'Client, produit et jour de livraison sont requis.' });
@@ -38,7 +38,7 @@ module.exports = function abonnementsRoutes(pool) {
         }
     });
 
-    router.put('/:id/statut', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.put('/:id/statut', requireAuth(pool, { module: 'clients_abonnements' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const { actif } = req.body;
         const result = await req.db.query(
             `UPDATE abonnements SET actif = $1 WHERE id = $2 AND tenant_id = $3 RETURNING *`,
@@ -49,7 +49,7 @@ module.exports = function abonnementsRoutes(pool) {
         res.json(result.rows[0]);
     });
 
-    router.delete('/:id', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.delete('/:id', requireAuth(pool, { module: 'clients_abonnements' }), checkRole(['admin', 'comptable']), async (req, res) => {
         await req.db.query(`UPDATE abonnements SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);
         await logAudit(req.db, { req, table: 'abonnements', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
         res.status(204).end();
@@ -60,7 +60,7 @@ module.exports = function abonnementsRoutes(pool) {
      * correspond au jour de la semaine courant (paniers récurrents). Applique la même logique de
      * réservation de stock et de tarification que la création manuelle de commande.
      */
-    router.post('/generer-commandes', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/generer-commandes', requireAuth(pool, { module: 'clients_abonnements' }), checkRole(['admin', 'comptable']), async (req, res) => {
         // Le Sénégal (Dakar) est en GMT+0, comme UTC : on utilise getUTCDay() pour ne pas dépendre
         // du fuseau horaire local de la machine qui héberge le serveur.
         const JOURS = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];

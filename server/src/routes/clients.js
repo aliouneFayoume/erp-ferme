@@ -6,7 +6,7 @@ const { logAudit } = require('../audit');
 module.exports = function clientsRoutes(pool) {
     const router = express.Router();
 
-    router.get('/', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.get('/', requireAuth(pool, { module: 'clients_abonnements' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const { type } = req.query;
         const params = [req.user.tenant_id];
         let where = 'tenant_id = $1 AND deleted_at IS NULL';
@@ -18,7 +18,7 @@ module.exports = function clientsRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.post('/', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/', requireAuth(pool, { module: 'clients_abonnements' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const { nom, type_client, categorie_tarifaire, telephone, adresse, gps_lat, gps_lng, limite_credit, est_abonne } = req.body;
         if (!gps_lat || !gps_lng) {
             return res.status(400).json({ erreur: "Un point GPS précis est obligatoire pour l'adressage client." });
@@ -37,7 +37,7 @@ module.exports = function clientsRoutes(pool) {
         }
     });
 
-    router.put('/:id', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.put('/:id', requireAuth(pool, { module: 'clients_abonnements' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const { nom, categorie_tarifaire, telephone, adresse, gps_lat, gps_lng, limite_credit } = req.body;
         try {
             const result = await req.db.query(
@@ -63,7 +63,7 @@ module.exports = function clientsRoutes(pool) {
      * téléchargement de facture PDF. Le PIN en clair n'est renvoyé qu'une fois, jamais stocké ni
      * journalisé ; pin_version incrémenté invalide immédiatement toute session portail existante.
      */
-    router.post('/:id/pin', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/:id/pin', requireAuth(pool, { module: 'clients_abonnements' }), checkRole(['admin', 'comptable']), async (req, res) => {
         try {
             const pin = String(Math.floor(100000 + Math.random() * 900000));
             const pinHash = await bcrypt.hash(pin, 10);
@@ -88,7 +88,7 @@ module.exports = function clientsRoutes(pool) {
         }
     });
 
-    router.delete('/:id', requireAuth(pool), checkRole(['admin']), async (req, res) => {
+    router.delete('/:id', requireAuth(pool, { module: 'clients_abonnements' }), checkRole(['admin']), async (req, res) => {
         await req.db.query(`UPDATE clients SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);
         await logAudit(req.db, { req, table: 'clients', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
         res.status(204).end();

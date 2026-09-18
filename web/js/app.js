@@ -352,8 +352,33 @@ function tabsForRole(user) {
     // Ne suit jamais le raccourci "admin voit tout" — n'est vrai que pour ce seul compte, quel que
     // soit son rôle (voir migration-04-superviseur-plateforme.sql).
     if (t.superviseurSeulement) return !!user.superviseurPlateforme;
+    // Modules SaaS : `onglets` (GET /auth/me) = Socle + modules souscrits ; absent/null = aucune
+    // restriction. Purement visuel — le serveur refuse de toute façon un module non souscrit.
+    if (Array.isArray(user.onglets) && !user.onglets.includes(t.key)) return false;
     return t.roles.includes(user.role) || user.role === 'admin';
   });
+}
+
+// Un module (ex. 'finance') est-il inclus dans l'abonnement de la ferme ? `modules` null/absent =
+// aucune restriction (pas d'abonnement, Pack tout compris, ferme plateforme). Sert aux écrans qui
+// mélangent Socle et module (Réglages de la ferme).
+window.aModule = function aModule(cle) {
+  const user = Api.getUser();
+  return !user || !Array.isArray(user.modules) || user.modules.includes(cle);
+};
+
+// Relit les onglets/modules autorisés à chaque chargement, pour qu'un changement d'abonnement fait
+// par le superviseur s'applique sans reconnexion. Toute erreur (hors-ligne sans cache, session
+// expirée) laisse l'état connu en place : l'API reste la vraie barrière.
+async function rafraichirAcces() {
+  try {
+    const data = await Api.get('/auth/me');
+    const user = Api.getUser();
+    if (!user || !data || !data.utilisateur) return;
+    Api.setSession(Api.getToken(), { ...user, onglets: data.utilisateur.onglets ?? null, modules: data.utilisateur.modules ?? null });
+  } catch (err) {
+    /* état connu conservé */
+  }
 }
 
 async function selectTab(key) {
@@ -448,7 +473,8 @@ function roleLabel(role) {
   }[role] || role;
 }
 
-function showApp() {
+async function showApp() {
+  await rafraichirAcces();
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app-shell').classList.remove('hidden');
   buildShell(Api.getUser());

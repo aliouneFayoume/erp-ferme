@@ -731,9 +731,11 @@ CREATE TABLE audit_logs (
 
 CREATE TABLE organisation_abonnement_saas (
     tenant_id INT PRIMARY KEY REFERENCES organisations(id),
-    -- Purement descriptif (quoi afficher côté plateforme) — le montant réellement facturé chaque
-    -- mois est montant_mensuel, négocié au cas par cas, jamais recalculé automatiquement à partir
-    -- de cette liste : reflète la réalité commerciale (chaque ferme peut avoir un prix différent).
+    -- Modules auxquels la ferme a réellement accès (Socle Essentiel toujours inclus) : appliqué par
+    -- requireAuth(pool, { module }) dans auth.js, voir modulesSaas.js. Contient 'pack_tout_compris'
+    -- pour tout ouvrir. Le montant réellement facturé chaque mois reste montant_mensuel, négocié au
+    -- cas par cas, jamais recalculé automatiquement à partir de cette liste (chaque ferme peut avoir
+    -- un prix différent).
     modules_actifs TEXT[] NOT NULL DEFAULT '{}',
     montant_mensuel INT NOT NULL,
     frais_configuration INT,

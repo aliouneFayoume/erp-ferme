@@ -2,9 +2,12 @@ window.Views = window.Views || {};
 
 window.Views['parametres-paiement'] = {
   async render(container) {
+    // Informations de la ferme = Socle Essentiel ; paiement PayDunya et relances WhatsApp = module
+    // Finance (les routes correspondantes refusent un abonnement sans ce module, voir modulesSaas.js).
+    const avecFinance = window.aModule('finance');
     const [config, configWhatsapp, infoFerme] = await Promise.all([
-      Api.get('/parametres-paiement/paiement'),
-      Api.get('/parametres-whatsapp'),
+      avecFinance ? Api.get('/parametres-paiement/paiement') : null,
+      avecFinance ? Api.get('/parametres-whatsapp') : null,
       Api.get('/parametres-ferme'),
     ]);
 
@@ -25,7 +28,19 @@ window.Views['parametres-paiement'] = {
         </form>
       </div>
 
-      <div class="panel">
+      ${
+        avecFinance
+          ? ''
+          : `<div class="panel">
+        <h2>Paiement mobile et relances WhatsApp</h2>
+        <p class="desc">Ces réglages (compte PayDunya, relances de vos clients par WhatsApp) font partie du module Finance, qui n'est pas inclus dans votre abonnement actuel. Contactez-nous pour l'activer.</p>
+      </div>`
+      }
+
+      ${
+        !avecFinance
+          ? ''
+          : `<div class="panel">
         <h2>Agrégateur de paiement (PayDunya)</h2>
         <p class="desc">
           Votre organisation a son propre compte PayDunya, distinct de toute autre ferme utilisant
@@ -54,9 +69,13 @@ window.Views['parametres-paiement'] = {
           <label>Token<input type="password" name="token" autocomplete="off" required /></label>
           <button type="submit">${config.configure ? 'Remplacer les identifiants' : 'Enregistrer'}</button>
         </form>
-      </div>
+      </div>`
+      }
 
-      <div class="panel">
+      ${
+        !avecFinance
+          ? ''
+          : `<div class="panel">
         <h2>Relances clients par WhatsApp</h2>
         ${
           configWhatsapp.estPlateforme
@@ -84,7 +103,8 @@ window.Views['parametres-paiement'] = {
         </form>
         `
         }
-      </div>
+      </div>`
+      }
     `;
 
     container.querySelector('#form-ferme').addEventListener('submit', async (e) => {
@@ -103,7 +123,7 @@ window.Views['parametres-paiement'] = {
       }
     });
 
-    container.querySelector('#form-paiement').addEventListener('submit', async (e) => {
+    container.querySelector('#form-paiement')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       try {

@@ -7,7 +7,7 @@ module.exports = function comptabiliteRoutes(pool) {
 
     // -------------------- Dépenses par pôle --------------------
 
-    router.get('/depenses', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.get('/depenses', requireAuth(pool, { module: 'comptabilite' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const result = await req.db.query(
             `SELECT d.*, s.nom as secteur_nom FROM depenses d
              LEFT JOIN secteurs s ON d.secteur_id = s.id
@@ -17,7 +17,7 @@ module.exports = function comptabiliteRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.post('/depenses', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/depenses', requireAuth(pool, { module: 'comptabilite' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const { secteur_id, categorie, montant, description, date_depense } = req.body;
         if (!categorie || !montant || !date_depense) {
             return res.status(400).json({ erreur: 'Catégorie, montant et date sont requis.' });
@@ -40,7 +40,7 @@ module.exports = function comptabiliteRoutes(pool) {
         }
     });
 
-    router.delete('/depenses/:id', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.delete('/depenses/:id', requireAuth(pool, { module: 'comptabilite' }), checkRole(['admin', 'comptable']), async (req, res) => {
         await req.db.query(`UPDATE depenses SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);
         await logAudit(req.db, { req, table: 'depenses', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
         res.status(204).end();
@@ -48,7 +48,7 @@ module.exports = function comptabiliteRoutes(pool) {
 
     // -------------------- Comptabilité analytique par pôle --------------------
 
-    router.get('/analytique', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.get('/analytique', requireAuth(pool, { module: 'comptabilite' }), checkRole(['admin', 'comptable']), async (req, res) => {
         try {
             const tenantId = req.user.tenant_id;
             const [secteurs, ca, dep, depParCategorie] = await Promise.all([
@@ -128,7 +128,7 @@ module.exports = function comptabiliteRoutes(pool) {
 
     // -------------------- Rapprochement bancaire --------------------
 
-    router.get('/releves-bancaires', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.get('/releves-bancaires', requireAuth(pool, { module: 'comptabilite' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const [releves, candidats] = await Promise.all([
             req.db.query(
@@ -180,7 +180,7 @@ module.exports = function comptabiliteRoutes(pool) {
      * l'interface, où le comptable voit un aperçu avant de confirmer). Remplace la saisie ligne par
      * ligne pour un vrai relevé — reste compatible avec elle (POST /releves-bancaires) au besoin.
      */
-    router.post('/releves-bancaires/import', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/releves-bancaires/import', requireAuth(pool, { module: 'comptabilite' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const { lignes } = req.body;
         if (!Array.isArray(lignes) || lignes.length === 0) {
             return res.status(400).json({ erreur: 'Aucune ligne à importer.' });
@@ -225,7 +225,7 @@ module.exports = function comptabiliteRoutes(pool) {
         res.status(201).json({ inserees, rejetees });
     });
 
-    router.post('/releves-bancaires', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/releves-bancaires', requireAuth(pool, { module: 'comptabilite' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const { date_operation, libelle, montant, type_operation } = req.body;
         if (!date_operation || !libelle || !montant || !type_operation) {
             return res.status(400).json({ erreur: 'Date, libellé, montant et type sont requis.' });
@@ -244,7 +244,7 @@ module.exports = function comptabiliteRoutes(pool) {
         }
     });
 
-    router.put('/releves-bancaires/:id/rapprocher', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.put('/releves-bancaires/:id/rapprocher', requireAuth(pool, { module: 'comptabilite' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const { paiement_id } = req.body;
         try {
             if (paiement_id) {
@@ -264,7 +264,7 @@ module.exports = function comptabiliteRoutes(pool) {
         }
     });
 
-    router.put('/releves-bancaires/:id/annuler-rapprochement', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.put('/releves-bancaires/:id/annuler-rapprochement', requireAuth(pool, { module: 'comptabilite' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const result = await req.db.query(
             `UPDATE releves_bancaires SET paiement_id = NULL, rapproche = FALSE, rapproche_par = NULL WHERE id = $1 AND tenant_id = $2 RETURNING *`,
             [req.params.id, req.user.tenant_id]

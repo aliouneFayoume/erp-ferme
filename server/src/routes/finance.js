@@ -23,7 +23,7 @@ const limiteurIPN = rateLimit({
 module.exports = function financeRoutes(pool) {
     const router = express.Router();
 
-    router.get('/factures', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
+    router.get('/factures', requireAuth(pool, { module: 'finance' }), checkRole(['comptable']), async (req, res) => {
         // Bascule automatique en retard : pas de tâche planifiée dédiée, le statut est simplement
         // remis à jour à chaque consultation de l'écran (même logique "à la demande" que la
         // génération des commandes d'abonnement ailleurs dans ce projet).
@@ -58,7 +58,7 @@ module.exports = function financeRoutes(pool) {
      * configurer les siens (organisation_whatsapp_config, voir routes/parametres-whatsapp.js) ; sans
      * ça, l'action échoue avec un message clair plutôt que d'envoyer silencieusement au nom de Massla.
      */
-    router.post('/factures/:id/rappel-whatsapp', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
+    router.post('/factures/:id/rappel-whatsapp', requireAuth(pool, { module: 'finance' }), checkRole(['comptable']), async (req, res) => {
         try {
             const factureRes = await req.db.query(
                 `SELECT f.id, f.montant_restant, cl.telephone as client_telephone, o.est_plateforme
@@ -103,7 +103,7 @@ module.exports = function financeRoutes(pool) {
     });
 
     /** Génère et télécharge la facture PDF correspondante (client, lignes, montants, échéance). */
-    router.get('/factures/:id/pdf', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
+    router.get('/factures/:id/pdf', requireAuth(pool, { module: 'finance' }), checkRole(['comptable']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const factureRes = await req.db.query(
             `SELECT f.*, c.numero_commande, c.montant_total, c.client_id
@@ -132,7 +132,7 @@ module.exports = function financeRoutes(pool) {
         });
     });
 
-    router.get('/paiements', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
+    router.get('/paiements', requireAuth(pool, { module: 'finance' }), checkRole(['comptable']), async (req, res) => {
         const result = await req.db.query(
             `SELECT p.*, cl.nom as client_nom FROM paiements p JOIN clients cl ON p.client_id = cl.id WHERE p.tenant_id = $1 ORDER BY p.date_paiement DESC LIMIT 200`,
             [req.user.tenant_id]
@@ -147,7 +147,7 @@ module.exports = function financeRoutes(pool) {
      * laquelle le frontend doit rediriger le client. Le paiement reste EN_ATTENTE tant que l'IPN de
      * confirmation n'est pas arrivé (voir /paiements/ipn).
      */
-    router.post('/paiements/initier', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/paiements/initier', requireAuth(pool, { module: 'finance' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { commande_id, client_id, montant, provider } = req.body;
 

@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const { signToken, requireAuth, attachTenantConnection, queryPreTenant, queryAvecTenant, JWT_SECRET } = require('../auth');
 const { logAudit } = require('../audit');
+const { ongletsAutorises } = require('../modulesSaas');
 const { motDePasseValide, motDePasseErreurs } = require('../validation');
 const mfa = require('../mfa');
 const { chiffrer } = require('../credentials');
@@ -523,7 +524,19 @@ module.exports = function authRoutes(pool) {
     router.get('/me', requireAuth(pool), async (req, res) => {
         const result = await req.db.query(`SELECT mfa_actif, mfa_methode, mfa_obligatoire FROM utilisateurs WHERE id = $1`, [req.user.id]);
         const row = result.rows[0] || {};
-        res.json({ utilisateur: { ...req.user, mfaActif: !!row.mfa_actif, mfaMethode: row.mfa_methode, mfaObligatoire: !!row.mfa_obligatoire } });
+        // onglets/modules : null = aucune restriction (voir modulesSaas.js). Le frontend les relit à
+        // chaque chargement (app.js, rafraichirAcces) pour qu'un changement d'abonnement fait par le
+        // superviseur s'applique sans reconnexion ; l'API refuse de toute façon un module non souscrit.
+        res.json({
+            utilisateur: {
+                ...req.user,
+                mfaActif: !!row.mfa_actif,
+                mfaMethode: row.mfa_methode,
+                mfaObligatoire: !!row.mfa_obligatoire,
+                onglets: ongletsAutorises(req.acces),
+                modules: req.acces === null ? null : req.acces.souscrits,
+            },
+        });
     });
 
     return router;

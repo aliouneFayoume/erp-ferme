@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { resoudreAcces, moduleAutorise, libelleModule } = require('./modulesSaas');
 
 // La présence de DATABASE_URL signale un déploiement réel (par opposition à la simulation locale
 // pg-mem) : dans ce cas, un secret par défaut connu de tous permettrait à quiconque de forger un
@@ -194,7 +195,7 @@ function requireClientAuth(pool) {
  *    L'ABSENCE de ligne d'abonnement (organisation jamais mise sous facturation) n'est PAS un
  *    blocage : seule une ligne existante avec actif = false l'est.
  */
-function requireAuth(pool) {
+function requireAuth(pool, { module: moduleRequis = null } = {}) {
     return async (req, res, next) => {
         const header = req.headers['authorization'] || '';
         const token = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -210,7 +211,8 @@ function requireAuth(pool) {
             const etat = await req.db.query(
                 `SELECT u.actif, u.deleted_at AS utilisateur_supprime_le, u.token_version, r.nom AS role,
                         u.mfa_obligatoire, u.mfa_actif,
-                        o.deleted_at AS organisation_supprimee_le, s.actif AS abonnement_actif
+                        o.deleted_at AS organisation_supprimee_le, o.est_plateforme,
+                        s.actif AS abonnement_actif, s.modules_actifs
                  FROM utilisateurs u
                  JOIN roles r ON r.id = u.role_id
                  LEFT JOIN organisations o ON o.id = u.tenant_id
@@ -245,6 +247,20 @@ function requireAuth(pool) {
                 if (!autorise) {
                     return res.status(403).json({ erreur: 'Configuration MFA obligatoire avant de continuer.', code: 'MFA_SETUP_REQUIS' });
                 }
+            }
+
+            // Modules SaaS (modulesSaas.js) : `req.acces` = null (aucune restriction : pas de ligne
+            // d'abonnement, ferme plateforme, ou Pack tout compris) ou { souscrits, lecture }.
+            // Appliqué même pendant une impersonation : le superviseur voit la ferme telle que ses
+            // utilisateurs la voient, et corrige les modules depuis la vue plateforme si besoin.
+            // modules_actifs n'est lu que si une ligne d'abonnement existe (LEFT JOIN => NULL sinon).
+            req.acces = ligne.est_plateforme ? null : resoudreAcces(ligne.modules_actifs);
+            if (moduleRequis && !moduleAutorise(req.acces, moduleRequis, req.method)) {
+                return res.status(403).json({
+                    erreur: `Le module « ${libelleModule(moduleRequis)} » n'est pas inclus dans votre abonnement. Contactez le support pour l'activer.`,
+                    code: 'MODULE_NON_SOUSCRIT',
+                    module: moduleRequis,
+                });
             }
 
             next();

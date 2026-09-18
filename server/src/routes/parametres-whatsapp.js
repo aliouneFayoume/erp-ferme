@@ -13,7 +13,7 @@ const { getWhatsappConfig, setWhatsappConfig } = require('../whatsappConfig');
 module.exports = function parametresWhatsappRoutes(pool) {
     const router = express.Router();
 
-    router.get('/', requireAuth(pool), checkRole(['admin']), async (req, res) => {
+    router.get('/', requireAuth(pool, { module: 'finance' }), checkRole(['admin']), async (req, res) => {
         const orgRes = await req.db.query(`SELECT est_plateforme FROM organisations WHERE id = $1`, [req.user.tenant_id]);
         // Massla utilise ses identifiants globaux (server/.env, voir routes/finance.js) — ce réglage
         // self-service ne s'applique jamais à elle, même si un admin Massla remplissait ce formulaire
@@ -26,7 +26,7 @@ module.exports = function parametresWhatsappRoutes(pool) {
         res.json({ estPlateforme: false, configure: !!config, templateNom: config?.templateNom || null, templateLangue: config?.templateLangue || null });
     });
 
-    router.put('/', requireAuth(pool), checkRole(['admin']), async (req, res) => {
+    router.put('/', requireAuth(pool, { module: 'finance' }), checkRole(['admin']), async (req, res) => {
         const { access_token, phone_number_id, template_nom, template_langue } = req.body;
         if (!access_token || !phone_number_id) {
             return res.status(400).json({ erreur: "Le jeton d'accès et l'ID du numéro de téléphone sont requis." });

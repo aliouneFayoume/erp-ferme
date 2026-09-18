@@ -5,7 +5,7 @@ const { logAudit } = require('../audit');
 module.exports = function ticketsRoutes(pool) {
     const router = express.Router();
 
-    router.get('/', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.get('/', requireAuth(pool, { module: 'support' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const { statut } = req.query;
         const params = [req.user.tenant_id];
         let where = 't.tenant_id = $1 AND t.deleted_at IS NULL';
@@ -26,7 +26,7 @@ module.exports = function ticketsRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.post('/', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/', requireAuth(pool, { module: 'support' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { client_id, sujet, description, priorite } = req.body;
         if (!client_id || !sujet) {
@@ -43,7 +43,7 @@ module.exports = function ticketsRoutes(pool) {
         res.status(201).json(result.rows[0]);
     });
 
-    router.put('/:id', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.put('/:id', requireAuth(pool, { module: 'support' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { statut, priorite, assigne_a } = req.body;
         const result = await req.db.query(
@@ -57,14 +57,14 @@ module.exports = function ticketsRoutes(pool) {
         res.json(result.rows[0]);
     });
 
-    router.delete('/:id', requireAuth(pool), checkRole(['admin']), async (req, res) => {
+    router.delete('/:id', requireAuth(pool, { module: 'support' }), checkRole(['admin']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         await req.db.query(`UPDATE tickets SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [req.params.id, tenantId]);
         await logAudit(req.db, { req, table: 'tickets', rowId: req.params.id, action: 'DELETE', userId: req.user.id, tenantId });
         res.status(204).end();
     });
 
-    router.get('/:id/messages', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.get('/:id/messages', requireAuth(pool, { module: 'support' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const ticketRes = await req.db.query(`SELECT id FROM tickets WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, [req.params.id, req.user.tenant_id]);
         if (ticketRes.rows.length === 0) return res.status(404).json({ erreur: 'Ticket introuvable.' });
         const result = await req.db.query(
@@ -79,7 +79,7 @@ module.exports = function ticketsRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.post('/:id/messages', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/:id/messages', requireAuth(pool, { module: 'support' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const { message } = req.body;
         if (!message || !message.trim()) return res.status(400).json({ erreur: 'Message vide.' });
         const ticketRes = await req.db.query(`SELECT id FROM tickets WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, [req.params.id, req.user.tenant_id]);

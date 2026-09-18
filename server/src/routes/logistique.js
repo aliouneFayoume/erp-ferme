@@ -10,7 +10,7 @@ module.exports = function logistiqueRoutes(pool) {
      * Feuille de route du livreur connecté (TMS), basée sur les coordonnées GPS du client (pas
      * d'adresse textuelle) et optimisée par ordre de passage depuis le dépôt de la ferme.
      */
-    router.get('/tournees', requireAuth(pool), checkRole(['livreur']), async (req, res) => {
+    router.get('/tournees', requireAuth(pool, { module: 'logistique' }), checkRole(['livreur']), async (req, res) => {
         try {
             const livreurId = req.user.role === 'livreur' ? req.user.id : req.query.livreur_id;
             const aujourdhui = new Date().toISOString().slice(0, 10);
@@ -61,7 +61,7 @@ module.exports = function logistiqueRoutes(pool) {
     });
 
     // Historique des livraisons (toutes statuts confondus) : sert notamment à consulter la preuve de livraison.
-    router.get('/livraisons', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.get('/livraisons', requireAuth(pool, { module: 'logistique' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const result = await req.db.query(
             `SELECT l.*, c.numero_commande, cl.nom as client_nom, u.nom_complet as livreur_nom
              FROM livraisons l
@@ -75,7 +75,7 @@ module.exports = function logistiqueRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.post('/livraisons', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/livraisons', requireAuth(pool, { module: 'logistique' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const { commande_id, livreur_id, date_prevue } = req.body;
         const commandeRes = await req.db.query(`SELECT id FROM commandes WHERE id = $1 AND tenant_id = $2`, [commande_id, req.user.tenant_id]);
         if (commandeRes.rows.length === 0) return res.status(400).json({ erreur: 'Commande invalide.' });
@@ -91,7 +91,7 @@ module.exports = function logistiqueRoutes(pool) {
     // Mise à jour terrain : statut, preuve de livraison, et éventuel encaissement espèces (caisse chauffeur virtuelle).
     const METHODES_PAIEMENT_VALIDES = ['ESPECES', 'WAVE', 'ORANGE_MONEY', 'VIREMENT'];
 
-    router.put('/livraisons/:id/statut', requireAuth(pool), checkRole(['livreur']), async (req, res) => {
+    router.put('/livraisons/:id/statut', requireAuth(pool, { module: 'logistique' }), checkRole(['livreur']), async (req, res) => {
         const { statut, notes_livreur, preuve_livraison, montant_encaisse } = req.body;
         // Le livreur encaisse aussi bien en espèces qu'en Wave/Orange Money reçu sur place au
         // moment de la livraison — la caisse chauffeur virtuelle doit refléter le mode réel.
@@ -185,7 +185,7 @@ module.exports = function logistiqueRoutes(pool) {
     });
 
     // Caisse Chauffeur Virtuelle : ouverture journalière par le livreur.
-    router.post('/caisse/ouvrir', requireAuth(pool), checkRole(['livreur']), async (req, res) => {
+    router.post('/caisse/ouvrir', requireAuth(pool, { module: 'logistique' }), checkRole(['livreur']), async (req, res) => {
         try {
             const aujourdhui = new Date().toISOString().slice(0, 10);
             const result = await req.db.query(
@@ -201,7 +201,7 @@ module.exports = function logistiqueRoutes(pool) {
         }
     });
 
-    router.get('/caisse', requireAuth(pool), checkRole(['comptable', 'livreur']), async (req, res) => {
+    router.get('/caisse', requireAuth(pool, { module: 'logistique' }), checkRole(['comptable', 'livreur']), async (req, res) => {
         const params = [req.user.tenant_id];
         let where = 'cc.tenant_id = $1';
         if (req.user.role === 'livreur') {
@@ -218,7 +218,7 @@ module.exports = function logistiqueRoutes(pool) {
     });
 
     // Clôture de caisse : rapprochement entre encaissements théoriques (app) et dépôt réel (comptable).
-    router.put('/caisse/:id/cloturer', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
+    router.put('/caisse/:id/cloturer', requireAuth(pool, { module: 'logistique' }), checkRole(['comptable']), async (req, res) => {
         const { montant_depose, notes } = req.body;
         try {
             const caisseRes = await req.db.query(`SELECT * FROM caisses_chauffeur WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenant_id]);

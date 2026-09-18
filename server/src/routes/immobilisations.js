@@ -22,7 +22,7 @@ module.exports = function immobilisationsRoutes(pool) {
 
     // -------------------- Inventaire --------------------
 
-    router.get('/', requireAuth(pool), checkRole(ROLES_IMMOBILISATION), async (req, res) => {
+    router.get('/', requireAuth(pool, { module: 'comptabilite' }), checkRole(ROLES_IMMOBILISATION), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const [equipements, amortis] = await Promise.all([
             req.db.query(
@@ -50,7 +50,7 @@ module.exports = function immobilisationsRoutes(pool) {
         res.json(avecValeurNette);
     });
 
-    router.post('/', requireAuth(pool), checkRole(ROLES_IMMOBILISATION), async (req, res) => {
+    router.post('/', requireAuth(pool, { module: 'comptabilite' }), checkRole(ROLES_IMMOBILISATION), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const {
             nom, categorie, secteur_id, fournisseur_id, etat, quantite,
@@ -76,7 +76,7 @@ module.exports = function immobilisationsRoutes(pool) {
         }
     });
 
-    router.put('/:id', requireAuth(pool), checkRole(ROLES_IMMOBILISATION), async (req, res) => {
+    router.put('/:id', requireAuth(pool, { module: 'comptabilite' }), checkRole(ROLES_IMMOBILISATION), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const {
             nom, categorie, secteur_id, fournisseur_id, etat, quantite,
@@ -106,7 +106,7 @@ module.exports = function immobilisationsRoutes(pool) {
         }
     });
 
-    router.delete('/:id', requireAuth(pool), checkRole(['admin']), async (req, res) => {
+    router.delete('/:id', requireAuth(pool, { module: 'comptabilite' }), checkRole(['admin']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const result = await req.db.query(
             `UPDATE equipements SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL RETURNING id`,
@@ -122,7 +122,7 @@ module.exports = function immobilisationsRoutes(pool) {
     // et, si un coût est renseigné, génère une dépense — même principe que la réception d'une
     // commande fournisseur (routes/fournisseurs.js /commandes/:id/recevoir).
 
-    router.get('/:id/entretiens', requireAuth(pool), checkRole(ROLES_IMMOBILISATION), async (req, res) => {
+    router.get('/:id/entretiens', requireAuth(pool, { module: 'comptabilite' }), checkRole(ROLES_IMMOBILISATION), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const equipement = await req.db.query(`SELECT id FROM equipements WHERE id = $1 AND tenant_id = $2`, [req.params.id, tenantId]);
         if (equipement.rows.length === 0) return res.status(404).json({ erreur: 'Équipement introuvable.' });
@@ -133,7 +133,7 @@ module.exports = function immobilisationsRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.post('/:id/entretiens', requireAuth(pool), checkRole(ROLES_IMMOBILISATION), async (req, res) => {
+    router.post('/:id/entretiens', requireAuth(pool, { module: 'comptabilite' }), checkRole(ROLES_IMMOBILISATION), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { date_entretien, description, cout, prochain_entretien } = req.body;
         if (!date_entretien) return res.status(400).json({ erreur: "La date de l'entretien est requise." });
@@ -189,7 +189,7 @@ module.exports = function immobilisationsRoutes(pool) {
     // idempotent grâce à UNIQUE (equipement_id, periode) sur `amortissements` : recliquer sur la
     // même période ne double jamais la dépense.
 
-    router.post('/amortissements/calculer', requireAuth(pool), checkRole(ROLES_IMMOBILISATION), async (req, res) => {
+    router.post('/amortissements/calculer', requireAuth(pool, { module: 'comptabilite' }), checkRole(ROLES_IMMOBILISATION), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { periode } = req.body; // 'YYYY-MM-DD', normalisé au 1er du mois côté client
         if (!periode) return res.status(400).json({ erreur: 'La période est requise.' });

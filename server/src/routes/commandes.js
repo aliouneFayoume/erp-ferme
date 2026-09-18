@@ -18,7 +18,7 @@ function resolvePrixUnitaire(produit, acheteur) {
 module.exports = function commandesRoutes(pool) {
     const router = express.Router();
 
-    router.get('/', requireAuth(pool), async (req, res) => {
+    router.get('/', requireAuth(pool, { module: 'commandes_fournisseurs' }), async (req, res) => {
         const result = await req.db.query(
             `SELECT c.*, cl.nom as client_nom, cl.type_client
              FROM commandes c JOIN clients cl ON c.client_id = cl.id
@@ -28,7 +28,7 @@ module.exports = function commandesRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.get('/:id', requireAuth(pool), async (req, res) => {
+    router.get('/:id', requireAuth(pool, { module: 'commandes_fournisseurs' }), async (req, res) => {
         const commande = await req.db.query(
             `SELECT c.*, cl.nom as client_nom, cl.type_client FROM commandes c JOIN clients cl ON c.client_id = cl.id WHERE c.id = $1 AND c.tenant_id = $2`,
             [req.params.id, req.user.tenant_id]
@@ -47,7 +47,7 @@ module.exports = function commandesRoutes(pool) {
      * - Réserve le stock dans le pool dédié (B2B ou B2C) pour éviter les surventes croisées.
      * - Pour le B2B : bloque automatiquement la commande si l'encours dépasse la limite de crédit.
      */
-    router.post('/', requireAuth(pool), checkRole(['admin', 'comptable']), async (req, res) => {
+    router.post('/', requireAuth(pool, { module: 'commandes_fournisseurs' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const { client_id, lignes } = req.body;
         if (!client_id || !Array.isArray(lignes) || lignes.length === 0) {
             return res.status(400).json({ erreur: 'Client et au moins une ligne de commande sont requis.' });
@@ -144,7 +144,7 @@ module.exports = function commandesRoutes(pool) {
         }
     });
 
-    router.put('/:id/statut', requireAuth(pool), checkRole(['admin', 'comptable', 'livreur']), async (req, res) => {
+    router.put('/:id/statut', requireAuth(pool, { module: 'commandes_fournisseurs' }), checkRole(['admin', 'comptable', 'livreur']), async (req, res) => {
         const { statut } = req.body;
         const statutsValides = ['EN_ATTENTE', 'PREPAREE', 'EN_LIVRAISON', 'LIVREE', 'ANNULEE'];
         if (!statutsValides.includes(statut)) {

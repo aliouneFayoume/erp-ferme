@@ -23,7 +23,7 @@ module.exports = function elevageRoutes(pool) {
 
     // -------------------- Animaux --------------------
 
-    router.get('/animaux', requireAuth(pool), async (req, res) => {
+    router.get('/animaux', requireAuth(pool, { module: 'elevage' }), async (req, res) => {
         try {
             const params = [req.user.tenant_id];
             let where = `a.tenant_id = $1 AND a.deleted_at IS NULL`;
@@ -66,7 +66,7 @@ module.exports = function elevageRoutes(pool) {
         }
     });
 
-    router.get('/animaux/:id', requireAuth(pool), async (req, res) => {
+    router.get('/animaux/:id', requireAuth(pool, { module: 'elevage' }), async (req, res) => {
         try {
             if (!(await verifierAccesAnimal(req.db, req.params.id, req.user))) {
                 return res.status(403).json({ erreur: 'Cet animal ne relève pas de votre secteur.' });
@@ -94,7 +94,7 @@ module.exports = function elevageRoutes(pool) {
         }
     });
 
-    router.post('/animaux', requireAuth(pool), checkRole(['chef_prod']), async (req, res) => {
+    router.post('/animaux', requireAuth(pool, { module: 'elevage' }), checkRole(['chef_prod']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { secteur_id, identifiant, espece, race, sexe, date_naissance, origine, poids_initial_kg, mere_id } = req.body;
 
@@ -140,7 +140,7 @@ module.exports = function elevageRoutes(pool) {
         }
     });
 
-    router.put('/animaux/:id', requireAuth(pool), checkRole(['chef_prod']), async (req, res) => {
+    router.put('/animaux/:id', requireAuth(pool, { module: 'elevage' }), checkRole(['chef_prod']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { race, sexe, notes } = req.body;
         if (!(await verifierAccesAnimal(req.db, req.params.id, req.user))) {
@@ -162,7 +162,7 @@ module.exports = function elevageRoutes(pool) {
         }
     });
 
-    router.put('/animaux/:id/statut', requireAuth(pool), checkRole(['chef_prod']), async (req, res) => {
+    router.put('/animaux/:id/statut', requireAuth(pool, { module: 'elevage' }), checkRole(['chef_prod']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { statut, date_sortie } = req.body;
         if (!STATUTS_ANIMAL.includes(statut)) return res.status(400).json({ erreur: 'Statut invalide.' });
@@ -187,7 +187,7 @@ module.exports = function elevageRoutes(pool) {
         }
     });
 
-    router.delete('/animaux/:id', requireAuth(pool), checkRole(['admin']), async (req, res) => {
+    router.delete('/animaux/:id', requireAuth(pool, { module: 'elevage' }), checkRole(['admin']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const result = await req.db.query(
             `UPDATE animaux SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL RETURNING id`,
@@ -200,7 +200,7 @@ module.exports = function elevageRoutes(pool) {
 
     // -------------------- Relevés (pesée / vaccination / traitement / observation) --------------------
 
-    router.get('/animaux/:id/releves', requireAuth(pool), async (req, res) => {
+    router.get('/animaux/:id/releves', requireAuth(pool, { module: 'elevage' }), async (req, res) => {
         if (!(await verifierAccesAnimal(req.db, req.params.id, req.user))) {
             return res.status(403).json({ erreur: 'Cet animal ne relève pas de votre secteur.' });
         }
@@ -211,7 +211,7 @@ module.exports = function elevageRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.post('/animaux/:id/releves', requireAuth(pool), checkRole(['chef_prod']), async (req, res) => {
+    router.post('/animaux/:id/releves', requireAuth(pool, { module: 'elevage' }), checkRole(['chef_prod']), async (req, res) => {
         const { date_releve, type_evenement, poids_kg, produit_utilise, notes } = req.body;
         const TYPES_VALIDES = ['PESEE', 'VACCINATION', 'TRAITEMENT', 'OBSERVATION'];
         if (!date_releve || !TYPES_VALIDES.includes(type_evenement)) {
@@ -239,7 +239,7 @@ module.exports = function elevageRoutes(pool) {
 
     // -------------------- Reproduction (saillie / mise-bas) --------------------
 
-    router.get('/reproductions', requireAuth(pool), async (req, res) => {
+    router.get('/reproductions', requireAuth(pool, { module: 'elevage' }), async (req, res) => {
         const params = [req.user.tenant_id];
         let where = `r.tenant_id = $1`;
         if (req.query.mere_id) {
@@ -259,7 +259,7 @@ module.exports = function elevageRoutes(pool) {
         res.json(result.rows);
     });
 
-    router.post('/reproductions', requireAuth(pool), checkRole(['chef_prod']), async (req, res) => {
+    router.post('/reproductions', requireAuth(pool, { module: 'elevage' }), checkRole(['chef_prod']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { mere_id, pere_id, date_saillie, date_mise_bas_prevue, notes } = req.body;
         if (!mere_id || !date_saillie) return res.status(400).json({ erreur: 'Mère et date de saillie sont requises.' });
@@ -298,7 +298,7 @@ module.exports = function elevageRoutes(pool) {
     // Endpoint transactionnel clé : crée tous les petits d'une portée d'un coup, ou aucun (même
     // pattern que routes/paie.js PUT /bulletins/:id/payer). nombre_petits est TOUJOURS dérivé de
     // petits.length, jamais un champ client séparé, pour garantir la cohérence.
-    router.put('/reproductions/:id/mise-bas', requireAuth(pool), checkRole(['chef_prod']), async (req, res) => {
+    router.put('/reproductions/:id/mise-bas', requireAuth(pool, { module: 'elevage' }), checkRole(['chef_prod']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { date_mise_bas_reelle, petits } = req.body;
         if (!date_mise_bas_reelle || !Array.isArray(petits) || petits.length === 0) {
@@ -351,7 +351,7 @@ module.exports = function elevageRoutes(pool) {
         }
     });
 
-    router.put('/reproductions/:id/echec', requireAuth(pool), checkRole(['chef_prod']), async (req, res) => {
+    router.put('/reproductions/:id/echec', requireAuth(pool, { module: 'elevage' }), checkRole(['chef_prod']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         try {
             const result = await req.db.query(

@@ -25,13 +25,13 @@ module.exports = function parametresPaiementRoutes(pool) {
 
     // Ne renvoie jamais les clés en clair une fois enregistrées (même logique que le PIN portail
     // client) : seul un statut "configuré / non configuré" est exposé, pour affichage.
-    router.get('/paiement', requireAuth(pool), checkRole(['admin']), async (req, res) => {
+    router.get('/paiement', requireAuth(pool, { module: 'finance' }), checkRole(['admin']), async (req, res) => {
         const config = await getPaydunyaConfig(req.db, req.user.tenant_id);
         if (!config) return res.json({ configure: false, mode: null });
         res.json({ configure: true, mode: config.mode });
     });
 
-    router.put('/paiement', requireAuth(pool), checkRole(['admin']), async (req, res) => {
+    router.put('/paiement', requireAuth(pool, { module: 'finance' }), checkRole(['admin']), async (req, res) => {
         const { mode, master_key, private_key, public_key, token } = req.body;
         if (!['test', 'live'].includes(mode)) {
             return res.status(400).json({ erreur: 'Mode invalide (test ou live).' });

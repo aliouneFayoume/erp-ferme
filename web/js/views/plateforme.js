@@ -511,6 +511,7 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
         </div>
 
         <p class="desc">${esc(catalogue.socleEssentiel.label)} — ${catalogue.socleEssentiel.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois (toujours inclus)</p>
+        <p class="desc"><b>Les modules cochés donnent réellement accès</b> : un module décoché disparaît du menu de la ferme et son API est refusée, immédiatement à l'enregistrement. Le Pack tout compris ouvre tout. Une ferme sans abonnement enregistré n'est pas restreinte.</p>
         <form id="form-abonnement-saas" class="form-grid" autocomplete="off">
           <label style="flex-direction: row; align-items: center; gap: 8px;">
             <input type="checkbox" name="pack" style="width:auto" ${surPack ? 'checked' : ''} />
