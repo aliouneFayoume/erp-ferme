@@ -53,7 +53,10 @@ CREATE TABLE organisations (
     gps_lat NUMERIC,
     gps_lng NUMERIC,
     adresse VARCHAR(255),
-    telephone VARCHAR(20)
+    telephone VARCHAR(20),
+    -- Relance WhatsApp automatique des factures clients impayées 7 jours après l'échéance
+    -- (relancesAuto.js). Activée par défaut ; l'admin de la ferme peut la couper (réglages).
+    relances_auto_actives BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 -- --------------------------------------------------------
@@ -371,7 +374,14 @@ CREATE TABLE factures (
     commande_id INT REFERENCES commandes(id),
     date_echeance DATE NOT NULL, -- Pour la gestion des encours à 30 jours (B2B)
     statut VARCHAR(20) CHECK (statut IN ('A_PAYER', 'PAYEE_PARTIEL', 'PAYEE', 'EN_RETARD')),
-    montant_restant NUMERIC NOT NULL
+    montant_restant NUMERIC NOT NULL,
+    -- Relance automatique (relancesAuto.js) : rappel_auto_envoye_le est posé AVANT l'envoi (claim
+    -- atomique, jamais deux envois pour une même facture), remis à NULL si l'envoi échoue ;
+    -- rappel_auto_tentatives plafonne les échecs répétés ; dernier_rappel_le = dernier rappel
+    -- réussi, manuel ou automatique (évite de doubler une relance manuelle toute récente).
+    rappel_auto_envoye_le TIMESTAMP,
+    rappel_auto_tentatives INT NOT NULL DEFAULT 0,
+    dernier_rappel_le TIMESTAMP
 );
 
 CREATE TABLE paiements (

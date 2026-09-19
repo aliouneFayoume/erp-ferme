@@ -154,6 +154,12 @@ async function main() {
         res.status(500).json({ erreur: 'Erreur interne du serveur.' });
     });
 
+    // Relance automatique des factures impayées (J+7) : uniquement sur une vraie base. En mode démo
+    // (pg-mem, sans DATABASE_URL) il n'y a ni vrai client ni identifiants WhatsApp à utiliser.
+    if (process.env.DATABASE_URL) {
+        require('./relancesAuto').demarrerPlanificateur(pool);
+    }
+
     app.listen(PORT, () => {
         console.log('=========================================');
         console.log(`ERP Ferme Massla démarré sur http://localhost:${PORT}`);

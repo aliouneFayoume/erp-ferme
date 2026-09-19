@@ -77,6 +77,13 @@ window.Views['parametres-paiement'] = {
           ? ''
           : `<div class="panel">
         <h2>Relances clients par WhatsApp</h2>
+        <label style="display:flex;flex-direction:row;align-items:flex-start;gap:8px;margin-bottom:14px">
+          <input type="checkbox" id="relances-auto" ${configWhatsapp.relancesAutoActives ? 'checked' : ''} style="width:auto;flex:none;margin-top:3px" />
+          <span>
+            <strong>Relance automatique 7 jours après l'échéance</strong><br />
+            <span class="desc" style="margin:0">Une facture impayée est relancée une seule fois par WhatsApp, 7 jours après sa date d'échéance, entre 9 h et 18 h. Les relances suivantes restent manuelles (bouton « Rappel WhatsApp » de l'écran Finances).</span>
+          </span>
+        </label>
         ${
           configWhatsapp.estPlateforme
             ? `<p class="desc">Ferme Massla utilise déjà son propre compte WhatsApp Business, configuré au niveau de la plateforme — rien à faire ici.</p>`
@@ -137,6 +144,17 @@ window.Views['parametres-paiement'] = {
         showToast('Identifiants de paiement enregistrés.', 'success');
         window.Views['parametres-paiement'].render(container);
       } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    container.querySelector('#relances-auto')?.addEventListener('change', async (e) => {
+      const coche = e.target.checked;
+      try {
+        await Api.put('/parametres-whatsapp/relances-auto', { actives: coche });
+        showToast(coche ? 'Relance automatique activée.' : 'Relance automatique désactivée.', 'success');
+      } catch (err) {
+        e.target.checked = !coche;
         showToast(err.message, 'error');
       }
     });

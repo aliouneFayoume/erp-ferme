@@ -87,6 +87,9 @@ module.exports = function financeRoutes(pool) {
             }
 
             await envoyerMessageWhatsapp(facture.client_telephone, { config, montant: facture.montant_restant });
+            // Le message est parti : évite que la relance automatique (relancesAuto.js) double ce
+            // rappel manuel dans les jours qui suivent.
+            await req.db.query(`UPDATE factures SET dernier_rappel_le = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2`, [facture.id, req.user.tenant_id]);
             await logAudit(req.db, { req,
                 table: 'factures',
                 rowId: facture.id,

@@ -14,16 +14,37 @@ module.exports = function parametresWhatsappRoutes(pool) {
     const router = express.Router();
 
     router.get('/', requireAuth(pool, { module: 'finance' }), checkRole(['admin']), async (req, res) => {
-        const orgRes = await req.db.query(`SELECT est_plateforme FROM organisations WHERE id = $1`, [req.user.tenant_id]);
+        const orgRes = await req.db.query(`SELECT est_plateforme, relances_auto_actives FROM organisations WHERE id = $1`, [req.user.tenant_id]);
+        const relancesAutoActives = orgRes.rows[0]?.relances_auto_actives !== false;
         // Massla utilise ses identifiants globaux (server/.env, voir routes/finance.js) — ce réglage
         // self-service ne s'applique jamais à elle, même si un admin Massla remplissait ce formulaire
         // par erreur, la config créée resterait silencieusement inutilisée. On l'indique clairement
         // plutôt que de laisser l'admin croire que ça change quelque chose.
         if (orgRes.rows[0]?.est_plateforme) {
-            return res.json({ estPlateforme: true, configure: true });
+            return res.json({ estPlateforme: true, configure: true, relancesAutoActives });
         }
         const config = await getWhatsappConfig(req.db, req.user.tenant_id);
-        res.json({ estPlateforme: false, configure: !!config, templateNom: config?.templateNom || null, templateLangue: config?.templateLangue || null });
+        res.json({ estPlateforme: false, configure: !!config, templateNom: config?.templateNom || null, templateLangue: config?.templateLangue || null, relancesAutoActives });
+    });
+
+    /**
+     * Interrupteur de la relance automatique J+7 (relancesAuto.js), valable aussi pour Ferme Massla.
+     * Route séparée de PUT / : celle-ci exige les identifiants WhatsApp, l'interrupteur non.
+     */
+    router.put('/relances-auto', requireAuth(pool, { module: 'finance' }), checkRole(['admin']), async (req, res) => {
+        if (typeof req.body.actives !== 'boolean') {
+            return res.status(400).json({ erreur: "Le champ « actives » doit être vrai ou faux." });
+        }
+        await req.db.query(`UPDATE organisations SET relances_auto_actives = $1 WHERE id = $2`, [req.body.actives, req.user.tenant_id]);
+        await logAudit(req.db, { req,
+            table: 'organisations',
+            rowId: req.user.tenant_id,
+            action: 'UPDATE',
+            userId: req.user.id,
+            tenantId: req.user.tenant_id,
+            details: { relances_auto_actives: req.body.actives },
+        });
+        res.json({ relancesAutoActives: req.body.actives });
     });
 
     router.put('/', requireAuth(pool, { module: 'finance' }), checkRole(['admin']), async (req, res) => {

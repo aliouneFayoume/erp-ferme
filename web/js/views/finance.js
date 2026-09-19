@@ -51,7 +51,7 @@ window.Views.finance = {
                   <td><span class="badge ${f.type_client === 'B2B' ? 'muted' : 'ok'}">${esc(f.type_client)}</span></td>
                   <td>${fmtDate(f.date_echeance)}</td>
                   <td class="num">${fmt(f.montant_restant)} FCFA</td>
-                  <td>${factureBadge(f.statut)}</td>
+                  <td>${factureBadge(f.statut)}${noteRelance(f)}</td>
                   <td style="white-space:nowrap">
                     <button class="secondary" data-facture-pdf="${f.id}" data-numero="${esc(f.numero_commande)}">PDF</button>
                     ${Number(f.montant_restant) > 0 ? `<button class="secondary" data-rappel-whatsapp="${f.id}">Rappel WhatsApp</button>` : ''}
@@ -174,6 +174,16 @@ function renderPaiements(container, paiements) {
         )
         .join('')
     : '<tr><td colspan="5" class="empty">Aucun paiement.</td></tr>';
+}
+
+// Trace de la dernière relance WhatsApp : automatique (J+7, relancesAuto.js) ou manuelle. Seule la
+// relance automatique est datée par sa propre colonne ; sinon dernier_rappel_le = rappel manuel.
+function noteRelance(f) {
+  if (Number(f.montant_restant) <= 0) return '';
+  const auto = f.rappel_auto_envoye_le;
+  const date = auto || f.dernier_rappel_le;
+  if (!date) return '';
+  return `<div class="desc" style="margin:4px 0 0">${auto ? 'Relance auto' : 'Relancée'} le ${esc(fmtDate(date))}</div>`;
 }
 
 function factureBadge(statut) {
