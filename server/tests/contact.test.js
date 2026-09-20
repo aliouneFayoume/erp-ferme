@@ -51,6 +51,19 @@ describe('contact — formulaire public massla.sn/decouvrir', () => {
         });
     });
 
+    test("accepte une demande sans préférence de contact (le formulaire ne la demande plus)", async () => {
+        const { preference, ...sansPreference } = payloadValide();
+        const res = await request(app).post('/api/contact').send(sansPreference);
+
+        expect(res.status).toBe(201);
+        expect(email.envoyerNotificationContact).toHaveBeenCalledWith({
+            nom: 'Clovis Test',
+            email: 'clovis@test.sn',
+            whatsapp: '+22670000000',
+            preference: '',
+        });
+    });
+
     test('rejette un nom manquant', async () => {
         const res = await request(app).post('/api/contact').send(payloadValide({ nom: '' }));
         expect(res.status).toBe(400);

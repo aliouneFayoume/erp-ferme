@@ -51,7 +51,7 @@ const BUNDLES = {
   // inscription.html, fin de <body> — séparé de marketing.min.js pour ne pas dupliquer
   // analytics.js dans les deux fichiers alors qu'il est déjà chargé une fois dans le <head>.
   'inscription.min.js': ['js/inscription.js'],
-  // decouvrir.html, fin de <body> — modal "Être recontacté" (section #contact) et section "Avis
+  // decouvrir.html, fin de <body> — modal de demande de démonstration (section #contact) et section "Avis
   // clients" (chargement + modal de soumission) : deux fonctionnalités propres à cette page,
   // regroupées dans un seul bundle plutôt qu'un fichier par mini-fonctionnalité.
   'contact-decouvrir.min.js': ['js/contact-decouvrir.js', 'js/avis-decouvrir.js'],

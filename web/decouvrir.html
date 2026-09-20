@@ -429,7 +429,7 @@
         <a href="#faq">FAQ</a>
         <a class="se-connecter" href="/">Se connecter</a>
       </nav>
-      <a class="cta-small" href="#contact" data-track="clic_cta_topbar">Démo gratuite</a>
+      <a class="cta-small" href="#contact" data-open-contact data-track="clic_cta_topbar">Démo gratuite</a>
     </div>
   </div>
 </div>
@@ -441,7 +441,7 @@
     <h1>Le logiciel de gestion pensé pour les fermes <em>sénégalaises</em></h1>
     <p class="lede">Avicole, piscicole, maraîcher, élevage — suivez votre production, votre stock et vos paiements depuis votre téléphone, même sans connexion internet stable. Encaissez par Wave et Orange Money, relancez vos clients par WhatsApp, automatiquement.</p>
     <div class="cta-row">
-      <a class="btn btn-primary" href="#contact" data-track="clic_cta_hero">Demander une démonstration gratuite</a>
+      <a class="btn btn-primary" href="#contact" data-open-contact data-track="clic_cta_hero">Demander une démonstration gratuite</a>
       <a class="btn btn-ghost" href="#tarifs">Voir les tarifs</a>
     </div>
     <p class="trust-line">Utilisé chaque jour sur le terrain par <strong>Ferme Massla</strong>, au Sénégal.</p>
@@ -678,8 +678,8 @@
       <h2>Voyez l'application tourner sur votre propre téléphone</h2>
       <p>Une démonstration gratuite de 15 minutes, sans engagement — le même outil utilisé chaque jour par la Ferme Massla.</p>
       <div class="cta-row">
-        <a class="btn btn-primary" href="https://wa.me/14165266293" target="_blank" rel="noopener" data-track="contact_whatsapp">Écrire sur WhatsApp</a>
-        <button type="button" class="btn btn-ghost" id="btn-open-contact-modal" data-track="clic_ouvrir_modal_contact">Être recontacté</button>
+        <button type="button" class="btn btn-primary" id="btn-open-contact-modal" data-open-contact data-track="clic_ouvrir_modal_contact">Demander ma démonstration gratuite</button>
+        <a class="btn btn-ghost" href="https://wa.me/14165266293" target="_blank" rel="noopener" data-track="contact_whatsapp">Écrire sur WhatsApp</a>
       </div>
     </div>
   </section>
@@ -700,28 +700,20 @@
 <div class="modal-overlay" id="modal-contact" hidden>
   <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-contact-title">
     <button type="button" class="modal-close" id="modal-contact-close" aria-label="Fermer">&times;</button>
-    <h3 id="modal-contact-title">Être recontacté</h3>
+    <h3 id="modal-contact-title">Demander une démonstration gratuite</h3>
     <p class="modal-lede">Laissez vos coordonnées, nous vous recontactons rapidement pour organiser votre démonstration gratuite.</p>
     <form id="form-contact" novalidate>
       <div class="form-field">
-        <label for="contact-nom">Nom et prénom</label>
+        <label for="contact-nom">Prénom et nom</label>
         <input type="text" id="contact-nom" name="nom" required maxlength="100" autocomplete="name" />
       </div>
       <div class="form-field">
-        <label for="contact-email">Adresse email</label>
+        <label for="contact-email">Adresse courriel</label>
         <input type="email" id="contact-email" name="email" required autocomplete="email" />
       </div>
       <div class="form-field">
         <label for="contact-whatsapp">Numéro de téléphone WhatsApp</label>
         <input type="tel" id="contact-whatsapp" name="whatsapp" required autocomplete="tel" placeholder="+221 77 000 00 00" />
-      </div>
-      <div class="form-field">
-        <label for="contact-preference">Comment préférez-vous être contacté ?</label>
-        <select id="contact-preference" name="preference" required>
-          <option value="whatsapp">WhatsApp</option>
-          <option value="telephone">Appel téléphonique</option>
-          <option value="email">Email</option>
-        </select>
       </div>
       <p class="form-error" id="contact-error" hidden></p>
       <button type="submit" class="btn btn-primary" id="contact-submit">Envoyer ma demande</button>

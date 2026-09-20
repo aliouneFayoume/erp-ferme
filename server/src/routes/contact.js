@@ -20,7 +20,7 @@ module.exports = function contactRoutes(pool) {
     const router = express.Router();
 
     /**
-     * Formulaire de contact public (massla.sn/decouvrir, bouton "Être recontacté") — se contente de
+     * Formulaire de contact public (massla.sn/decouvrir, boutons "Démonstration gratuite") — se contente de
      * notifier l'équipe par email, aucune donnée persistée en base (pas de table dédiée, volume de
      * demandes bien trop faible pour le justifier ; voir email.envoyerNotificationContact).
      */
@@ -39,7 +39,9 @@ module.exports = function contactRoutes(pool) {
         if (!whatsapp || whatsapp.length > 30) {
             return res.status(400).json({ erreur: 'Numéro WhatsApp requis.' });
         }
-        if (!PREFERENCES_VALIDES.includes(preference)) {
+        // Facultative : le formulaire actuel ne la demande plus, mais un ancien client (page en cache) peut
+        // encore l'envoyer. Absente = ignorée ; présente mais hors liste = toujours refusée.
+        if (preference && !PREFERENCES_VALIDES.includes(preference)) {
             return res.status(400).json({ erreur: 'Préférence de contact invalide.' });
         }
 

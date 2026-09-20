@@ -1,6 +1,5 @@
 (function () {
   const overlay = document.getElementById('modal-contact');
-  const openBtn = document.getElementById('btn-open-contact-modal');
   const closeBtn = document.getElementById('modal-contact-close');
   const form = document.getElementById('form-contact');
   const errEl = document.getElementById('contact-error');
@@ -20,7 +19,14 @@
     overlay.hidden = true;
   }
 
-  openBtn?.addEventListener('click', ouvrir);
+  // Tous les boutons "démonstration" (barre du haut, en-tête, bas de page) ouvrent ce formulaire ;
+  // le href="#contact" reste un repli si le JavaScript n'est pas chargé.
+  document.querySelectorAll('[data-open-contact]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      ouvrir();
+    });
+  });
   closeBtn?.addEventListener('click', fermer);
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) fermer();
@@ -37,7 +43,6 @@
       nom: data.get('nom'),
       email: data.get('email'),
       whatsapp: data.get('whatsapp'),
-      preference: data.get('preference'),
     };
 
     submitBtn.disabled = true;

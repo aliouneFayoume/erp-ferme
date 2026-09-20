@@ -107,7 +107,7 @@ const PREFERENCES_CONTACT = { whatsapp: 'WhatsApp', telephone: 'Appel téléphon
 // Formulaire public massla.sn/decouvrir (routes/contact.js) : simple notification à l'équipe, pas
 // de compte ni de tenant à ce stade (visiteur pas encore client). reply_to pointe vers l'adresse du
 // visiteur pour que répondre depuis la boîte de réception aille directement à lui, sans copier-coller.
-async function envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp, preference }) {
+async function envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp, preference = '' }) {
     const { apiKey, from } = lireConfig();
     if (!apiKey || !from) {
         throw new Error("Intégration email non configurée (RESEND_API_KEY / RESEND_FROM_EMAIL manquants).");
@@ -121,13 +121,13 @@ async function envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp,
             from,
             to: [destinataire],
             reply_to: emailVisiteur,
-            subject: `Nouvelle demande de contact — ${echapperHtml(nom)}`,
+            subject: `Nouvelle demande de démonstration — ${echapperHtml(nom)}`,
             html: `<p>Nouvelle demande depuis massla.sn/decouvrir :</p>
                    <ul>
                      <li><strong>Nom :</strong> ${echapperHtml(nom)}</li>
                      <li><strong>Email :</strong> ${echapperHtml(emailVisiteur)}</li>
                      <li><strong>WhatsApp :</strong> ${echapperHtml(whatsapp)}</li>
-                     <li><strong>Préfère être recontacté par :</strong> ${echapperHtml(PREFERENCES_CONTACT[preference] || preference)}</li>
+                     ${preference ? `<li><strong>Préfère être recontacté par :</strong> ${echapperHtml(PREFERENCES_CONTACT[preference] || preference)}</li>` : ''}
                    </ul>`,
         }),
     });
