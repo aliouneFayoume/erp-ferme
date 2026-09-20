@@ -8,9 +8,9 @@ const express = require('express');
 // audit sécurité 2026-08-11 : reproduit avec /api/portail/login sur un body malformé.
 require('express-async-errors');
 const cors = require('cors');
-const helmet = require('helmet');
 const path = require('path');
 
+const { securiteHeaders } = require('./csp');
 const { createPool } = require('./db');
 const { seed } = require('./seed');
 
@@ -39,30 +39,9 @@ app.use(express.json());
 // PayDunya envoie ses notifications IPN en application/x-www-form-urlencoded, pas en JSON.
 app.use(express.urlencoded({ extended: true }));
 
-// CSP alignée sur les ressources externes réellement utilisées par le frontend (Leaflet via unpkg,
-// tuiles de fond de carte Esri) : aucune autre origine externe n'est chargée, donc pas de
-// relâchement au-delà. https://*.tile.openstreetmap.org gardé en plus d'Esri : ce serveur OSM a
-// commencé à bloquer les requêtes de massla.sn (politique d'usage, voir migration des vues clients/
-// logistique vers Esri) mais un navigateur peut avoir un vieux app.min.js en cache qui le référence
-// encore juste après un déploiement — éviter un CSP-blocage en plus du blocage OSM le temps que le
-// cache expire.
-app.use(
-    helmet({
-        contentSecurityPolicy: {
-            directives: {
-                defaultSrc: ["'self'"],
-                scriptSrc: ["'self'", 'https://unpkg.com'],
-                styleSrc: ["'self'", 'https://unpkg.com', "'unsafe-inline'"], // styles inline ponctuels (frontend) + Leaflet
-                // https://unpkg.com : icônes de marqueur par défaut de Leaflet (marker-icon.png,
-                // marker-shadow.png), chargées via des url() relatives dans leaflet.css.
-                imgSrc: ["'self'", 'data:', 'https://*.tile.openstreetmap.org', 'https://server.arcgisonline.com', 'https://unpkg.com'],
-                fontSrc: ["'self'"],
-                connectSrc: ["'self'"],
-                objectSrc: ["'none'"],
-            },
-        },
-    })
-);
+// En-têtes de sécurité (helmet + CSP) : voir csp.js — CSP stricte partout, sauf sur les pages
+// publiques qui portent le suivi marketing (Google Analytics 4, Meta Pixel).
+app.use(securiteHeaders);
 
 // Filet de dernier recours : attrape ce qu'express-async-errors ne peut pas voir (une promesse
 // rejetée en dehors du cycle requête/réponse — setInterval, callback fire-and-forget, etc.).
