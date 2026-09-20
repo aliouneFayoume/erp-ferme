@@ -9,12 +9,13 @@ const FACTURE_SAAS_STATUT_BADGE = { A_PAYER: 'warn', PAYEE: 'ok', EN_RETARD: 'da
 
 window.Views.plateforme = {
   async render(container) {
-    const [organisations, tickets, catalogue, facturesSaas, avis] = await Promise.all([
+    const [organisations, tickets, catalogue, facturesSaas, avis, activite] = await Promise.all([
       Api.get('/plateforme/organisations'),
       Api.get('/plateforme/tickets'),
       Api.get('/plateforme/modules-saas'),
       Api.get('/plateforme/factures-saas'),
       Api.get('/plateforme/avis'),
+      Api.get('/plateforme/activite'),
     ]);
 
     container.innerHTML = `
@@ -47,6 +48,17 @@ window.Views.plateforme = {
               .join('')}
           </tbody>
         </table>
+      </div>
+
+      <div class="panel">
+        <h2>Activité des fermes</h2>
+        <p class="desc">Qui utilise réellement l'application ? Les fermes à relancer sont en tête : jamais connectées, inactives depuis plus de 7 jours, ou connectées sans rien saisir. Seuls des compteurs sont affichés, jamais le contenu des saisies ; vos propres connexions de support ne comptent pas.</p>
+        <div style="overflow-x: auto;">
+          <table>
+            <thead><tr><th>Ferme</th><th>Statut</th><th>Dernière connexion</th><th>7 derniers jours</th><th>Saisies (30 j)</th><th>Principales saisies (7 j)</th></tr></thead>
+            <tbody>${renderLignesActivite(activite.fermes)}</tbody>
+          </table>
+        </div>
       </div>
 
       <div class="panel">
@@ -129,6 +141,71 @@ window.Views.plateforme = {
     attacherActionsAvis(container.querySelector('#avis-body'), container);
   },
 };
+
+const ACTIVITE_STATUT = {
+  active: { badge: 'ok', label: 'Actif cette semaine' },
+  connecte_sans_saisie: { badge: 'warn', label: 'Se connecte sans saisir' },
+  inactive: { badge: 'danger', label: 'Inactif' },
+  jamais: { badge: 'danger', label: 'Jamais connecté' },
+};
+
+// Libellés lisibles pour les tables du journal d'audit ; une table inconnue s'affiche telle quelle.
+const ACTIVITE_TABLES = {
+  releves_journaliers: 'Relevés',
+  lots_production: 'Lots',
+  commandes: 'Commandes',
+  clients: 'Clients',
+  produits: 'Produits',
+  paiements: 'Paiements',
+  factures: 'Factures',
+  depenses: 'Dépenses',
+  animaux: 'Animaux',
+  reproductions: 'Reproductions',
+  intrants: 'Intrants',
+  fournisseurs: 'Fournisseurs',
+  commandes_fournisseurs: 'Achats',
+  abonnements: 'Abonnements',
+  livraisons: 'Livraisons',
+  caisses_chauffeur: 'Caisses',
+  employes: 'Employés',
+  bulletins_paie: 'Paie',
+  equipements: 'Équipements',
+  tickets: 'Tickets',
+};
+
+// "aujourd'hui" / "hier" / "il y a N j" à partir d'une date SQL ; null → tiret.
+function activiteIlYa(dateStr) {
+  if (!dateStr) return '—';
+  const jours = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+  if (jours <= 0) return "aujourd'hui";
+  if (jours === 1) return 'hier';
+  return `il y a ${jours} j`;
+}
+
+function renderLignesActivite(fermes) {
+  if (fermes.length === 0) return '<tr><td colspan="6" class="empty">Aucune ferme cliente pour le moment.</td></tr>';
+  return fermes
+    .map((f) => {
+      const st = ACTIVITE_STATUT[f.statut];
+      const abo = f.abonnement
+        ? f.abonnement.actif
+          ? `<span class="badge ok">Abonné · ${fmt(f.abonnement.montant_mensuel)} FCFA/mois</span>`
+          : '<span class="badge danger">Abonnement suspendu</span>'
+        : '<span class="badge muted">Sans abonnement</span>';
+      const principales = f.principales_saisies_7j.length
+        ? f.principales_saisies_7j.map((t) => `${esc(ACTIVITE_TABLES[t.table] || t.table)} ${t.n}`).join(' · ')
+        : '<span class="desc">—</span>';
+      return `<tr>
+        <td>${esc(f.nom)}<div class="desc" style="margin:2px 0 4px">Créée ${esc(activiteIlYa(f.cree_le))}</div>${abo}</td>
+        <td><span class="badge ${st.badge}">${st.label}</span></td>
+        <td>${f.derniere_connexion ? `${esc(activiteIlYa(f.derniere_connexion))}<div class="desc" style="margin:2px 0 0">${esc(fmtDate(f.derniere_connexion))}</div>` : '<span class="desc">—</span>'}</td>
+        <td>${f.connexions_7j} connexion(s) · ${f.saisies_7j} saisie(s)<div class="desc" style="margin:2px 0 0">${f.jours_actifs_7j} jour(s) actif(s) · ${f.utilisateurs_connectes_7j} utilisateur(s)</div></td>
+        <td>${f.saisies_30j}${f.derniere_saisie ? `<div class="desc" style="margin:2px 0 0">dernière ${esc(activiteIlYa(f.derniere_saisie))}</div>` : ''}</td>
+        <td>${principales}</td>
+      </tr>`;
+    })
+    .join('');
+}
 
 const AVIS_ETOILES = { 1: '★☆☆☆☆', 2: '★★☆☆☆', 3: '★★★☆☆', 4: '★★★★☆', 5: '★★★★★' };
 

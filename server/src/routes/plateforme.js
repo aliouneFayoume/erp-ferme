@@ -7,6 +7,20 @@ const { envoyerMessageWhatsapp } = require('../whatsapp');
 const { envoyerEmailRappelSaas } = require('../email');
 const { nomSecteurValide } = require('../validation');
 
+// Activité d'une ferme (GET /activite) : "saisie" = écriture métier journalisée. Sont exclues les
+// tables de configuration et de gestion des comptes, sinon créer un utilisateur ou régler WhatsApp
+// ferait passer une ferme pour "active" alors qu'elle n'utilise pas encore l'outil.
+const ACTIONS_SAISIE = ['CREATE', 'UPDATE', 'DELETE'];
+const TABLES_HORS_SAISIE = new Set([
+    'utilisateurs',
+    'organisations',
+    'secteurs',
+    'organisation_whatsapp_config',
+    'organisation_paydunya_config',
+    'organisation_abonnement_saas',
+]);
+const JOUR_MS = 24 * 3600 * 1000;
+
 function dansNJours(n) {
     const d = new Date();
     d.setDate(d.getDate() + n);
@@ -93,6 +107,92 @@ module.exports = function plateformeRoutes(pool) {
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: 'Erreur lors de la récupération des organisations.' });
+        }
+    });
+
+    /**
+     * Activité des fermes clientes sur 7 / 30 jours, pour savoir quel pilote relancer et quand :
+     * dernière connexion, saisies métier, principaux écrans utilisés. Ne renvoie que des compteurs et
+     * des dates, jamais le contenu d'une saisie (audit_logs.details n'est même pas lu). Source =
+     * journal d'audit (lecture cross-tenant ouverte au superviseur par migration-26) ; les actions de
+     * support (connexion en tant qu'admin, impersonation) sont exclues pour ne pas faire passer une
+     * intervention de Massla pour de l'activité du client. Ferme Massla elle-même est exclue.
+     * Comptage en JS plutôt qu'en SQL agrégé : mêmes limites pg-mem que GET /organisations.
+     */
+    router.get('/activite', ...garde, async (req, res) => {
+        try {
+            const maintenant = new Date();
+            const il7 = new Date(maintenant.getTime() - 7 * JOUR_MS);
+            const il30 = new Date(maintenant.getTime() - 30 * JOUR_MS);
+
+            const [orgsRes, abosRes, recentRes, connexionsRes] = await Promise.all([
+                req.db.query(`SELECT id, nom, cree_le FROM organisations WHERE deleted_at IS NULL AND est_plateforme = FALSE`),
+                req.db.query(`SELECT tenant_id, actif, montant_mensuel FROM organisation_abonnement_saas`),
+                req.db.query(
+                    `SELECT tenant_id, table_name, action, utilisateur_id, cree_le FROM audit_logs
+                     WHERE tenant_id IS NOT NULL AND impersonation = FALSE AND cree_le >= $1
+                     ORDER BY cree_le DESC LIMIT 50000`,
+                    [il30]
+                ),
+                req.db.query(
+                    `SELECT tenant_id, MAX(cree_le) AS derniere FROM audit_logs
+                     WHERE tenant_id IS NOT NULL AND impersonation = FALSE AND action = 'LOGIN' GROUP BY tenant_id`
+                ),
+            ]);
+
+            const aboParOrg = new Map(abosRes.rows.map((a) => [a.tenant_id, a]));
+            const derniereConnexion = new Map(connexionsRes.rows.map((c) => [c.tenant_id, c.derniere]));
+            const evenementsParOrg = new Map();
+            for (const e of recentRes.rows) {
+                if (!evenementsParOrg.has(e.tenant_id)) evenementsParOrg.set(e.tenant_id, []);
+                evenementsParOrg.get(e.tenant_id).push(e);
+            }
+
+            // Les fermes qui demandent une action passent en premier.
+            const ORDRE_STATUT = { jamais: 0, inactive: 1, connecte_sans_saisie: 2, active: 3 };
+            const fermes = orgsRes.rows.map((o) => {
+                const evenements = evenementsParOrg.get(o.id) || [];
+                const connexions7 = evenements.filter((e) => e.action === 'LOGIN' && new Date(e.cree_le) >= il7);
+                const saisies = evenements.filter((e) => ACTIONS_SAISIE.includes(e.action) && !TABLES_HORS_SAISIE.has(e.table_name));
+                const saisies7 = saisies.filter((e) => new Date(e.cree_le) >= il7);
+
+                const parTable = new Map();
+                for (const e of saisies7) parTable.set(e.table_name, (parTable.get(e.table_name) || 0) + 1);
+                const joursActifs = new Set(saisies7.map((e) => new Date(e.cree_le).toISOString().slice(0, 10)));
+
+                const derniere = derniereConnexion.get(o.id) || null;
+                let statut;
+                if (!derniere) statut = 'jamais';
+                else if (saisies7.length > 0) statut = 'active';
+                else if (new Date(derniere) >= il7) statut = 'connecte_sans_saisie';
+                else statut = 'inactive';
+
+                const abo = aboParOrg.get(o.id);
+                return {
+                    id: o.id,
+                    nom: o.nom,
+                    cree_le: o.cree_le,
+                    abonnement: abo ? { actif: abo.actif, montant_mensuel: abo.montant_mensuel } : null,
+                    statut,
+                    derniere_connexion: derniere,
+                    connexions_7j: connexions7.length,
+                    utilisateurs_connectes_7j: new Set(connexions7.map((e) => e.utilisateur_id)).size,
+                    saisies_7j: saisies7.length,
+                    saisies_30j: saisies.length,
+                    jours_actifs_7j: joursActifs.size,
+                    derniere_saisie: saisies.length ? saisies[0].cree_le : null,
+                    principales_saisies_7j: [...parTable.entries()]
+                        .sort((a, b) => b[1] - a[1])
+                        .slice(0, 5)
+                        .map(([table, n]) => ({ table, n })),
+                };
+            });
+            fermes.sort((a, b) => ORDRE_STATUT[a.statut] - ORDRE_STATUT[b.statut] || new Date(b.cree_le) - new Date(a.cree_le));
+
+            res.json({ genere_le: maintenant.toISOString(), fermes });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: "Erreur lors du calcul de l'activité des fermes." });
         }
     });
 

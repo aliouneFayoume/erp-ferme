@@ -191,8 +191,11 @@ DROP POLICY IF EXISTS tenant_isolation_select ON audit_logs;
 DROP POLICY IF EXISTS tenant_isolation_insert ON audit_logs;
 DROP POLICY IF EXISTS tenant_isolation_update ON audit_logs;
 DROP POLICY IF EXISTS tenant_isolation_delete ON audit_logs;
+-- Lecture ouverte au superviseur plateforme (migration-26) : uniquement pour le panneau "Activité des
+-- fermes" (routes/plateforme.js, GET /activite), qui n'agrège que des compteurs et des dates — jamais
+-- audit_logs.details. Écriture/modification/suppression restent strictes.
 CREATE POLICY tenant_isolation_select ON audit_logs FOR SELECT
-    USING (tenant_id = current_tenant_id());
+    USING (tenant_id = current_tenant_id() OR is_plateforme_admin());
 CREATE POLICY tenant_isolation_insert ON audit_logs FOR INSERT
     WITH CHECK (tenant_id = current_tenant_id() OR is_plateforme_admin());
 CREATE POLICY tenant_isolation_update ON audit_logs FOR UPDATE
