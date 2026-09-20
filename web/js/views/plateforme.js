@@ -189,7 +189,7 @@ function renderLignesActivite(fermes) {
       const st = ACTIVITE_STATUT[f.statut];
       const abo = f.abonnement
         ? f.abonnement.actif
-          ? `<span class="badge ok">Abonné · ${fmt(f.abonnement.montant_mensuel)} FCFA/mois</span>`
+          ? `<span class="badge ok">Tarif : ${fmt(f.abonnement.montant_mensuel)} FCFA/mois</span>`
           : '<span class="badge danger">Abonnement suspendu</span>'
         : '<span class="badge muted">Sans abonnement</span>';
       const principales = f.principales_saisies_7j.length

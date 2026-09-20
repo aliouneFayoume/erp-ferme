@@ -123,6 +123,19 @@ describe('plateforme — panneau "Activité des fermes"', () => {
         expect(f.connexions_7j).toBe(0);
     });
 
+    test("la facturation SaaS faite par Massla n'est pas une saisie du client", async () => {
+        const ferme = await creerOrganisation(pool, 'Ferme Facturée');
+        await journal(ferme, 'utilisateurs', 'LOGIN', 20);
+        await journal(ferme, 'factures_saas', 'CREATE', 0);
+        await journal(ferme, 'factures_saas', 'UPDATE', 1);
+
+        const f = (await lire())['Ferme Facturée'];
+
+        expect(f.saisies_7j).toBe(0);
+        expect(f.saisies_30j).toBe(0);
+        expect(f.statut).toBe('inactive');
+    });
+
     test("n'expose que des compteurs : jamais le contenu d'une saisie", async () => {
         const ferme = await creerOrganisation(pool, 'Ferme Discrète');
         await journal(ferme, 'clients', 'CREATE', 0, { details: JSON.stringify({ nom: 'Fatou', telephone: '+221771234567' }) });

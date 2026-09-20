@@ -18,6 +18,9 @@ const TABLES_HORS_SAISIE = new Set([
     'organisation_whatsapp_config',
     'organisation_paydunya_config',
     'organisation_abonnement_saas',
+    // Facturation SaaS : générée par Massla depuis Support plateforme, mais journalisée dans le journal
+    // de la ferme facturée — ce n'est pas une saisie du client.
+    'factures_saas',
 ]);
 const JOUR_MS = 24 * 3600 * 1000;
 
