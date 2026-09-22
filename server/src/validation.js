@@ -39,4 +39,37 @@ function motDePasseErreurs(mdp) {
     return erreurs;
 }
 
-module.exports = { nomSecteurValide, motDePasseValide, motDePasseErreurs, MOT_DE_PASSE_MIN_LONGUEUR };
+/**
+ * Normalise un numéro de téléphone/WhatsApp saisi librement en format international (+ suivi des
+ * chiffres, sans espace), ou renvoie null s'il est invalide. Règles :
+ * - "+221 77 000 00 00", "00221 77 000 00 00", "221770000000" → "+221770000000" ;
+ * - 9 chiffres commençant par 70/75/76/77/78 (mobile sénégalais saisi sans indicatif) → préfixe +221 ;
+ * - tout autre pays : l'indicatif est obligatoire ("+" ou "00" devant), 8 à 15 chiffres au total (E.164) ;
+ * - un numéro +221 doit avoir exactement 9 chiffres nationaux.
+ * Ne prouve pas que le numéro existe sur WhatsApp ni qu'il appartient à la bonne personne : seulement
+ * qu'il est bien formé (cas constaté 2026-09-20 : un numéro à 9 chiffres sans indicatif).
+ * Copie côté navigateur : web/js/contact-decouvrir.js (le serveur reste l'autorité).
+ */
+function normaliserTelephone(saisie) {
+    if (typeof saisie !== 'string') return null;
+    const texte = saisie.trim();
+    if (!/^[+\d(][\d\s().-]*$/.test(texte)) return null;
+    let chiffres = texte.replace(/\D/g, '');
+    if (texte.startsWith('+')) {
+        // indicatif déjà fourni
+    } else if (chiffres.startsWith('00')) {
+        chiffres = chiffres.slice(2);
+    } else if (chiffres.length === 9 && /^7[05678]/.test(chiffres)) {
+        chiffres = `221${chiffres}`;
+    } else if (/^221\d{9}$/.test(chiffres)) {
+        // "221 77 000 00 00" sans le +
+    } else {
+        return null;
+    }
+    if (chiffres.length < 8 || chiffres.length > 15) return null;
+    if (chiffres.startsWith('0')) return null; // un indicatif pays ne commence jamais par 0
+    if (chiffres.startsWith('221') && chiffres.length !== 12) return null;
+    return `+${chiffres}`;
+}
+
+module.exports = { nomSecteurValide, motDePasseValide, motDePasseErreurs, MOT_DE_PASSE_MIN_LONGUEUR, normaliserTelephone };

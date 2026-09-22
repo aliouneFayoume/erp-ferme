@@ -64,6 +64,28 @@ describe('contact — formulaire public massla.sn/decouvrir', () => {
         });
     });
 
+    test('un numéro sénégalais à 9 chiffres sans indicatif est complété en +221', async () => {
+        const res = await request(app).post('/api/contact').send(payloadValide({ whatsapp: '76 220 64 18' }));
+
+        expect(res.status).toBe(201);
+        expect(email.envoyerNotificationContact).toHaveBeenCalledWith(expect.objectContaining({ whatsapp: '+221762206418' }));
+    });
+
+    test('un numéro avec espaces, points ou tirets est normalisé', async () => {
+        const res = await request(app).post('/api/contact').send(payloadValide({ whatsapp: '+226 70-00.00 00' }));
+
+        expect(res.status).toBe(201);
+        expect(email.envoyerNotificationContact).toHaveBeenCalledWith(expect.objectContaining({ whatsapp: '+22670000000' }));
+    });
+
+    test.each(['12345', 'pas un numéro', '0770000000', '+221 7700', '123456789'])('refuse le numéro invalide « %s » avec un message clair', async (numero) => {
+        const res = await request(app).post('/api/contact').send(payloadValide({ whatsapp: numero }));
+
+        expect(res.status).toBe(400);
+        expect(res.body.erreur).toMatch(/indicatif/i);
+        expect(email.envoyerNotificationContact).not.toHaveBeenCalled();
+    });
+
     test('rejette un nom manquant', async () => {
         const res = await request(app).post('/api/contact').send(payloadValide({ nom: '' }));
         expect(res.status).toBe(400);

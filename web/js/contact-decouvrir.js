@@ -7,6 +7,44 @@
   const submitBtn = document.getElementById('contact-submit');
   if (!overlay || !form) return;
 
+  // Même règle que server/src/validation.js (normaliserTelephone) : le serveur reste l'autorité, ceci
+  // évite seulement un aller-retour et corrige le numéro pendant la saisie.
+  function normaliserTelephone(saisie) {
+    const texte = String(saisie || '').trim();
+    if (!/^[+\d(][\d\s().-]*$/.test(texte)) return null;
+    let chiffres = texte.replace(/\D/g, '');
+    if (texte.startsWith('+')) {
+      // indicatif déjà fourni
+    } else if (chiffres.startsWith('00')) {
+      chiffres = chiffres.slice(2);
+    } else if (chiffres.length === 9 && /^7[05678]/.test(chiffres)) {
+      chiffres = `221${chiffres}`;
+    } else if (/^221\d{9}$/.test(chiffres)) {
+      // "221 77 000 00 00" sans le +
+    } else {
+      return null;
+    }
+    if (chiffres.length < 8 || chiffres.length > 15) return null;
+    if (chiffres.startsWith('0')) return null;
+    if (chiffres.startsWith('221') && chiffres.length !== 12) return null;
+    return `+${chiffres}`;
+  }
+
+  // "+221 77 000 00 00" pour le Sénégal, "+" + chiffres ailleurs.
+  function formaterTelephone(e164) {
+    if (e164.startsWith('+221')) {
+      const n = e164.slice(4);
+      return `+221 ${n.slice(0, 2)} ${n.slice(2, 5)} ${n.slice(5, 7)} ${n.slice(7, 9)}`;
+    }
+    return e164;
+  }
+
+  const champWhatsapp = document.getElementById('contact-whatsapp');
+  champWhatsapp?.addEventListener('blur', () => {
+    const normalise = normaliserTelephone(champWhatsapp.value);
+    if (normalise) champWhatsapp.value = formaterTelephone(normalise);
+  });
+
   function ouvrir() {
     form.hidden = false;
     successEl.hidden = true;
@@ -39,10 +77,17 @@
     e.preventDefault();
     errEl.hidden = true;
     const data = new FormData(form);
+    const whatsapp = normaliserTelephone(data.get('whatsapp'));
+    if (!whatsapp) {
+      errEl.textContent = "Numéro WhatsApp invalide. Indiquez-le avec l'indicatif du pays, par exemple +221 77 000 00 00.";
+      errEl.hidden = false;
+      champWhatsapp?.focus();
+      return;
+    }
     const body = {
       nom: data.get('nom'),
       email: data.get('email'),
-      whatsapp: data.get('whatsapp'),
+      whatsapp,
     };
 
     submitBtn.disabled = true;

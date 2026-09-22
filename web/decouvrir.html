@@ -399,6 +399,7 @@
   .modal-box form .btn { width: 100%; border: none; cursor: pointer; font-family: inherit; justify-content: center; }
   .modal-box form .btn:disabled { opacity: 0.6; cursor: default; }
   .form-error { color: var(--danger); font-size: 0.85rem; margin: -0.4rem 0 1rem; }
+  .form-hint { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 0.25rem; }
   .form-success p:first-child { color: var(--success); font-weight: 700; margin: 0 0 0.4rem; }
   .form-success p:last-child { color: var(--muted); margin: 0; }
 
@@ -714,6 +715,7 @@
       <div class="form-field">
         <label for="contact-whatsapp">Numéro de téléphone WhatsApp</label>
         <input type="tel" id="contact-whatsapp" name="whatsapp" required autocomplete="tel" placeholder="+221 77 000 00 00" />
+        <small class="form-hint">Avec l'indicatif du pays. Pour le Sénégal, les 9 chiffres suffisent (ex. 77 000 00 00).</small>
       </div>
       <p class="form-error" id="contact-error" hidden></p>
       <button type="submit" class="btn btn-primary" id="contact-submit">Envoyer ma demande</button>

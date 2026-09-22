@@ -126,7 +126,7 @@ async function envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp,
                    <ul>
                      <li><strong>Nom :</strong> ${echapperHtml(nom)}</li>
                      <li><strong>Email :</strong> ${echapperHtml(emailVisiteur)}</li>
-                     <li><strong>WhatsApp :</strong> ${echapperHtml(whatsapp)}</li>
+                     <li><strong>WhatsApp :</strong> ${echapperHtml(whatsapp)} — <a href="https://wa.me/${encodeURIComponent(String(whatsapp).replace(/\D/g, ''))}">ouvrir la discussion WhatsApp</a></li>
                      ${preference ? `<li><strong>Préfère être recontacté par :</strong> ${echapperHtml(PREFERENCES_CONTACT[preference] || preference)}</li>` : ''}
                    </ul>`,
         }),

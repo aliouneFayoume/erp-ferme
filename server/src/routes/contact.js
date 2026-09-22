@@ -1,6 +1,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const email = require('../email');
+const { normaliserTelephone } = require('../validation');
 
 const PREFERENCES_VALIDES = ['whatsapp', 'telephone', 'email'];
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -27,7 +28,7 @@ module.exports = function contactRoutes(pool) {
     router.post('/', limiteurContact, async (req, res) => {
         const nom = String(req.body.nom || '').trim();
         const emailVisiteur = String(req.body.email || '').trim();
-        const whatsapp = String(req.body.whatsapp || '').trim();
+        const whatsapp = normaliserTelephone(String(req.body.whatsapp || ''));
         const preference = String(req.body.preference || '').trim();
 
         if (!nom || nom.length > 100) {
@@ -36,8 +37,8 @@ module.exports = function contactRoutes(pool) {
         if (!EMAIL_REGEX.test(emailVisiteur)) {
             return res.status(400).json({ erreur: 'Adresse email invalide.' });
         }
-        if (!whatsapp || whatsapp.length > 30) {
-            return res.status(400).json({ erreur: 'Numéro WhatsApp requis.' });
+        if (!whatsapp) {
+            return res.status(400).json({ erreur: "Numéro WhatsApp invalide. Indiquez-le avec l'indicatif du pays, par exemple +221 77 000 00 00." });
         }
         // Facultative : le formulaire actuel ne la demande plus, mais un ancien client (page en cache) peut
         // encore l'envoyer. Absente = ignorée ; présente mais hors liste = toujours refusée.
