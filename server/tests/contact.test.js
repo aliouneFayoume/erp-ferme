@@ -97,6 +97,30 @@ describe('contact — formulaire public massla.sn/decouvrir', () => {
         expect(res.status).toBe(400);
     });
 
+    test.each([
+        'verif@example.com',
+        'test@test.com',
+        'test-ne-pas-traiter@massla.sn',
+        'admin@massla.sn',
+        'asdf@gmail.com',
+        'aaaaaa@gmail.com',
+        'demo@mailinator.com',
+        'toto@yopmail.com',
+    ])('rejette l\'adresse email farfelue « %s »', async (adresse) => {
+        const res = await request(app).post('/api/contact').send(payloadValide({ email: adresse }));
+
+        expect(res.status).toBe(400);
+        expect(res.body.erreur).toMatch(/adresse/i);
+        expect(email.envoyerNotificationContact).not.toHaveBeenCalled();
+    });
+
+    test("accepte une adresse email à l'apparence inhabituelle mais légitime (alias de confidentialité type iCloud)", async () => {
+        const res = await request(app).post('/api/contact').send(payloadValide({ email: '31-parcourt.ruisselet@icloud.com' }));
+
+        expect(res.status).toBe(201);
+        expect(email.envoyerNotificationContact).toHaveBeenCalledWith(expect.objectContaining({ email: '31-parcourt.ruisselet@icloud.com' }));
+    });
+
     test('rejette un numéro WhatsApp manquant', async () => {
         const res = await request(app).post('/api/contact').send(payloadValide({ whatsapp: '' }));
         expect(res.status).toBe(400);

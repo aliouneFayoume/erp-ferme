@@ -1,4 +1,4 @@
-const { normaliserTelephone } = require('../src/validation');
+const { normaliserTelephone, emailFarfelue } = require('../src/validation');
 const { envoyerNotificationContact } = require('../src/email');
 
 describe('normaliserTelephone — numéro WhatsApp du formulaire de démonstration', () => {
@@ -46,6 +46,35 @@ describe('normaliserTelephone — numéro WhatsApp du formulaire de démonstrati
         expect(normaliserTelephone(undefined)).toBeNull();
         expect(normaliserTelephone(762206418)).toBeNull();
         expect(normaliserTelephone({ toString: () => '762206418' })).toBeNull();
+    });
+});
+
+describe('emailFarfelue — détection des adresses manifestement fictives ou de test', () => {
+    test.each([
+        ['domaine réservé aux exemples', 'quelqu-un@example.com'],
+        ['test.com', 'quelqu-un@test.com'],
+        ['domaine jetable connu', 'quelqu-un@mailinator.com'],
+        ['domaine jetable connu (yopmail)', 'quelqu-un@yopmail.com'],
+        ['notre propre domaine', 'quelqu-un@massla.sn'],
+        ['notre propre domaine, sous-domaine', 'quelqu-un@mail.massla.sn'],
+        ['partie locale "test"', 'test@gmail.com'],
+        ['partie locale "admin"', 'admin@gmail.com'],
+        ['partie locale "asdf"', 'asdf@gmail.com'],
+        ['partie locale "verif" (cas du 21/09)', 'verif@gmail.com'],
+        ['une seule lettre répétée', 'aaaaaa@gmail.com'],
+        ['un seul chiffre répété', '111111@gmail.com'],
+        ['format déjà invalide', 'pas-un-email'],
+    ])('détecte : %s (%s)', (_nom, adresse) => {
+        expect(emailFarfelue(adresse)).toBe(true);
+    });
+
+    test.each([
+        ['adresse ordinaire', 'clovis@test.sn'],
+        ['alias de confidentialité iCloud, à l\'apparence aléatoire mais légitime', '31-parcourt.ruisselet@icloud.com'],
+        ['nom.prenom classique', 'moussa.ndiaye@gmail.com'],
+        ['partie locale contenant "test" sans être égale à "test"', 'contest@gmail.com'],
+    ])("n'est pas signalée comme farfelue : %s (%s)", (_nom, adresse) => {
+        expect(emailFarfelue(adresse)).toBe(false);
     });
 });
 

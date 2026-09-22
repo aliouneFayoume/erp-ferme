@@ -1,7 +1,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const email = require('../email');
-const { normaliserTelephone } = require('../validation');
+const { normaliserTelephone, emailFarfelue } = require('../validation');
 
 const PREFERENCES_VALIDES = ['whatsapp', 'telephone', 'email'];
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -34,8 +34,8 @@ module.exports = function contactRoutes(pool) {
         if (!nom || nom.length > 100) {
             return res.status(400).json({ erreur: 'Nom et prénom requis.' });
         }
-        if (!EMAIL_REGEX.test(emailVisiteur)) {
-            return res.status(400).json({ erreur: 'Adresse email invalide.' });
+        if (!EMAIL_REGEX.test(emailVisiteur) || emailFarfelue(emailVisiteur)) {
+            return res.status(400).json({ erreur: 'Adresse email invalide. Utilisez une adresse où nous pouvons vraiment vous recontacter.' });
         }
         if (!whatsapp) {
             return res.status(400).json({ erreur: "Numéro WhatsApp invalide. Indiquez-le avec l'indicatif du pays, par exemple +221 77 000 00 00." });

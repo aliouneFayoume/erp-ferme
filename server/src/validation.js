@@ -72,4 +72,44 @@ function normaliserTelephone(saisie) {
     return `+${chiffres}`;
 }
 
-module.exports = { nomSecteurValide, motDePasseValide, motDePasseErreurs, MOT_DE_PASSE_MIN_LONGUEUR, normaliserTelephone };
+// Domaines jetables/temporaires les plus répandus (boîte qui s'autodétruit en quelques minutes) :
+// un vrai client n'a aucune raison d'en utiliser un pour une demande qu'on doit pouvoir recontacter.
+const DOMAINES_JETABLES = new Set([
+    'mailinator.com', 'guerrillamail.com', 'guerrillamail.info', 'guerrillamail.biz', 'sharklasers.com',
+    'yopmail.com', 'yopmail.fr', 'yopmail.net', '10minutemail.com', '10minutemail.net', 'tempmail.com',
+    'temp-mail.org', 'trashmail.com', 'throwawaymail.com', 'fakeinbox.com', 'getnada.com', 'dispostable.com',
+    'maildrop.cc', 'mintemail.com', 'discard.email', 'moakt.com', 'emailondeck.com', 'mohmal.com',
+]);
+
+// Domaines réservés à la documentation/aux exemples (RFC 2606) : jamais une vraie boîte.
+const DOMAINES_EXEMPLE = new Set(['example.com', 'example.org', 'example.net', 'example.edu', 'test.com']);
+
+// Parties locales manifestement bidon : mot de test, remplissage clavier, placeholder générique.
+const LOCAL_PARTS_SUSPECTES = new Set([
+    'test', 'testtest', 'exemple', 'example', 'asdf', 'asdfgh', 'qwerty', 'azerty', 'admin', 'administrateur',
+    'noreply', 'no-reply', 'abc', 'abcd', 'abcdef', 'xxx', 'xxxx', 'verif', 'verification', 'sample', 'demo',
+    'user', 'utilisateur', 'foo', 'bar', 'foobar', 'toto', 'titi', '123', '1234', '123456', 'aaa', 'aaaa',
+]);
+
+/**
+ * Détecte une adresse email au format valide mais manifestement fictive/de test ("farfelue") :
+ * domaine jetable ou réservé à la documentation, notre propre domaine (aucun visiteur externe ne
+ * peut légitimement écrire depuis @massla.sn), partie locale bidon (test/asdf/admin/...), ou une
+ * même lettre/chiffre répété(e) ("aaaaaa@..."). Ne remplace pas la vérification du format lui-même
+ * (EMAIL_REGEX dans routes/contact.js) ni une preuve que la boîte existe réellement — seulement un
+ * filtre contre les demandes visiblement jouées (cas constatés : verif@example.com, test-ne-pas-
+ * traiter@massla.sn). Copie de l'esprit de normaliserTelephone ci-dessus, mais pour l'email.
+ */
+function emailFarfelue(saisie) {
+    const m = /^([^\s@]+)@([^\s@]+\.[^\s@]+)$/.exec(String(saisie || '').trim());
+    if (!m) return true; // format déjà invalide : de toute façon refusé par EMAIL_REGEX
+    const local = m[1].toLowerCase();
+    const domaine = m[2].toLowerCase();
+    if (DOMAINES_JETABLES.has(domaine) || DOMAINES_EXEMPLE.has(domaine)) return true;
+    if (domaine === 'massla.sn' || domaine.endsWith('.massla.sn')) return true;
+    if (LOCAL_PARTS_SUSPECTES.has(local)) return true;
+    if (/^(.)\1*$/.test(local)) return true; // une seule lettre/chiffre répété(e), ex. "aaaaaa"
+    return false;
+}
+
+module.exports = { nomSecteurValide, motDePasseValide, motDePasseErreurs, MOT_DE_PASSE_MIN_LONGUEUR, normaliserTelephone, emailFarfelue };
