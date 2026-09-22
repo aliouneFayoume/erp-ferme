@@ -248,8 +248,16 @@ module.exports = function productionRoutes(pool) {
                 // configuré (routes/intrants.js) ; le stock peut devenir négatif (signal à
                 // investiguer) plutôt que de bloquer.
                 if (releve.conso_aliment_kg > 0) {
+                    // Aliment du secteur du lot (ex. "Éclosion", "Élevage larvaire", "Pregrossissement" :
+                    // trois types de bassin = trois aliments différents utilisés le même jour), à défaut
+                    // celui de son secteur parent (ex. "Piscicole") — jamais l'inverse, pour qu'un type de
+                    // bassin puisse toujours avoir SON aliment sans toucher aux autres.
                     const secteurRes = await client.query(
-                        `SELECT s.intrant_alimentation_id FROM lots_production l JOIN secteurs s ON s.id = l.secteur_id WHERE l.id = $1`,
+                        `SELECT COALESCE(s.intrant_alimentation_id, p.intrant_alimentation_id) AS intrant_alimentation_id
+                         FROM lots_production l
+                         JOIN secteurs s ON s.id = l.secteur_id
+                         LEFT JOIN secteurs p ON p.id = s.parent_secteur_id
+                         WHERE l.id = $1`,
                         [releve.lot_id]
                     );
                     const intrantAlimentationId = secteurRes.rows[0]?.intrant_alimentation_id;

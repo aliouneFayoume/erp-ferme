@@ -86,8 +86,9 @@ module.exports = function intrantsRoutes(pool) {
             return res.status(404).json({ erreur: 'Intrant introuvable.' });
         }
         const result = await req.db.query(
-            `SELECT m.*, l.code_lot FROM mouvements_intrants m
+            `SELECT m.*, l.code_lot, s.nom AS secteur_nom FROM mouvements_intrants m
              LEFT JOIN lots_production l ON l.id = m.lot_id
+             LEFT JOIN secteurs s ON s.id = l.secteur_id
              WHERE m.intrant_id = $1 ORDER BY m.cree_le DESC LIMIT 100`,
             [req.params.id]
         );

@@ -5,9 +5,28 @@ const INTRANT_CATEGORIES = ['Aliment', 'Engrais', 'Phytosanitaire', 'Vétérinai
 window.Views.intrants = {
   async render(container) {
     const [intrants, secteurs] = await Promise.all([Api.get('/intrants'), Api.get('/production/secteurs')]);
-    // Seuls les secteurs de premier niveau, non-suivi-individuel, peuvent avoir un aliment par
-    // défaut : mêmes catégories qui portent des lots_production (voir web/js/views/production.js).
-    const secteursAliment = secteurs.filter((s) => !s.suivi_individuel && !s.parent_secteur_id);
+    // Un aliment par défaut se règle sur le secteur qui porte réellement les lots. Pour une ferme à
+    // sous-secteurs (ex. Piscicole > Éclosion / Élevage larvaire / Pregrossissement), ce sont les
+    // SOUS-secteurs : chaque type de bassin peut avoir son propre aliment, utilisés le même jour. Le
+    // secteur parent garde un réglage de repli, utilisé par les sous-secteurs qui n'ont pas le leur
+    // (même règle côté serveur, routes/production.js). Les secteurs à suivi individuel (bovins…)
+    // n'ont pas d'aliment par défaut.
+    const secteursEligibles = secteurs.filter((s) => !s.suivi_individuel);
+    const lignesAliment = [];
+    for (const racine of secteursEligibles.filter((s) => !s.parent_secteur_id)) {
+      const enfants = secteursEligibles.filter((s) => s.parent_secteur_id === racine.id);
+      lignesAliment.push({ secteur: racine, enfant: false, aEnfants: enfants.length > 0 });
+      for (const e of enfants) lignesAliment.push({ secteur: e, enfant: true, aEnfants: false });
+    }
+    const parId = new Map(secteurs.map((s) => [s.id, s]));
+    // Aliment réellement appliqué aux lots d'un secteur : le sien, sinon celui de son parent.
+    const alimentEffectif = (s) => s.intrant_alimentation_id ?? parId.get(s.parent_secteur_id)?.intrant_alimentation_id ?? null;
+    // Secteurs qui portent des lots (feuilles) — ceux dont on veut savoir quel aliment ils consomment.
+    const secteursAvecLots = lignesAliment.filter((l) => !l.aEnfants).map((l) => l.secteur);
+    const utilisePar = (intrantId) =>
+      secteursAvecLots
+        .filter((s) => Number(alimentEffectif(s)) === intrantId)
+        .map((s) => ({ nom: s.nom, herite: s.intrant_alimentation_id == null }));
 
     container.innerHTML = `
       <div class="panel">
@@ -35,9 +54,9 @@ window.Views.intrants = {
 
       <div class="panel">
         <h2>Stock d'intrants (${intrants.length})</h2>
-        <p class="desc">L'aliment consommé (Avicole/Piscicole) saisi dans un relevé journalier est déduit automatiquement du stock si un "aliment par défaut" est configuré pour le secteur — voir ci-dessous.</p>
+        <p class="desc">L'aliment consommé saisi dans un relevé journalier est déduit automatiquement du stock de l'aliment lié au type de bassin du lot (colonne « Aliment de ») — à régler dans le panneau ci-dessous. Renseignez un seuil d'alerte par aliment : le stock passe en orange dès qu'il est atteint.</p>
         <table>
-          <thead><tr><th>Nom</th><th>Catégorie</th><th>Secteur</th><th>Stock</th><th></th></tr></thead>
+          <thead><tr><th>Nom</th><th>Catégorie</th><th>Secteur</th><th>Aliment de</th><th>Stock</th><th></th></tr></thead>
           <tbody>
             ${intrants
               .map((i) => {
@@ -49,6 +68,13 @@ window.Views.intrants = {
                   <td>${esc(i.nom)}</td>
                   <td>${i.categorie ? esc(i.categorie) : '-'}</td>
                   <td>${i.secteur_nom ? esc(i.secteur_nom) : '-'}</td>
+                  <td>${
+                    utilisePar(i.id).length
+                      ? utilisePar(i.id)
+                          .map((u) => `<span class="badge muted" title="${u.herite ? 'Repris du secteur parent' : 'Aliment propre à ce type de bassin'}">${esc(u.nom)}${u.herite ? ' ↑' : ''}</span>`)
+                          .join(' ')
+                      : '<span class="desc">—</span>'
+                  }</td>
                   <td class="num"><span class="badge ${classe}">${fmt(stockNum)} ${esc(i.unite)}</span></td>
                   <td style="white-space:nowrap">
                     <button class="secondary" data-entree="${i.id}">+ Entrée</button>
@@ -66,30 +92,32 @@ window.Views.intrants = {
       </div>
 
       <div class="panel">
-        <h2>Aliment par défaut par secteur</h2>
-        <p class="desc">Le secteur d'un lot Avicole/Piscicole peut être lié à un intrant "aliment" : chaque relevé journalier avec un aliment consommé déduit alors automatiquement ce stock, sans double saisie.</p>
+        <h2>Aliment par défaut par secteur et type de bassin</h2>
+        <p class="desc">Chaque type de bassin (sous-secteur) peut avoir son propre aliment : les relevés de chacun déduisent alors le bon stock, même si plusieurs aliments sont utilisés le même jour. Le secteur parent sert de repli aux types de bassin qui n'ont pas le leur.</p>
         <table>
-          <thead><tr><th>Secteur</th><th>Aliment par défaut</th><th></th></tr></thead>
+          <thead><tr><th>Secteur / type de bassin</th><th>Aliment par défaut</th><th></th></tr></thead>
           <tbody>
-            ${secteursAliment
+            ${lignesAliment
               .map(
-                (s) => `<tr>
-                  <td>${esc(s.nom)}</td>
+                (l) => `<tr>
+                  <td>${l.enfant ? '<span class="desc" style="margin-left:14px">↳</span> ' : ''}${esc(l.secteur.nom)}${
+                    l.aEnfants ? '<div class="desc" style="margin:2px 0 0">Repli pour ses types de bassin sans aliment propre</div>' : ''
+                  }</td>
                   <td>
-                    <select class="select-aliment-defaut" data-secteur="${s.id}" style="max-width:280px">
+                    <select class="select-aliment-defaut" data-secteur="${l.secteur.id}" style="max-width:280px">
                       <option value="">Aucun</option>
                       ${intrants
-                        .map((i) => `<option value="${i.id}" ${Number(s.intrant_alimentation_id) === i.id ? 'selected' : ''}>${esc(i.nom)}</option>`)
+                        .map((i) => `<option value="${i.id}" ${Number(l.secteur.intrant_alimentation_id) === i.id ? 'selected' : ''}>${esc(i.nom)}</option>`)
                         .join('')}
                     </select>
                   </td>
-                  <td><button class="secondary btn-enregistrer-aliment-defaut" data-secteur="${s.id}">Enregistrer</button></td>
+                  <td><button class="secondary btn-enregistrer-aliment-defaut" data-secteur="${l.secteur.id}">Enregistrer</button></td>
                 </tr>`
               )
               .join('')}
           </tbody>
         </table>
-        ${secteursAliment.length === 0 ? '<p class="empty">Aucun secteur éligible.</p>' : ''}
+        ${lignesAliment.length === 0 ? '<p class="empty">Aucun secteur éligible.</p>' : ''}
       </div>
 
       <div id="historique-panel" class="panel hidden"></div>
@@ -200,7 +228,7 @@ window.Views.intrants = {
         panel.innerHTML = `
           <h2>Historique — ${esc(btn.dataset.nom)}</h2>
           <table>
-            <thead><tr><th>Date</th><th>Type</th><th>Quantité</th><th>Motif</th><th>Lot</th><th>Notes</th></tr></thead>
+            <thead><tr><th>Date</th><th>Type</th><th>Quantité</th><th>Motif</th><th>Lot / type de bassin</th><th>Notes</th></tr></thead>
             <tbody>
               ${mouvements
                 .map(
@@ -209,7 +237,7 @@ window.Views.intrants = {
                     <td><span class="badge ${m.type === 'ENTREE' ? 'ok' : 'warn'}">${m.type === 'ENTREE' ? 'Entrée' : 'Sortie'}</span></td>
                     <td class="num">${fmt(m.quantite)}</td>
                     <td>${esc(m.motif)}</td>
-                    <td>${m.code_lot ? esc(m.code_lot) : '-'}</td>
+                    <td>${m.code_lot ? `${esc(m.code_lot)}${m.secteur_nom ? ` <span class="desc">(${esc(m.secteur_nom)})</span>` : ''}` : '-'}</td>
                     <td>${m.notes ? esc(m.notes) : '-'}</td>
                   </tr>`
                 )
