@@ -24,6 +24,11 @@ const TABLES_HORS_SAISIE = new Set([
 ]);
 const JOUR_MS = 24 * 3600 * 1000;
 
+// Délai de paiement d'une facture SaaS (mise en route et abonnement mensuel), en jours après sa génération.
+// Aligné sur les conditions de la phase test réseau ANIDA (« payable sous 15 jours ») ; 7 jours était
+// court pour de petites fermes.
+const DELAI_PAIEMENT_JOURS = 15;
+
 function dansNJours(n) {
     const d = new Date();
     d.setDate(d.getDate() + n);
@@ -478,7 +483,7 @@ module.exports = function plateformeRoutes(pool) {
                 if (Number(fraisConfiguration) > 0) {
                     await req.db.query(
                         `INSERT INTO factures_saas (tenant_id, type, montant, date_echeance) VALUES ($1, 'CONFIGURATION', $2, $3)`,
-                        [tenantId, fraisConfiguration, dansNJours(7)]
+                        [tenantId, fraisConfiguration, dansNJours(DELAI_PAIEMENT_JOURS)]
                     );
                     result = await req.db.query(
                         `UPDATE organisation_abonnement_saas SET frais_configuration_facture = TRUE WHERE tenant_id = $1 RETURNING *`,
@@ -546,7 +551,7 @@ module.exports = function plateformeRoutes(pool) {
                 }
                 await req.db.query(
                     `INSERT INTO factures_saas (tenant_id, type, periode, montant, date_echeance) VALUES ($1, 'ABONNEMENT', $2, $3, $4)`,
-                    [ab.tenant_id, periode, ab.montant_mensuel, dansNJours(7)]
+                    [ab.tenant_id, periode, ab.montant_mensuel, dansNJours(DELAI_PAIEMENT_JOURS)]
                 );
                 resultats.creees += 1;
             }

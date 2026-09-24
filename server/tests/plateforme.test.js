@@ -310,6 +310,25 @@ describe('plateforme — facturation SaaS', () => {
         expect(facturesApres.rows).toHaveLength(1);
     });
 
+    test("les factures SaaS (mise en route et abonnement mensuel) sont payables sous 15 jours", async () => {
+        const dansQuinzeJours = new Date();
+        dansQuinzeJours.setDate(dansQuinzeJours.getDate() + 15);
+        const attendu = dansQuinzeJours.toISOString().slice(0, 10);
+        const echeance = (valeur) => new Date(valeur).toISOString().slice(0, 10);
+
+        await request(app)
+            .put(`/api/plateforme/organisations/${tenantA}/abonnement-saas`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ modulesActifs: ['finance'], montantMensuel: 40000, fraisConfiguration: 15000 });
+        await request(app).post('/api/plateforme/factures-saas/generer').set('Authorization', `Bearer ${tokenSuperviseur}`);
+
+        const configuration = await pool.query(`SELECT date_echeance FROM factures_saas WHERE tenant_id = $1 AND type = 'CONFIGURATION'`, [tenantA]);
+        const abonnement = await pool.query(`SELECT date_echeance FROM factures_saas WHERE tenant_id = $1 AND type = 'ABONNEMENT'`, [tenantA]);
+
+        expect(echeance(configuration.rows[0].date_echeance)).toBe(attendu);
+        expect(echeance(abonnement.rows[0].date_echeance)).toBe(attendu);
+    });
+
     test('marquer une facture comme payée enregistre la date et le moyen de paiement', async () => {
         await request(app)
             .put(`/api/plateforme/organisations/${tenantA}/abonnement-saas`)
