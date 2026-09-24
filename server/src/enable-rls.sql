@@ -46,3 +46,4 @@ ALTER TABLE organisation_paydunya_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE organisation_whatsapp_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE organisation_abonnement_saas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE factures_saas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE paiements_saas ENABLE ROW LEVEL SECURITY;

@@ -5,6 +5,7 @@ const { logAudit } = require('../audit');
 const { genererFacturePDF } = require('../facturePdf');
 const { creerFacture, confirmerFacture } = require('../paydunya');
 const { getPaydunyaConfig } = require('../paymentConfig');
+const { traiterIpnSaas } = require('../paiementsSaas');
 const { envoyerMessageWhatsapp } = require('../whatsapp');
 const { getWhatsappConfig } = require('../whatsappConfig');
 
@@ -226,6 +227,9 @@ module.exports = function financeRoutes(pool) {
         // sans jamais confirmer la facture correspondante.
         const paiementInitial = await queryPreTenant(pool, `SELECT tenant_id FROM paiements WHERE reference_transaction = $1`, [token]);
         if (paiementInitial.rows.length === 0) {
+            // Pas un paiement d'une ferme : peut-être une facture d'abonnement Massla payée par lien
+            // PayDunya (paiementsSaas.js, même URL d'IPN). Inconnu partout = idempotence, comme avant.
+            if (await traiterIpnSaas(req, res, pool, token)) return;
             return res.status(200).json({ message: 'Paiement introuvable ou déjà traité (idempotence).' });
         }
         const tenantId = paiementInitial.rows[0].tenant_id;

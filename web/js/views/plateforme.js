@@ -63,7 +63,7 @@ window.Views.plateforme = {
 
       <div class="panel">
         <h2>Facturation SaaS</h2>
-        <p class="desc">Collecte manuelle : le paiement de chaque ferme se fait par le moyen de votre choix (Wave, virement, espèces) — marquez la facture comme payée une fois reçue.</p>
+        <p class="desc">Chaque ferme paie en ligne avec le bouton « Lien de paiement » (Wave, Orange Money, carte via PayDunya) : la facture passe « Payée » toute seule. Pour un règlement hors application (virement, espèces), utilisez « Marquer payée ».</p>
         <button id="btn-generer-factures-saas" style="margin-bottom: 1rem;">Générer les factures du mois</button>
         <table>
           <thead><tr><th>Ferme</th><th>Type</th><th>Période</th><th>Montant</th><th>Échéance</th><th>Statut</th><th></th></tr></thead>
@@ -449,7 +449,8 @@ function renderLignesFacturesSaas(factures) {
         <td><span class="badge ${FACTURE_SAAS_STATUT_BADGE[f.statut] || 'muted'}">${esc(FACTURE_SAAS_STATUT_LABELS[f.statut] || f.statut)}</span></td>
         <td style="white-space:nowrap">${
           f.statut === 'A_PAYER' || f.statut === 'EN_RETARD'
-            ? `<button class="secondary" data-marquer-payee="${f.id}">Marquer payée</button>
+            ? `<button data-lien-paiement="${f.id}">Lien de paiement</button>
+               <button class="secondary" data-marquer-payee="${f.id}">Marquer payée</button>
                <button class="secondary" data-rappel-whatsapp="${f.id}">Envoyer un rappel WhatsApp</button>
                <button class="secondary" data-rappel-email="${f.id}">Envoyer un rappel email</button>`
             : ''
@@ -460,6 +461,9 @@ function renderLignesFacturesSaas(factures) {
 }
 
 function attacherActionsFactures(scope, factures, container) {
+  scope.querySelectorAll('button[data-lien-paiement]').forEach((btn) => {
+    btn.addEventListener('click', () => ouvrirLienPaiement(btn));
+  });
   scope.querySelectorAll('button[data-marquer-payee]').forEach((btn) => {
     btn.addEventListener('click', () => marquerFacturePayee(container, btn.dataset.marquerPayee));
   });
@@ -468,6 +472,61 @@ function attacherActionsFactures(scope, factures, container) {
   });
   scope.querySelectorAll('button[data-rappel-email]').forEach((btn) => {
     btn.addEventListener('click', () => envoyerRappelEmail(btn));
+  });
+}
+
+// Lien de paiement en ligne (PayDunya) d'une facture SaaS : généré (ou repris s'il date de moins de 24 h) puis
+// affiché pour être copié et envoyé à la ferme. Quand la ferme paie, la facture passe « Payée » toute seule.
+async function ouvrirLienPaiement(btn) {
+  const factureId = btn.dataset.lienPaiement;
+  btn.disabled = true;
+  const texteOriginal = btn.textContent;
+  btn.textContent = 'Création…';
+  let lien;
+  try {
+    lien = await Api.post(`/plateforme/factures-saas/${factureId}/lien-paiement`, {});
+  } catch (err) {
+    showToast(err.message, 'error');
+    return;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = texteOriginal;
+  }
+
+  const avertissementTest =
+    lien.mode === 'live'
+      ? ''
+      : '<p class="desc" style="color: var(--danger, #b3261e);"><strong>Mode test PayDunya :</strong> ce lien ne déclenche aucun vrai paiement. Passez le compte PayDunya en mode réel dans Réglages de la ferme.</p>';
+  const overlay = el(`
+    <div class="modal-overlay">
+      <div class="modal-box">
+        <h3>Lien de paiement</h3>
+        <p class="desc">Envoyez ce lien à la ferme (WhatsApp, SMS…). Elle paie par Wave, Orange Money ou carte, et la facture passe « Payée » automatiquement.${lien.reutilise ? ' (Lien déjà créé récemment, repris tel quel.)' : ''}</p>
+        ${avertissementTest}
+        <input type="text" readonly value="${esc(lien.url)}" style="width:100%; box-sizing:border-box; margin-bottom:12px;" />
+        <div class="modal-actions">
+          <button class="secondary" data-action="fermer">Fermer</button>
+          <button data-action="copier">Copier le lien</button>
+        </div>
+      </div>
+    </div>
+  `);
+  document.body.appendChild(overlay);
+  const closeModal = () => overlay.remove();
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+  overlay.querySelector('[data-action="fermer"]').addEventListener('click', closeModal);
+  const champ = overlay.querySelector('input');
+  champ.addEventListener('focus', () => champ.select());
+  overlay.querySelector('[data-action="copier"]').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(lien.url);
+      showToast('Lien copié.', 'success');
+    } catch (err) {
+      champ.select();
+      showToast('Copie impossible : sélectionnez le lien et copiez-le à la main.', 'error');
+    }
   });
 }
 

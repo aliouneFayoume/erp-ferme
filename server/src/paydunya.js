@@ -42,7 +42,7 @@ function publicUrl() {
  * `credentials` : { mode, masterKey, privateKey, publicKey, token } — identifiants de
  * l'organisation qui initie ce paiement (jamais ceux d'une autre organisation).
  */
-async function creerFacture({ montant, description, referenceInterne, storeName, credentials }) {
+async function creerFacture({ montant, description, referenceInterne, storeName, credentials, retourChemin, annulationChemin }) {
   const res = await fetch(`${baseUrl(credentials.mode)}/checkout-invoice/create`, {
     method: 'POST',
     headers: headers(credentials),
@@ -55,8 +55,10 @@ async function creerFacture({ montant, description, referenceInterne, storeName,
       store: { name: storeName || 'Ferme' },
       actions: {
         callback_url: `${publicUrl()}/api/finance/paiements/ipn`,
-        return_url: `${publicUrl()}/?paiement=succes`,
-        cancel_url: `${publicUrl()}/?paiement=annule`,
+        // Par défaut, retour sur l'application (paiement d'un client d'une ferme) ; la facture SaaS passe ses
+        // propres chemins de retour (retourChemin/annulationChemin), pensés pour quelqu'un de non connecté.
+        return_url: retourChemin ? `${publicUrl()}${retourChemin}` : `${publicUrl()}/?paiement=succes`,
+        cancel_url: annulationChemin ? `${publicUrl()}${annulationChemin}` : `${publicUrl()}/?paiement=annule`,
       },
       custom_data: { reference_interne: referenceInterne },
     }),

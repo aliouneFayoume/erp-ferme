@@ -66,7 +66,7 @@ async function envoyerEmailVerification(email, nomComplet, token) {
 // erp_ferme_whatsapp_status). Envoyée à tous les admins actifs de la ferme cliente : leur email
 // est déjà connu (utilisateurs.email), contrairement au numéro WhatsApp qui doit être saisi à part
 // dans organisation_abonnement_saas.telephone_contact.
-async function envoyerEmailRappelSaas(emails, { organisationNom, montant, dateEcheance, type }) {
+async function envoyerEmailRappelSaas(emails, { organisationNom, montant, dateEcheance, type, lienPaiement }) {
     const { apiKey, from } = lireConfig();
     if (!apiKey || !from) {
         throw new Error("Intégration email non configurée (RESEND_API_KEY / RESEND_FROM_EMAIL manquants).");
@@ -77,6 +77,11 @@ async function envoyerEmailRappelSaas(emails, { organisationNom, montant, dateEc
     const montantFormate = `${Number(montant).toLocaleString('fr-FR')} FCFA`;
     const echeanceFormatee = new Date(dateEcheance).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
     const libelleType = type === 'CONFIGURATION' ? 'de configuration' : "d'abonnement";
+    // Lien de paiement en ligne (PayDunya) : seulement une URL https, échappée comme tout texte injecté dans le HTML.
+    const blocReglement =
+        typeof lienPaiement === 'string' && lienPaiement.startsWith('https://')
+            ? `<p><a href="${echapperHtml(lienPaiement)}" style="display:inline-block;padding:10px 18px;background:#1F5D3A;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:600">Payer en ligne</a></p><p>Wave, Orange Money ou carte bancaire, en quelques secondes. Votre paiement est enregistré automatiquement.</p>`
+            : '<p>Merci de contacter votre interlocuteur habituel pour effectuer le règlement.</p>';
     const res = await fetch(RESEND_API, {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -85,7 +90,7 @@ async function envoyerEmailRappelSaas(emails, { organisationNom, montant, dateEc
             from,
             to: emails,
             subject: `Facture ${libelleType} en attente — ${echapperHtml(organisationNom)}`,
-            html: `<p>Bonjour,</p><p>Votre facture ${libelleType} de <strong>${montantFormate}</strong> pour ${echapperHtml(organisationNom)} est à régler (échéance : ${echeanceFormatee}).</p><p>Merci de contacter votre interlocuteur habituel pour effectuer le règlement.</p>`,
+            html: `<p>Bonjour,</p><p>Votre facture ${libelleType} de <strong>${montantFormate}</strong> pour ${echapperHtml(organisationNom)} est à régler (échéance : ${echeanceFormatee}).</p>${blocReglement}`,
         }),
     });
 

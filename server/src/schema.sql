@@ -767,8 +767,25 @@ CREATE TABLE factures_saas (
     statut VARCHAR(20) CHECK (statut IN ('A_PAYER', 'PAYEE', 'EN_RETARD', 'ANNULEE')) NOT NULL DEFAULT 'A_PAYER',
     date_echeance DATE NOT NULL,
     date_paiement TIMESTAMP,
-    methode_paiement VARCHAR(30), -- 'WAVE', 'VIREMENT', 'ESPECES', 'AUTRE' — collecte manuelle, pas de PayDunya ici
+    methode_paiement VARCHAR(30), -- 'WAVE', 'VIREMENT', 'ESPECES', 'AUTRE' (collecte manuelle) ou 'PAYDUNYA' (lien de paiement, voir paiements_saas)
     notes TEXT,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tentatives de paiement PayDunya d'une facture SaaS (voir migration-27) : plusieurs lignes possibles par
+-- facture, chaque token reste résolvable par l'IPN. Accès réservé à la supervision plateforme (RLS).
+CREATE TABLE paiements_saas (
+    id SERIAL PRIMARY KEY,
+    facture_saas_id INT NOT NULL REFERENCES factures_saas(id),
+    tenant_id INT NOT NULL REFERENCES organisations(id),
+    emetteur_tenant_id INT NOT NULL REFERENCES organisations(id),
+    montant INT NOT NULL,
+    token VARCHAR(255) NOT NULL UNIQUE,
+    reference_interne VARCHAR(100) NOT NULL,
+    url_paiement TEXT NOT NULL,
+    statut VARCHAR(20) NOT NULL DEFAULT 'EN_ATTENTE' CHECK (statut IN ('EN_ATTENTE', 'VALIDE', 'ECHOUE', 'DOUBLON')),
+    date_paiement TIMESTAMP,
+    cree_par INT REFERENCES utilisateurs(id),
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

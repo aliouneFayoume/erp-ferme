@@ -296,3 +296,9 @@ DROP POLICY IF EXISTS plateforme_seulement ON factures_saas;
 CREATE POLICY plateforme_seulement ON factures_saas
     USING (is_plateforme_admin())
     WITH CHECK (is_plateforme_admin());
+
+-- Tentatives de paiement PayDunya des factures SaaS (migration-27) : mêmes règles que factures_saas.
+DROP POLICY IF EXISTS plateforme_seulement ON paiements_saas;
+CREATE POLICY plateforme_seulement ON paiements_saas
+    USING (is_plateforme_admin())
+    WITH CHECK (is_plateforme_admin());

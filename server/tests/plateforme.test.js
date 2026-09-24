@@ -310,6 +310,24 @@ describe('plateforme — facturation SaaS', () => {
         expect(facturesApres.rows).toHaveLength(1);
     });
 
+    test('générer les factures du mois ignore une ferme supprimée, même si son abonnement est resté actif', async () => {
+        await request(app)
+            .put(`/api/plateforme/organisations/${tenantA}/abonnement-saas`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ modulesActifs: ['finance'], montantMensuel: 40000 });
+        await request(app)
+            .put(`/api/plateforme/organisations/${tenantB}/abonnement-saas`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ modulesActifs: ['support'], montantMensuel: 30000 });
+        await pool.query(`UPDATE organisations SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1`, [tenantB]);
+
+        const gen = await request(app).post('/api/plateforme/factures-saas/generer').set('Authorization', `Bearer ${tokenSuperviseur}`);
+
+        expect(gen.body.creees).toBe(1);
+        const factures = await pool.query(`SELECT tenant_id FROM factures_saas WHERE type = 'ABONNEMENT'`);
+        expect(factures.rows.map((r) => r.tenant_id)).toEqual([tenantA]);
+    });
+
     test("les factures SaaS (mise en route et abonnement mensuel) sont payables sous 15 jours", async () => {
         const dansQuinzeJours = new Date();
         dansQuinzeJours.setDate(dansQuinzeJours.getDate() + 15);

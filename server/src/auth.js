@@ -124,6 +124,25 @@ async function queryPreTenant(pool, sql, params) {
 }
 
 /**
+ * Comme queryPreTenant (aucun tenant courant) MAIS avec l'échappatoire `app.is_plateforme_admin`
+ * levée, pour lire une table réservée à la supervision plateforme depuis un endpoint public sans
+ * utilisateur — uniquement l'IPN PayDunya d'une facture SaaS (paiements_saas / factures_saas, voir
+ * paiementsSaas.js). L'appelant ne doit y faire passer qu'une recherche par token PayDunya (généré
+ * par PayDunya, non devinable), jamais une valeur fournie librement par un visiteur. Les deux GUC
+ * sont remis à vide avant ET après, comme queryPreTenant.
+ */
+async function queryPreTenantPlateforme(pool, sql, params) {
+    const client = await pool.connect();
+    try {
+        await client.query("SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_plateforme_admin', 'true', false)");
+        return await client.query(sql, params);
+    } finally {
+        await client.query("SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_plateforme_admin', '', false)").catch(() => {});
+        client.release();
+    }
+}
+
+/**
  * Exécute une requête pour un tenant CONNU, en dehors du cycle req/res habituel (donc sans passer
  * par attachTenantConnection, qui suppose une requête HTTP en cours). Utilisé par exemple pour
  * mettre à jour le compteur de tentatives échouées d'un client pendant /portail/login, avant que
@@ -317,6 +336,7 @@ module.exports = {
     requireClientAuth,
     attachTenantConnection,
     queryPreTenant,
+    queryPreTenantPlateforme,
     queryAvecTenant,
     requireSuperviseurPlateforme,
     JWT_SECRET,
