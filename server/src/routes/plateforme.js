@@ -6,9 +6,8 @@ const { creerNouvelleFerme } = require('../creerFerme');
 const { envoyerMessageWhatsapp } = require('../whatsapp');
 const { envoyerEmailRappelSaas } = require('../email');
 const { nomSecteurValide } = require('../validation');
-const { creerFacture } = require('../paydunya');
 const { getPaydunyaConfig } = require('../paymentConfig');
-const { STATUTS_PAYABLES } = require('../paiementsSaas');
+const { creerJeton, chargerFactureSaas, verifierFacturePayable, erreurHttp } = require('../paiementsSaas');
 
 // Activité d'une ferme (GET /activite) : "saisie" = écriture métier journalisée. Sont exclues les
 // tables de configuration et de gestion des comptes, sinon créer un utilisateur ou régler WhatsApp
@@ -39,78 +38,21 @@ function dansNJours(n) {
     return d.toISOString().slice(0, 10);
 }
 
-// Un lien de paiement PayDunya déjà généré pour une facture reste réutilisé pendant ce délai (même lien
-// renvoyé à chaque clic), au-delà on en crée un nouveau : la validité d'un checkout PayDunya n'est pas garantie
-// indéfiniment. Les anciens tokens restent résolus par l'IPN (paiements_saas.token), donc un paiement fait avec
-// un ancien lien n'est jamais perdu.
-const LIEN_REUTILISABLE_MS = 24 * 3600 * 1000;
-const LIBELLES_TYPE_FACTURE = { CONFIGURATION: 'Mise en route', ABONNEMENT: 'Abonnement' };
-
 /**
- * Renvoie le lien de paiement PayDunya d'une facture SaaS (en crée un si besoin) avec les clés PayDunya de
- * l'organisation du superviseur (Massla). Lève une erreur portant `statutHttp`/`message` exploitables par la route.
- * `req.db` doit déjà porter le contexte du superviseur (requireAuth + requireSuperviseurPlateforme).
+ * Lien de paiement à envoyer à la ferme : adresse STABLE de Massla (/api/payer/<jeton>, routes/payer.js), qui crée un
+ * checkout PayDunya tout frais à chaque ouverture — un checkout PayDunya expire ~30 minutes après sa création, un
+ * lien direct serait mort avant même d'être lu (voir paiementsSaas.js). On vérifie ici que la facture est payable et
+ * que PayDunya est configuré, pour que le superviseur voie l'erreur tout de suite plutôt que la ferme.
+ * `req.db` doit porter le contexte du superviseur (requireAuth + requireSuperviseurPlateforme).
  */
-async function obtenirOuCreerLienPaiement(req, facture) {
-    const echec = (statutHttp, message) => Object.assign(new Error(message), { statutHttp });
-    if (!STATUTS_PAYABLES.includes(facture.statut)) throw echec(400, 'Cette facture est déjà payée ou annulée.');
-    if (!(Number(facture.montant) > 0)) throw echec(400, 'Cette facture a un montant nul : rien à payer.');
-
-    const existant = await req.db.query(
-        `SELECT token, url_paiement, cree_le FROM paiements_saas WHERE facture_saas_id = $1 AND statut = 'EN_ATTENTE' ORDER BY cree_le DESC, id DESC LIMIT 1`,
-        [facture.id]
-    );
+async function lienPaiementStable(req, facture) {
+    verifierFacturePayable(facture);
     const credentials = await getPaydunyaConfig(req.db, req.user.tenant_id);
     if (!credentials) {
-        throw echec(400, 'Aucun compte PayDunya configuré pour Massla (Réglages de la ferme, section Paiement) : impossible de générer un lien de paiement.');
+        throw erreurHttp(400, 'Aucun compte PayDunya configuré pour Massla (Réglages de la ferme, section Paiement) : impossible de générer un lien de paiement.');
     }
-    const ligne = existant.rows[0];
-    if (ligne && Date.now() - new Date(ligne.cree_le).getTime() < LIEN_REUTILISABLE_MS) {
-        return { url: ligne.url_paiement, token: ligne.token, reutilise: true, mode: credentials.mode };
-    }
-
-    const referenceInterne = `saas-${facture.id}-${Date.now()}`;
-    const libelle = LIBELLES_TYPE_FACTURE[facture.type] || 'Facture';
-    let checkout;
-    try {
-        checkout = await creerFacture({
-            montant: facture.montant,
-            description: `Massla — ${libelle} — ${facture.organisation_nom}${facture.periode ? ` (${facture.periode})` : ''}`,
-            referenceInterne,
-            storeName: 'Massla',
-            credentials,
-            retourChemin: '/paiement-abonnement-succes.html',
-            annulationChemin: '/paiement-abonnement-annule.html',
-        });
-    } catch (err) {
-        console.error('Échec de création du lien de paiement PayDunya (facture SaaS):', err.message);
-        throw echec(502, 'Impossible de contacter PayDunya pour créer le lien de paiement.');
-    }
-
-    const insertion = await req.db.query(
-        `INSERT INTO paiements_saas (facture_saas_id, tenant_id, emetteur_tenant_id, montant, token, reference_interne, url_paiement, cree_par)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-        [facture.id, facture.tenant_id, req.user.tenant_id, Math.round(Number(facture.montant)), checkout.token, referenceInterne, checkout.url, req.user.id]
-    );
-    await logAudit(req.db, {
-        req,
-        table: 'paiements_saas',
-        rowId: insertion.rows[0].id,
-        action: 'CREATE',
-        userId: req.user.id,
-        tenantId: facture.tenant_id,
-        details: { facture_saas_id: facture.id, montant: facture.montant, mode: credentials.mode },
-    });
-    return { url: checkout.url, token: checkout.token, reutilise: false, mode: credentials.mode };
-}
-
-async function chargerFactureSaas(db, id) {
-    const res = await db.query(
-        `SELECT f.id, f.tenant_id, f.type, f.periode, f.montant, f.statut, f.date_echeance, o.nom AS organisation_nom
-         FROM factures_saas f JOIN organisations o ON o.id = f.tenant_id WHERE f.id = $1`,
-        [id]
-    );
-    return res.rows[0] || null;
+    const base = process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+    return { url: `${base}/api/payer/${creerJeton(facture.id)}`, mode: credentials.mode };
 }
 
 /**
@@ -682,8 +624,7 @@ module.exports = function plateformeRoutes(pool) {
         try {
             const facture = await chargerFactureSaas(req.db, req.params.id);
             if (!facture) return res.status(404).json({ erreur: 'Facture introuvable.' });
-            const lien = await obtenirOuCreerLienPaiement(req, facture);
-            res.status(lien.reutilise ? 200 : 201).json(lien);
+            res.json(await lienPaiementStable(req, facture));
         } catch (err) {
             if (err.statutHttp) return res.status(err.statutHttp).json({ erreur: err.message });
             console.error(err);
@@ -755,7 +696,7 @@ module.exports = function plateformeRoutes(pool) {
             // sans lien si PayDunya n'est pas configuré ou si PayDunya est injoignable.
             let lienPaiement = null;
             try {
-                lienPaiement = (await obtenirOuCreerLienPaiement(req, facture)).url;
+                lienPaiement = (await lienPaiementStable(req, facture)).url;
             } catch (err) {
                 if (!err.statutHttp) console.error(err);
             }

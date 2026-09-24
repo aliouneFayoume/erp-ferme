@@ -98,6 +98,9 @@ async function main() {
     app.use('/api/parametres-whatsapp', require('./routes/parametres-whatsapp')(pool));
     app.use('/api/parametres-ferme', require('./routes/parametres-ferme')(pool));
     app.use('/api/plateforme', require('./routes/plateforme')(pool));
+    // Lien de paiement public des factures d'abonnement (voir routes/payer.js) : sous /api/ pour que le service
+    // worker ne l'intercepte pas et qu'aucune règle de page statique ne s'applique.
+    app.use('/api/payer', require('./routes/payer')(pool));
     app.use('/api/assistant', require('./routes/assistant')(pool));
 
     // Interroge réellement la base plutôt que de renvoyer un texte statique : c'est cette route

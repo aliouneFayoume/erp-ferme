@@ -80,7 +80,7 @@ async function envoyerEmailRappelSaas(emails, { organisationNom, montant, dateEc
     // Lien de paiement en ligne (PayDunya) : seulement une URL https, échappée comme tout texte injecté dans le HTML.
     const blocReglement =
         typeof lienPaiement === 'string' && lienPaiement.startsWith('https://')
-            ? `<p><a href="${echapperHtml(lienPaiement)}" style="display:inline-block;padding:10px 18px;background:#1F5D3A;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:600">Payer en ligne</a></p><p>Wave, Orange Money ou carte bancaire, en quelques secondes. Votre paiement est enregistré automatiquement.</p>`
+            ? `<p><a href="${echapperHtml(lienPaiement)}" style="display:inline-block;padding:10px 18px;background:#1F5D3A;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:600">Payer en ligne</a></p><p>Paiement par mobile money (Orange Money, Mixx by Yas…), en quelques secondes. Votre paiement est enregistré automatiquement.</p>`
             : '<p>Merci de contacter votre interlocuteur habituel pour effectuer le règlement.</p>';
     const res = await fetch(RESEND_API, {
         method: 'POST',

@@ -63,7 +63,7 @@ window.Views.plateforme = {
 
       <div class="panel">
         <h2>Facturation SaaS</h2>
-        <p class="desc">Chaque ferme paie en ligne avec le bouton « Lien de paiement » (Wave, Orange Money, carte via PayDunya) : la facture passe « Payée » toute seule. Pour un règlement hors application (virement, espèces), utilisez « Marquer payée ».</p>
+        <p class="desc">Chaque ferme paie en ligne avec le lien du bouton « Lien de paiement » (mobile money via PayDunya) : la facture passe « Payée » toute seule. Pour un règlement hors application (Wave, virement, espèces), utilisez « Marquer payée ».</p>
         <button id="btn-generer-factures-saas" style="margin-bottom: 1rem;">Générer les factures du mois</button>
         <table>
           <thead><tr><th>Ferme</th><th>Type</th><th>Période</th><th>Montant</th><th>Échéance</th><th>Statut</th><th></th></tr></thead>
@@ -501,7 +501,7 @@ async function ouvrirLienPaiement(btn) {
     <div class="modal-overlay">
       <div class="modal-box">
         <h3>Lien de paiement</h3>
-        <p class="desc">Envoyez ce lien à la ferme (WhatsApp, SMS…). Elle paie par Wave, Orange Money ou carte, et la facture passe « Payée » automatiquement.${lien.reutilise ? ' (Lien déjà créé récemment, repris tel quel.)' : ''}</p>
+        <p class="desc">Envoyez ce lien à la ferme (WhatsApp, SMS…). Il reste valable tant que la facture n’est pas payée : à chaque ouverture, la ferme est envoyée vers une page de paiement PayDunya toute fraîche (mobile money : les moyens proposés dépendent de votre compte PayDunya). Une fois payée, la facture passe « Payée » automatiquement.</p>
         ${avertissementTest}
         <input type="text" readonly value="${esc(lien.url)}" style="width:100%; box-sizing:border-box; margin-bottom:12px;" />
         <div class="modal-actions">
