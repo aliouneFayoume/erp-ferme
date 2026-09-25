@@ -14,6 +14,16 @@ async function verifierAccesLot(db, lotId, user) {
     return true;
 }
 
+// Espèce présente dans un bassin (Piscicole) : texte libre court. Renvoie null (vide/absent), la chaîne nettoyée,
+// ou false si elle est trop longue. Un bassin change d'espèce au gré des déplacements de poissons.
+const ESPECE_MAX = 100;
+function normaliserEspece(valeur) {
+    if (valeur === undefined || valeur === null) return null;
+    const texte = String(valeur).trim();
+    if (texte === '') return null;
+    return texte.length > ESPECE_MAX ? false : texte;
+}
+
 module.exports = function productionRoutes(pool) {
     const router = express.Router();
 
@@ -77,8 +87,9 @@ module.exports = function productionRoutes(pool) {
             }
 
             const result = await req.db.query(
-                `SELECT l.*, s.nom as secteur_nom FROM lots_production l
+                `SELECT l.*, s.nom as secteur_nom, p.nom as secteur_parent_nom FROM lots_production l
                  JOIN secteurs s ON l.secteur_id = s.id
+                 LEFT JOIN secteurs p ON p.id = s.parent_secteur_id
                  WHERE ${where} ORDER BY l.date_demarrage DESC`,
                 params
             );
@@ -94,13 +105,15 @@ module.exports = function productionRoutes(pool) {
         if (req.user.role === 'chef_prod' && req.user.secteur_id && Number(secteur_id) !== Number(req.user.secteur_id)) {
             return res.status(403).json({ erreur: 'Vous ne pouvez créer un lot que pour votre secteur.' });
         }
+        const espece = normaliserEspece(req.body.espece);
+        if (espece === false) return res.status(400).json({ erreur: `L'espèce ne peut pas dépasser ${ESPECE_MAX} caractères.` });
         try {
             const secteurRes = await req.db.query(`SELECT id FROM secteurs WHERE id = $1 AND tenant_id = $2`, [secteur_id, req.user.tenant_id]);
             if (secteurRes.rows.length === 0) return res.status(400).json({ erreur: 'Secteur invalide.' });
             const result = await req.db.query(
-                `INSERT INTO lots_production (tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, statut, culture, duree_maturite_jours, cree_par)
-                 VALUES ($1, $2, $3, $4, $5, 'EN_COURS', $6, $7, $8) RETURNING *`,
-                [req.user.tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, culture || null, duree_maturite_jours || null, req.user.id]
+                `INSERT INTO lots_production (tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, statut, culture, duree_maturite_jours, espece, cree_par)
+                 VALUES ($1, $2, $3, $4, $5, 'EN_COURS', $6, $7, $8, $9) RETURNING *`,
+                [req.user.tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, culture || null, duree_maturite_jours || null, espece, req.user.id]
             );
             await logAudit(req.db, { req, table: 'lots_production', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.status(201).json(result.rows[0]);
@@ -119,6 +132,10 @@ module.exports = function productionRoutes(pool) {
         if (quantite_initiale !== undefined && !(Number(quantite_initiale) > 0)) {
             return res.status(400).json({ erreur: 'La quantité doit être un nombre positif.' });
         }
+        // espece absente = inchangée ; chaîne vide = effacée (bassin vide / espèce inconnue) ; sinon remplacée.
+        const especeFournie = req.body.espece !== undefined;
+        const espece = normaliserEspece(req.body.espece);
+        if (espece === false) return res.status(400).json({ erreur: `L'espèce ne peut pas dépasser ${ESPECE_MAX} caractères.` });
         if (!(await verifierAccesLot(req.db, req.params.id, req.user))) {
             return res.status(403).json({ erreur: 'Ce lot ne relève pas de votre secteur.' });
         }
@@ -126,12 +143,13 @@ module.exports = function productionRoutes(pool) {
             const result = await req.db.query(
                 `UPDATE lots_production SET
                     quantite_initiale = COALESCE($1, quantite_initiale),
-                    date_demarrage = COALESCE($2, date_demarrage)
-                 WHERE id = $3 AND tenant_id = $4 AND deleted_at IS NULL RETURNING *`,
-                [quantite_initiale ?? null, date_demarrage || null, req.params.id, req.user.tenant_id]
+                    date_demarrage = COALESCE($2, date_demarrage),
+                    espece = CASE WHEN $3::boolean THEN $4::varchar ELSE espece END
+                 WHERE id = $5 AND tenant_id = $6 AND deleted_at IS NULL RETURNING *`,
+                [quantite_initiale ?? null, date_demarrage || null, especeFournie, espece, req.params.id, req.user.tenant_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Lot introuvable.' });
-            await logAudit(req.db, { req, table: 'lots_production', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { quantite_initiale, date_demarrage } });
+            await logAudit(req.db, { req, table: 'lots_production', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { quantite_initiale, date_demarrage, ...(especeFournie ? { espece } : {}) } });
             res.json(result.rows[0]);
         } catch (err) {
             console.error(err);

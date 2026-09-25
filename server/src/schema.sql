@@ -205,6 +205,7 @@ CREATE TABLE lots_production (
     statut VARCHAR(20) CHECK (statut IN ('EN_COURS', 'ABATTAGE', 'TERMINE', 'PERDU')),
     culture VARCHAR(100), -- Maraîcher : type de culture (tomate, chou, ...) — planification des cultures
     duree_maturite_jours INT, -- Maraîcher : durée avant récolte prévue, en jours depuis date_demarrage
+    espece VARCHAR(100), -- Piscicole : espèce actuellement dans ce bassin (voir migration-28) ; change quand des poissons y sont déplacés
     cree_par INT REFERENCES utilisateurs(id),
     deleted_at TIMESTAMP,
     UNIQUE (tenant_id, code_lot)

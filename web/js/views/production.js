@@ -52,7 +52,12 @@ window.Views.production = {
         <form id="form-lot" class="form-grid" autocomplete="off">
           <label>Secteur
             <select name="secteur_id" id="select-secteur-lot" required>
-              ${secteursAutorises.map((s) => `<option value="${s.id}" data-nom="${s.nom}">${s.nom}</option>`).join('')}
+              ${secteursAutorises
+                .map((s) => {
+                  const parent = secteurs.find((p) => p.id === s.parent_secteur_id);
+                  return `<option value="${s.id}" data-nom="${s.nom}" data-piscicole="${estPiscicole(s.nom, parent?.nom) ? '1' : ''}">${s.nom}</option>`;
+                })
+                .join('')}
             </select>
           </label>
           <label>Code du lot
@@ -69,6 +74,10 @@ window.Views.production = {
           </label>
           <label id="champ-duree" class="${secteursAutorises[0]?.nom === 'Maraîcher' ? '' : 'hidden'}">Durée avant récolte (jours)
             <input type="number" name="duree_maturite_jours" min="1" placeholder="ex: 90" />
+          </label>
+          <label id="champ-espece" class="${secteursAutorises[0] && estPiscicole(secteursAutorises[0].nom, secteurs.find((p) => p.id === secteursAutorises[0].parent_secteur_id)?.nom) ? '' : 'hidden'}">Espèce (facultatif)
+            <input type="text" name="espece" list="liste-especes" maxlength="100" placeholder="ex: Tilapia, Clarias" />
+            <datalist id="liste-especes"><option value="Tilapia"></option><option value="Clarias (poisson-chat)"></option><option value="Silure"></option><option value="Carpe"></option></datalist>
           </label>
           <button type="submit">Créer le lot</button>
         </form>
@@ -96,6 +105,7 @@ window.Views.production = {
       container.querySelector('#label-quantite').textContent = quantiteLabel(nom);
       container.querySelector('#champ-culture').classList.toggle('hidden', nom !== 'Maraîcher');
       container.querySelector('#champ-duree').classList.toggle('hidden', nom !== 'Maraîcher');
+      container.querySelector('#champ-espece').classList.toggle('hidden', !e.target.selectedOptions[0]?.dataset.piscicole);
     });
 
     container.querySelector('#form-lot').addEventListener('submit', async (e) => {
@@ -109,6 +119,7 @@ window.Views.production = {
           date_demarrage: fd.get('date_demarrage'),
           culture: fd.get('culture') || null,
           duree_maturite_jours: fd.get('duree_maturite_jours') ? Number(fd.get('duree_maturite_jours')) : null,
+          espece: fd.get('espece') || null,
         });
         showToast('Lot créé avec succès.', 'success');
         window.Views.production.render(container);
@@ -120,6 +131,9 @@ window.Views.production = {
     await updateOfflineBanner(container);
   },
 };
+
+// Piscicole = le secteur « Piscicole » lui-même ou un de ses sous-secteurs (Éclosion, Élevage larvaire, Prégrossissement…).
+const estPiscicole = (nom, nomParent) => nom === 'Piscicole' || nomParent === 'Piscicole';
 
 const LOT_STATUT_BADGE = { EN_COURS: 'ok', ABATTAGE: 'info', TERMINE: 'muted', PERDU: 'danger' };
 const LOT_STATUT_LABEL = { EN_COURS: 'En cours', ABATTAGE: 'Abattage', TERMINE: 'Terminé', PERDU: 'Perdu' };
@@ -154,11 +168,12 @@ function renderLotsList(container, lots) {
           <div class="code" style="margin-top:8px">${esc(l.code_lot)}${l.culture ? ` — ${esc(l.culture)}` : ''}</div>
           <div class="meta">Démarré le ${fmtDate(l.date_demarrage)} · ${esc(l.statut)}</div>
           <div class="kpi"><span>${l.secteur_nom === 'Maraîcher' ? 'Nombre de plants' : 'Effectif actuel'}</span><b>${fmt(l.quantite_initiale)}</b></div>
+          ${l.espece ? `<div class="kpi"><span>Espèce</span><b>${esc(l.espece)}</b></div>` : ''}
           ${badgeRecolte}
           <button class="secondary" style="margin-top:10px;width:100%" data-lot='${lotDataAttr(l)}'>
             Saisir un relevé / voir le FCR
           </button>
-          <button class="secondary btn-modifier-lot" style="margin-top:6px;width:100%" data-lot-id="${l.id}" data-quantite="${l.quantite_initiale}" data-date="${l.date_demarrage ? String(l.date_demarrage).slice(0, 10) : ''}">
+          <button class="secondary btn-modifier-lot" style="margin-top:6px;width:100%" data-lot-id="${l.id}" data-quantite="${l.quantite_initiale}" data-date="${l.date_demarrage ? String(l.date_demarrage).slice(0, 10) : ''}" data-espece="${esc(l.espece || '')}" data-piscicole="${estPiscicole(l.secteur_nom, l.secteur_parent_nom) ? '1' : ''}">
             Modifier
           </button>
           <div style="margin-top:8px;display:flex;gap:6px">
@@ -184,6 +199,7 @@ function renderLotsList(container, lots) {
           <div class="code" style="margin-top:8px">${esc(l.code_lot)}${l.culture ? ` — ${esc(l.culture)}` : ''}</div>
           <div class="meta">Démarré le ${fmtDate(l.date_demarrage)}</div>
           <div class="kpi"><span>${l.secteur_nom === 'Maraîcher' ? 'Nombre de plants' : 'Effectif final'}</span><b>${fmt(l.quantite_initiale)}</b></div>
+          ${l.espece ? `<div class="kpi"><span>Espèce</span><b>${esc(l.espece)}</b></div>` : ''}
           <button class="secondary" style="margin-top:10px;width:100%" data-lot='${lotDataAttr(l)}'>
             Voir l'historique
           </button>
@@ -199,10 +215,13 @@ function renderLotsList(container, lots) {
 
   container.querySelectorAll('button.btn-modifier-lot').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const values = await Modal.open('Modifier le lot', [
+      const champs = [
         { name: 'quantite_initiale', label: 'Effectif / quantité', type: 'number', value: btn.dataset.quantite },
         { name: 'date_demarrage', label: 'Date de démarrage', type: 'date', value: btn.dataset.date },
-      ]);
+      ];
+      // Bassin piscicole : l'espèce actuellement dedans (vide = bassin vide ou espèce inconnue).
+      if (btn.dataset.piscicole) champs.push({ name: 'espece', label: 'Espèce dans ce bassin (vide = aucune)', type: 'text', value: btn.dataset.espece });
+      const values = await Modal.open('Modifier le lot', champs);
       if (!values) return;
       try {
         await Api.put(`/production/lots/${btn.dataset.lotId}`, values);
