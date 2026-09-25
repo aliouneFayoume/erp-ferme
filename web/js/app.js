@@ -317,14 +317,18 @@ window.MapPicker = MapPicker;
 // `step` = incrément des boutons + / − UNIQUEMENT (data-step). Le champ lui-même est en step="any" : avec un
 // pas HTML de 0,5 (aliment) ou de 10 (poids), le navigateur refusait 2,3 kg ou 125 g à l'envoi du formulaire
 // (constaté en démo, 2026-09-24) alors que la base accepte les décimales.
-function numberStepperHTML(label, name, { value = 0, min, step = 1 } = {}) {
+// `entier: true` pour un NOMBRE D'ÉLÉMENTS (poissons morts, œufs) : colonne INT en base, donc le champ garde un pas de
+// validation de 1 — sans quoi 2,5 poissons morts ferait échouer l'enregistrement de tout le relevé. `hint` = petite
+// phrase d'aide sous le champ.
+function numberStepperHTML(label, name, { value = 0, min, step = 1, entier = false, hint = '' } = {}) {
   return `
     <label>${label}
       <div class="stepper">
         <button type="button" class="stepper-btn" data-action="dec" aria-label="Diminuer">−</button>
-        <input type="number" name="${name}" value="${value}" ${min !== undefined ? `min="${min}"` : ''} step="any" data-step="${step}" inputmode="decimal" />
+        <input type="number" name="${name}" value="${value}" ${min !== undefined ? `min="${min}"` : ''} step="${entier ? 1 : 'any'}" data-step="${step}" inputmode="${entier ? 'numeric' : 'decimal'}" />
         <button type="button" class="stepper-btn" data-action="inc" aria-label="Augmenter">+</button>
       </div>
+      ${hint ? `<small style="display:block;color:#666;font-size:0.8em;margin-top:2px;font-weight:400">${hint}</small>` : ''}
     </label>
   `;
 }

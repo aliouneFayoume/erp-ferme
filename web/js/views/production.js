@@ -386,7 +386,7 @@ async function openRelevePanel(container, lot) {
         ${numberStepperHTML('Récolte du jour (kg)', 'quantite_recoltee_kg', { step: 0.5, min: 0 })}
       `
       : lot.secteur_nom === 'Avicole'
-      ? `${numberStepperHTML('Œufs collectés (jour)', 'oeufs_collectes', { step: 1, min: 0 })}`
+      ? `${numberStepperHTML('Œufs collectés (jour)', 'oeufs_collectes', { step: 1, min: 0, entier: true })}`
       : '';
 
   panel.innerHTML = `
@@ -431,7 +431,7 @@ async function openRelevePanel(container, lot) {
       ${
         lot.secteur_nom === 'Maraîcher'
           ? ''
-          : `${numberStepperHTML('Mortalité', 'mortalite', { step: 1, min: 0 })}
+          : `${numberStepperHTML('Mortalité', 'mortalite', { step: 1, min: 0, entier: true, hint: "Déduite automatiquement de l'effectif du bassin." })}
       ${numberStepperHTML('Conso. aliment (kg)', 'conso_aliment_kg', { step: 0.5, min: 0 })}
       ${numberStepperHTML('Poids moyen (g)', 'poids_moyen_g', { step: 10, min: 0 })}`
       }

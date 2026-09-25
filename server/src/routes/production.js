@@ -374,6 +374,11 @@ module.exports = function productionRoutes(pool) {
                     throw { statut: 403, message: `Le lot ${releve.lot_id} ne relève pas de votre secteur.` };
                 }
 
+                // Nombres d'éléments (colonnes INT) : ramenés à un entier ≥ 0 plutôt que de laisser PostgreSQL rejeter
+                // « 2.5 » et faire échouer TOUT le lot de relevés — une donnée de terrain ne doit jamais se perdre pour ça.
+                const mortalite = Math.max(0, Math.round(Number(releve.mortalite) || 0));
+                const oeufsCollectes = releve.oeufs_collectes ? Math.max(0, Math.round(Number(releve.oeufs_collectes) || 0)) : null;
+
                 await client.query(
                     `INSERT INTO releves_journaliers
                      (lot_id, utilisateur_id, date_releve, mortalite, conso_aliment_kg, poids_moyen_g, taille_moyenne_cm, temperature_eau, ph_eau, intrants_utilises, quantite_recoltee_kg, oeufs_collectes, notes, est_synchronise)
@@ -382,7 +387,7 @@ module.exports = function productionRoutes(pool) {
                         releve.lot_id,
                         req.user.id,
                         releve.date_releve,
-                        releve.mortalite || 0,
+                        mortalite,
                         releve.conso_aliment_kg || 0,
                         releve.poids_moyen_g || 0,
                         releve.taille_moyenne_cm || null,
@@ -390,15 +395,18 @@ module.exports = function productionRoutes(pool) {
                         releve.ph_eau || null,
                         releve.intrants_utilises || null,
                         releve.quantite_recoltee_kg || null,
-                        releve.oeufs_collectes || null,
+                        oeufsCollectes || null,
                         releve.notes || null,
                     ]
                 );
 
-                if (releve.mortalite > 0) {
+                // La mortalité saisie est déduite de l'effectif du bassin (« effectif actuel »). Jamais en dessous de 0 :
+                // un chiffre de mortalité supérieur à l'effectif (faute de frappe) ne doit ni bloquer le relevé ni rendre
+                // l'effectif négatif. (« + valeur négative » plutôt que « - $1 » : pg-mem inverse le signe de « - $param ».)
+                if (mortalite > 0) {
                     await client.query(
-                        `UPDATE lots_production SET quantite_initiale = quantite_initiale + $1 WHERE id = $2`,
-                        [-releve.mortalite, releve.lot_id]
+                        `UPDATE lots_production SET quantite_initiale = GREATEST(quantite_initiale + $1, 0) WHERE id = $2`,
+                        [-mortalite, releve.lot_id]
                     );
                 }
 
@@ -435,7 +443,7 @@ module.exports = function productionRoutes(pool) {
                 // philosophie best-effort/non-bloquante que la déduction d'aliment ci-dessus. Le reste
                 // non conditionné (< 1 plateau) est reporté sur le secteur pour ne jamais perdre
                 // d'œufs à l'arrondi (45 œufs avec un plateau de 30 = +1 plateau en stock, 15 reportés).
-                if (releve.oeufs_collectes > 0) {
+                if (oeufsCollectes > 0) {
                     const secteurOeufsRes = await client.query(
                         `SELECT s.id AS secteur_id, s.produit_oeufs_id, s.oeufs_par_plateau, s.oeufs_non_conditionnes
                          FROM lots_production l JOIN secteurs s ON s.id = l.secteur_id WHERE l.id = $1`,
@@ -444,7 +452,7 @@ module.exports = function productionRoutes(pool) {
                     const secteurOeufs = secteurOeufsRes.rows[0];
                     if (secteurOeufs?.produit_oeufs_id) {
                         const parPlateau = Number(secteurOeufs.oeufs_par_plateau) || 30;
-                        const totalOeufs = Number(secteurOeufs.oeufs_non_conditionnes || 0) + Number(releve.oeufs_collectes);
+                        const totalOeufs = Number(secteurOeufs.oeufs_non_conditionnes || 0) + oeufsCollectes;
                         const plateauxComplets = Math.floor(totalOeufs / parPlateau);
                         const reste = totalOeufs % parPlateau;
                         if (plateauxComplets > 0) {
