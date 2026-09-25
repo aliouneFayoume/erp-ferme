@@ -14,6 +14,15 @@ async function verifierAccesLot(db, lotId, user) {
     return true;
 }
 
+// Identifiant unique d'un relevé, créé par le navigateur (voir migration-30) : un envoi rejoué (réponse perdue puis
+// file hors ligne, ou formulaire renvoyé) n'est jamais compté deux fois. Un identifiant absent OU mal formé est
+// simplement ignoré (pas de déduplication) plutôt que refusé : la file hors ligne supprime une action refusée en
+// 400, et une donnée de terrain ne doit jamais se perdre à cause d'un identifiant.
+const CLIENT_ID_REGEX = /^[A-Za-z0-9-]{8,64}$/;
+function normaliserClientId(valeur) {
+    return typeof valeur === 'string' && CLIENT_ID_REGEX.test(valeur) ? valeur : null;
+}
+
 // Espèce présente dans un bassin (Piscicole) : texte libre court. Renvoie null (vide/absent), la chaîne nettoyée,
 // ou false si elle est trop longue. Un bassin change d'espèce au gré des déplacements de poissons.
 const ESPECE_MAX = 100;
@@ -366,6 +375,7 @@ module.exports = function productionRoutes(pool) {
         }
 
         const client = req.db;
+        let doublonsIgnores = 0;
         try {
             await client.query('BEGIN');
 
@@ -379,10 +389,24 @@ module.exports = function productionRoutes(pool) {
                 const mortalite = Math.max(0, Math.round(Number(releve.mortalite) || 0));
                 const oeufsCollectes = releve.oeufs_collectes ? Math.max(0, Math.round(Number(releve.oeufs_collectes) || 0)) : null;
 
-                await client.query(
+                // Relevé déjà reçu (même bassin + même identifiant du navigateur) : on saute TOUS ses effets (effectif, stock
+                // d'aliment, œufs), sinon ils seraient comptés deux fois. Vérification explicite d'abord (comportement
+                // identique partout), puis ON CONFLICT DO NOTHING pour le cas de deux envois simultanés : sous PostgreSQL,
+                // le perdant n'obtient alors aucune ligne en retour et est ignoré à son tour.
+                const clientId = normaliserClientId(releve.client_id);
+                if (clientId) {
+                    const dejaRecu = await client.query(`SELECT id FROM releves_journaliers WHERE lot_id = $1 AND client_id = $2`, [releve.lot_id, clientId]);
+                    if (dejaRecu.rows.length > 0) {
+                        doublonsIgnores += 1;
+                        continue;
+                    }
+                }
+                const insertion = await client.query(
                     `INSERT INTO releves_journaliers
-                     (lot_id, utilisateur_id, date_releve, mortalite, conso_aliment_kg, poids_moyen_g, taille_moyenne_cm, temperature_eau, ph_eau, intrants_utilises, quantite_recoltee_kg, oeufs_collectes, notes, est_synchronise)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE)`,
+                     (lot_id, utilisateur_id, date_releve, mortalite, conso_aliment_kg, poids_moyen_g, taille_moyenne_cm, temperature_eau, ph_eau, intrants_utilises, quantite_recoltee_kg, oeufs_collectes, notes, est_synchronise, client_id)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE, $14)
+                     ON CONFLICT (lot_id, client_id) DO NOTHING
+                     RETURNING id`,
                     [
                         releve.lot_id,
                         req.user.id,
@@ -397,8 +421,13 @@ module.exports = function productionRoutes(pool) {
                         releve.quantite_recoltee_kg || null,
                         oeufsCollectes || null,
                         releve.notes || null,
+                        clientId,
                     ]
                 );
+                if (insertion.rows.length === 0) {
+                    doublonsIgnores += 1;
+                    continue;
+                }
 
                 // La mortalité saisie est déduite de l'effectif du bassin (« effectif actuel »). Jamais en dessous de 0 :
                 // un chiffre de mortalité supérieur à l'effectif (faute de frappe) ne doit ni bloquer le relevé ni rendre
@@ -468,7 +497,13 @@ module.exports = function productionRoutes(pool) {
 
             await client.query('COMMIT');
             await logAudit(req.db, { req, table: 'releves_journaliers', action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { count: releves.length } });
-            res.status(200).json({ message: `${releves.length} relevé(s) synchronisé(s) avec succès.` });
+            res.status(200).json({
+                message:
+                    doublonsIgnores > 0
+                        ? `${releves.length} relevé(s) traité(s) dont ${doublonsIgnores} déjà reçu(s) (ignoré(s), aucun doublon créé).`
+                        : `${releves.length} relevé(s) synchronisé(s) avec succès.`,
+                doublons_ignores: doublonsIgnores,
+            });
         } catch (err) {
             await client.query('ROLLBACK');
             if (err.statut) return res.status(err.statut).json({ erreur: err.message });

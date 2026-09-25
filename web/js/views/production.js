@@ -139,6 +139,14 @@ window.Views.production = {
   },
 };
 
+// Identifiant unique d'un relevé (voir POST /production/sync). crypto.randomUUID n'existe que dans un contexte sécurisé
+// (https) : repli sur un identifiant aléatoire pour ne jamais bloquer la saisie.
+function nouvelIdReleve() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+  const hex = () => Math.floor(Math.random() * 0x100000000).toString(16).padStart(8, '0');
+  return `${hex()}-${hex()}-${hex()}-${Date.now().toString(16)}`;
+}
+
 // Piscicole = le secteur « Piscicole » lui-même ou un de ses sous-secteurs (Éclosion, Élevage larvaire, Prégrossissement…).
 const estPiscicole = (nom, nomParent) => nom === 'Piscicole' || nomParent === 'Piscicole';
 
@@ -491,10 +499,16 @@ async function openRelevePanel(container, lot) {
   const formReleve = panel.querySelector('#form-releve');
   if (!formReleve) return;
 
+  // Identifiant unique de CE relevé, créé une seule fois par formulaire et conservé tant qu'il n'est pas envoyé avec
+  // succès : si la réponse se perd et que l'on renvoie (ou que la file hors ligne rejoue), le serveur reconnaît le
+  // relevé et ne le compte pas deux fois (mortalité, aliment, œufs). Un nouveau relevé reçoit un nouvel identifiant.
+  let idReleve = nouvelIdReleve();
+
   formReleve.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const releve = {
+      client_id: idReleve,
       lot_id: lot.id,
       date_releve: fd.get('date_releve'),
       mortalite: Number(fd.get('mortalite') || 0),
@@ -520,6 +534,7 @@ async function openRelevePanel(container, lot) {
       showToast('Hors-ligne : relevé mis en file (IndexedDB). Il sera synchronisé au retour du réseau.', 'warn');
       await updateOfflineBanner(container);
       e.target.reset();
+      idReleve = nouvelIdReleve(); // le relevé en file garde SON identifiant ; le suivant en aura un autre
       return;
     }
 

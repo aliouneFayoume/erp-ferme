@@ -243,8 +243,10 @@ CREATE TABLE releves_journaliers (
     oeufs_collectes INT, -- Avicole : ramassage du jour (converti en plateaux, voir secteurs.produit_oeufs_id)
     notes TEXT,
     est_synchronise BOOLEAN DEFAULT TRUE, -- Essentiel pour la PWA (gestion offline)
+    client_id VARCHAR(64), -- identifiant unique créé par le navigateur : un envoi rejoué n'est jamais compté deux fois (migration-30)
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE UNIQUE INDEX uq_releves_lot_client ON releves_journaliers (lot_id, client_id);
 
 -- --------------------------------------------------------
 -- 3bis. ÉLEVAGE INDIVIDUEL (bovins/ovins/caprins) — suivi animal par animal, pas par lot
