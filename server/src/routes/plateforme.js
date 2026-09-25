@@ -487,8 +487,11 @@ module.exports = function plateformeRoutes(pool) {
         try {
             const tenantId = req.params.id;
             const { modulesActifs, montantMensuel, fraisConfiguration, actif, telephoneContact } = req.body;
-            if (!Array.isArray(modulesActifs) || !(Number(montantMensuel) > 0)) {
-                return res.status(400).json({ erreur: 'Modules actifs et montant mensuel (positif) sont requis.' });
+            // 0 = ferme partenaire gratuite (aucune facture d'abonnement générée, voir /factures-saas/generer) ;
+            // seuls un montant absent, non numérique ou négatif sont refusés.
+            const montantValide = montantMensuel !== undefined && montantMensuel !== null && montantMensuel !== '' && Number.isFinite(Number(montantMensuel)) && Number(montantMensuel) >= 0;
+            if (!Array.isArray(modulesActifs) || !montantValide) {
+                return res.status(400).json({ erreur: 'Modules actifs et montant mensuel (0 ou plus) sont requis.' });
             }
 
             const existant = await req.db.query(`SELECT tenant_id, frais_configuration_facture FROM organisation_abonnement_saas WHERE tenant_id = $1`, [tenantId]);
@@ -557,11 +560,12 @@ module.exports = function plateformeRoutes(pool) {
     router.post('/factures-saas/generer', ...garde, async (req, res) => {
         try {
             const periode = new Date().toISOString().slice(0, 7);
-            // Une ferme supprimée (deleted_at) n'est plus facturée, même si sa ligne d'abonnement est restée active.
+            // Une ferme supprimée (deleted_at) n'est plus facturée, même si sa ligne d'abonnement est restée active ;
+            // une ferme à 0 FCFA/mois (partenaire gratuite) n'a aucune facture d'abonnement.
             const abonnements = await req.db.query(
                 `SELECT a.tenant_id, a.montant_mensuel FROM organisation_abonnement_saas a
                  JOIN organisations o ON o.id = a.tenant_id
-                 WHERE a.actif = TRUE AND o.deleted_at IS NULL`
+                 WHERE a.actif = TRUE AND o.deleted_at IS NULL AND a.montant_mensuel > 0`
             );
 
             const resultats = { creees: 0, deja_generees: 0 };

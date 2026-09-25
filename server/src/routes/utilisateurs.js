@@ -77,8 +77,13 @@ module.exports = function utilisateursRoutes(pool) {
             });
             res.status(201).json({ ...result.rows[0], role });
         } catch (err) {
+            // 23505 = violation d'unicité PostgreSQL : l'email est unique sur TOUTE la plateforme (toutes fermes
+            // confondues, comptes supprimés ou de test inclus) — le dire clairement, ce n'est pas une panne.
+            if (err.code === '23505') {
+                return res.status(409).json({ erreur: 'Cette adresse email est déjà utilisée sur Massla (une adresse ne peut servir qu’une seule fois, toutes fermes confondues). Utilisez-en une autre.' });
+            }
             console.error(err);
-            res.status(500).json({ erreur: 'Erreur lors de la création (email déjà utilisé ?).' });
+            res.status(500).json({ erreur: 'Erreur lors de la création de l’utilisateur.' });
         }
     });
 
@@ -118,8 +123,11 @@ module.exports = function utilisateursRoutes(pool) {
             await logAudit(req.db, { req, table: 'utilisateurs', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { nom_complet, email, role, secteur_id, actif } });
             res.json({ ...result.rows[0], role });
         } catch (err) {
+            if (err.code === '23505') {
+                return res.status(409).json({ erreur: 'Cette adresse email est déjà utilisée sur Massla (une adresse ne peut servir qu’une seule fois, toutes fermes confondues). Utilisez-en une autre.' });
+            }
             console.error(err);
-            res.status(500).json({ erreur: 'Erreur lors de la mise à jour (email déjà utilisé ?).' });
+            res.status(500).json({ erreur: 'Erreur lors de la mise à jour de l’utilisateur.' });
         }
     });
 

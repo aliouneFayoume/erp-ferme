@@ -189,7 +189,7 @@ function renderLignesActivite(fermes) {
       const st = ACTIVITE_STATUT[f.statut];
       const abo = f.abonnement
         ? f.abonnement.actif
-          ? `<span class="badge ok">Tarif : ${fmt(f.abonnement.montant_mensuel)} FCFA/mois</span>`
+          ? `<span class="badge ok">${Number(f.abonnement.montant_mensuel) === 0 ? 'Gratuit (partenaire)' : `Tarif : ${fmt(f.abonnement.montant_mensuel)} FCFA/mois`}</span>`
           : '<span class="badge danger">Abonnement suspendu</span>'
         : '<span class="badge muted">Sans abonnement</span>';
       const principales = f.principales_saisies_7j.length
@@ -664,7 +664,7 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
               .join('')}
           </div>
           <label>Montant mensuel négocié (FCFA)
-            <input type="number" name="montantMensuel" min="1" required value="${abonnement?.montant_mensuel || ''}" />
+            <input type="number" name="montantMensuel" min="0" required value="${abonnement?.montant_mensuel ?? ''}" />
           </label>
           ${
             dejaConfigure

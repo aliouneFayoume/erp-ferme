@@ -310,6 +310,36 @@ describe('plateforme — facturation SaaS', () => {
         expect(facturesApres.rows).toHaveLength(1);
     });
 
+    test('un abonnement à 0 FCFA (ferme partenaire gratuite) est accepté, sans facture de mise en route, et jamais facturé chaque mois', async () => {
+        const res = await request(app)
+            .put(`/api/plateforme/organisations/${tenantB}/abonnement-saas`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ modulesActifs: ['pack_tout_compris'], montantMensuel: 0, fraisConfiguration: 0 });
+        expect(res.status).toBe(200);
+        expect(Number(res.body.montant_mensuel)).toBe(0);
+        await request(app)
+            .put(`/api/plateforme/organisations/${tenantA}/abonnement-saas`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ modulesActifs: ['finance'], montantMensuel: 40000 });
+
+        const gen = await request(app).post('/api/plateforme/factures-saas/generer').set('Authorization', `Bearer ${tokenSuperviseur}`);
+
+        expect(gen.body.creees).toBe(1); // seule la ferme payante est facturée
+        const factures = await pool.query(`SELECT tenant_id FROM factures_saas`);
+        expect(factures.rows.map((r) => r.tenant_id)).toEqual([tenantA]);
+    });
+
+    test.each([[-1], [''], [null], ['abc'], [undefined]])('un montant mensuel invalide (%p) est refusé', async (montant) => {
+        const res = await request(app)
+            .put(`/api/plateforme/organisations/${tenantB}/abonnement-saas`)
+            .set('Authorization', `Bearer ${tokenSuperviseur}`)
+            .send({ modulesActifs: ['finance'], montantMensuel: montant });
+
+        expect(res.status).toBe(400);
+        const lignes = await pool.query(`SELECT * FROM organisation_abonnement_saas WHERE tenant_id = $1`, [tenantB]);
+        expect(lignes.rows).toHaveLength(0);
+    });
+
     test('générer les factures du mois ignore une ferme supprimée, même si son abonnement est resté actif', async () => {
         await request(app)
             .put(`/api/plateforme/organisations/${tenantA}/abonnement-saas`)
