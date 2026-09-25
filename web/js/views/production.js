@@ -257,8 +257,8 @@ async function openRelevePanel(container, lot) {
     lot.secteur_nom === 'Piscicole'
       ? `
         ${numberStepperHTML('Taille moyenne (cm)', 'taille_moyenne_cm', { step: 0.5, min: 0 })}
-        <label>Température eau (°C)<input type="number" step="0.1" name="temperature_eau" /></label>
-        <label>pH eau<input type="number" step="0.1" name="ph_eau" /></label>
+        <label>Température eau (°C)<input type="number" step="any" inputmode="decimal" name="temperature_eau" /></label>
+        <label>pH eau<input type="number" step="any" inputmode="decimal" name="ph_eau" /></label>
       `
       : lot.secteur_nom === 'Maraîcher'
       ? `

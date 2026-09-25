@@ -314,12 +314,15 @@ window.MapPicker = MapPicker;
 
 // Champ numérique avec boutons +/- (saisie terrain au doigt : mortalité, aliment, récolte...).
 // L'input reste éditable au clavier normalement ; les boutons ne font que le nudger.
+// `step` = incrément des boutons + / − UNIQUEMENT (data-step). Le champ lui-même est en step="any" : avec un
+// pas HTML de 0,5 (aliment) ou de 10 (poids), le navigateur refusait 2,3 kg ou 125 g à l'envoi du formulaire
+// (constaté en démo, 2026-09-24) alors que la base accepte les décimales.
 function numberStepperHTML(label, name, { value = 0, min, step = 1 } = {}) {
   return `
     <label>${label}
       <div class="stepper">
         <button type="button" class="stepper-btn" data-action="dec" aria-label="Diminuer">−</button>
-        <input type="number" name="${name}" value="${value}" ${min !== undefined ? `min="${min}"` : ''} step="${step}" inputmode="decimal" />
+        <input type="number" name="${name}" value="${value}" ${min !== undefined ? `min="${min}"` : ''} step="any" data-step="${step}" inputmode="decimal" />
         <button type="button" class="stepper-btn" data-action="inc" aria-label="Augmenter">+</button>
       </div>
     </label>
@@ -331,12 +334,15 @@ document.addEventListener('click', (e) => {
   const btn = e.target.closest('.stepper-btn');
   if (!btn) return;
   const input = btn.closest('.stepper').querySelector('input');
-  const step = Number(input.step) || 1;
+  const step = Number(input.dataset.step) || 1;
   const min = input.min !== '' ? Number(input.min) : -Infinity;
-  let val = (Number(input.value) || 0) + (btn.dataset.action === 'inc' ? step : -step);
+  const courant = Number(input.value) || 0;
+  let val = courant + (btn.dataset.action === 'inc' ? step : -step);
   if (val < min) val = min;
-  const decimals = (String(step).split('.')[1] || '').length;
-  input.value = decimals ? val.toFixed(decimals) : String(val);
+  // Garde les décimales déjà saisies (2,35 + 0,5 = 2,85, pas 2,9) : on arrondit seulement le bruit flottant.
+  const decimalesDe = (n) => (String(n).split('.')[1] || '').length;
+  const decimals = Math.min(3, Math.max(decimalesDe(step), decimalesDe(courant)));
+  input.value = decimals ? String(Number(val.toFixed(decimals))) : String(val);
   input.dispatchEvent(new Event('input', { bubbles: true }));
 });
 

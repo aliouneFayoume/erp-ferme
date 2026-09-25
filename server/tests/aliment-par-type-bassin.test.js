@@ -123,6 +123,27 @@ describe('intrants — un aliment par type de bassin (sous-secteurs)', () => {
         expect(await stock(demarrage)).toBe(100);
     });
 
+    // Constaté en démo (2026-09-24) : le formulaire refusait 2,3 kg d'aliment ou 125 g de poids. La base et la
+    // déduction de stock, elles, gèrent très bien les décimales — ce test verrouille ce comportement.
+    test('les décimales (0,25 kg d’aliment, 3,5 g, 24,35 °C, pH 7,25) sont enregistrées et déduites exactement', async () => {
+        const aliment = await creerAliment('Aliment fin', 10);
+        await lierAliment(eclosion, aliment);
+        const lot = await creerLot(eclosion, 'ECL-09');
+
+        const res = await sync([
+            { lot_id: lot, date_releve: '2026-09-22', conso_aliment_kg: 0.25, poids_moyen_g: 3.5, taille_moyenne_cm: 4.25, temperature_eau: 24.35, ph_eau: 7.25 },
+        ]);
+
+        expect(res.status).toBe(200);
+        expect(await stock(aliment)).toBe(9.75);
+        const releve = (await pool.query(`SELECT * FROM releves_journaliers WHERE lot_id = $1`, [lot])).rows[0];
+        expect(Number(releve.conso_aliment_kg)).toBe(0.25);
+        expect(Number(releve.poids_moyen_g)).toBe(3.5);
+        expect(Number(releve.taille_moyenne_cm)).toBe(4.25);
+        expect(Number(releve.temperature_eau)).toBe(24.35);
+        expect(Number(releve.ph_eau)).toBe(7.25);
+    });
+
     test("l'historique d'un aliment indique le bassin et son type de bassin", async () => {
         const demarrage = await creerAliment('Aliment démarrage', 100);
         await lierAliment(eclosion, demarrage);
