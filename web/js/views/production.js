@@ -95,10 +95,17 @@ window.Views.production = {
         <div class="card-list" id="lots-clotures-list"></div>
       </div>
 
+      <div class="panel hidden" id="panel-mouvements">
+        <h2>Déplacements de poissons</h2>
+        <p class="desc">Historique des passages d'un bassin à l'autre (les plus récents d'abord). Utilisez « Déplacer des poissons » sur la carte d'un bassin pour en ajouter un.</p>
+        <div id="mouvements-list"></div>
+      </div>
+
       <div class="panel hidden" id="releve-panel"></div>
     `;
 
     renderLotsList(container, lots);
+    chargerMouvements(container, lots);
 
     container.querySelector('#select-secteur-lot').addEventListener('change', (e) => {
       const nom = e.target.selectedOptions[0]?.dataset.nom;
@@ -168,6 +175,7 @@ function renderLotsList(container, lots) {
           <div class="code" style="margin-top:8px">${esc(l.code_lot)}${l.culture ? ` — ${esc(l.culture)}` : ''}</div>
           <div class="meta">Démarré le ${fmtDate(l.date_demarrage)} · ${esc(l.statut)}</div>
           <div class="kpi"><span>${l.secteur_nom === 'Maraîcher' ? 'Nombre de plants' : 'Effectif actuel'}</span><b>${fmt(l.quantite_initiale)}</b></div>
+          ${estPiscicole(l.secteur_nom, l.secteur_parent_nom) && Number(l.quantite_initiale) === 0 ? '<div class="kpi"><span>État</span><b><span class="badge muted">Bassin vide</span></b></div>' : ''}
           ${l.espece ? `<div class="kpi"><span>Espèce</span><b>${esc(l.espece)}</b></div>` : ''}
           ${badgeRecolte}
           <button class="secondary" style="margin-top:10px;width:100%" data-lot='${lotDataAttr(l)}'>
@@ -176,6 +184,11 @@ function renderLotsList(container, lots) {
           <button class="secondary btn-modifier-lot" style="margin-top:6px;width:100%" data-lot-id="${l.id}" data-quantite="${l.quantite_initiale}" data-date="${l.date_demarrage ? String(l.date_demarrage).slice(0, 10) : ''}" data-espece="${esc(l.espece || '')}" data-piscicole="${estPiscicole(l.secteur_nom, l.secteur_parent_nom) ? '1' : ''}">
             Modifier
           </button>
+          ${
+            estPiscicole(l.secteur_nom, l.secteur_parent_nom)
+              ? `<button class="secondary btn-deplacer-lot" style="margin-top:6px;width:100%" data-lot-id="${l.id}">Déplacer des poissons</button>`
+              : ''
+          }
           <div style="margin-top:8px;display:flex;gap:6px">
             <select class="select-cloture" data-lot-id="${l.id}" style="flex:1">
               ${optionFin}
@@ -233,6 +246,10 @@ function renderLotsList(container, lots) {
     });
   });
 
+  container.querySelectorAll('button.btn-deplacer-lot').forEach((btn) => {
+    btn.addEventListener('click', () => ouvrirDeplacement(container, lots, Number(btn.dataset.lotId)));
+  });
+
   container.querySelectorAll('button.btn-cloturer').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const select = container.querySelector(`.select-cloture[data-lot-id="${btn.dataset.lotId}"]`);
@@ -249,6 +266,90 @@ function renderLotsList(container, lots) {
       }
     });
   });
+}
+
+const poissons = (n) => `${fmt(n)} poisson${Number(n) > 1 ? 's' : ''}`;
+
+// « Déplacer des poissons » : d'un bassin (la carte cliquée) vers un autre bassin piscicole en cours. Les bassins
+// gardent leur type ; ce sont les poissons — et leur espèce — qui changent de bassin.
+async function ouvrirDeplacement(container, lots, sourceId) {
+  const source = lots.find((l) => l.id === sourceId);
+  if (!source) return;
+  const effectif = Number(source.quantite_initiale) || 0;
+  if (effectif <= 0) {
+    showToast(`Le bassin ${source.code_lot} est vide : il n'y a aucun poisson à déplacer.`, 'error');
+    return;
+  }
+  const destinations = lots
+    .filter((l) => l.id !== sourceId && l.statut === 'EN_COURS' && estPiscicole(l.secteur_nom, l.secteur_parent_nom))
+    .sort((a, b) => String(a.code_lot).localeCompare(String(b.code_lot), 'fr', { numeric: true }));
+  if (destinations.length === 0) {
+    showToast("Aucun autre bassin piscicole en cours : créez d'abord le bassin d'arrivée.", 'error');
+    return;
+  }
+  const values = await Modal.open(`Déplacer des poissons depuis ${esc(source.code_lot)}${source.espece ? ` (${esc(source.espece)})` : ''}`, [
+    {
+      name: 'lot_destination_id',
+      label: "Bassin d'arrivée",
+      type: 'select',
+      options: destinations.map((l) => ({
+        value: l.id,
+        label: `${esc(l.code_lot)} · ${esc(l.secteur_nom)} · ${Number(l.quantite_initiale) > 0 ? `${poissons(l.quantite_initiale)}${l.espece ? ` ${esc(l.espece)}` : ''}` : 'vide'}`,
+      })),
+    },
+    { name: 'quantite', label: `Nombre de poissons déplacés (maximum ${fmt(effectif)})`, type: 'number', value: String(effectif) },
+    { name: 'date_mouvement', label: 'Date du déplacement', type: 'date', value: new Date().toISOString().slice(0, 10) },
+    { name: 'notes', label: 'Note (facultatif)', type: 'text', value: '' },
+  ]);
+  if (!values) return;
+  try {
+    const res = await Api.post('/production/mouvements', {
+      lot_source_id: sourceId,
+      lot_destination_id: Number(values.lot_destination_id),
+      quantite: Number(values.quantite),
+      date_mouvement: values.date_mouvement || undefined,
+      notes: values.notes || undefined,
+    });
+    showToast(`${poissons(res.mouvement.quantite)} déplacé${Number(res.mouvement.quantite) > 1 ? 's' : ''} de ${res.source.code_lot} vers ${res.destination.code_lot}.`, 'success');
+    if (res.avertissement) showToast(res.avertissement, 'error');
+    window.Views.production.render(container);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// Historique des déplacements : affiché seulement s'il existe des bassins piscicoles ou des mouvements.
+async function chargerMouvements(container, lots) {
+  const panel = container.querySelector('#panel-mouvements');
+  const zone = container.querySelector('#mouvements-list');
+  if (!panel || !zone) return;
+  const aDesBassins = lots.some((l) => estPiscicole(l.secteur_nom, l.secteur_parent_nom));
+  let mouvements = [];
+  try {
+    mouvements = await Api.get('/production/mouvements?limit=30');
+  } catch (err) {
+    mouvements = [];
+  }
+  if (!aDesBassins && mouvements.length === 0) return;
+  panel.classList.remove('hidden');
+  zone.innerHTML = mouvements.length
+    ? `<table>
+        <thead><tr><th>Date</th><th>De</th><th>Vers</th><th class="num">Poissons</th><th>Espèce</th><th>Note</th><th>Par</th></tr></thead>
+        <tbody>${mouvements
+          .map(
+            (m) => `<tr>
+          <td>${fmtDate(m.date_mouvement)}</td>
+          <td>${esc(m.source_code)} <span class="desc">(${esc(m.source_secteur)})</span></td>
+          <td>${esc(m.destination_code)} <span class="desc">(${esc(m.destination_secteur)})</span></td>
+          <td class="num">${fmt(m.quantite)}</td>
+          <td>${esc(m.espece || '-')}</td>
+          <td>${esc(m.notes || '')}</td>
+          <td>${esc(m.auteur || '')}</td>
+        </tr>`
+          )
+          .join('')}</tbody>
+      </table>`
+    : '<div class="empty">Aucun déplacement enregistré.</div>';
 }
 
 async function openRelevePanel(container, lot) {

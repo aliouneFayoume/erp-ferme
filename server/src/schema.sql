@@ -211,6 +211,22 @@ CREATE TABLE lots_production (
     UNIQUE (tenant_id, code_lot)
 );
 
+-- Déplacements de poissons entre bassins (voir migration-29) : historique des mouvements.
+CREATE TABLE mouvements_bassins (
+    id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
+    lot_source_id INT NOT NULL REFERENCES lots_production(id),
+    lot_destination_id INT NOT NULL REFERENCES lots_production(id),
+    quantite INT NOT NULL CHECK (quantite > 0),
+    espece VARCHAR(100),
+    date_mouvement DATE NOT NULL,
+    effectif_source_apres INT NOT NULL,
+    effectif_destination_apres INT NOT NULL,
+    notes TEXT,
+    cree_par INT REFERENCES utilisateurs(id),
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE releves_journaliers (
     id SERIAL PRIMARY KEY,
     lot_id INT REFERENCES lots_production(id),

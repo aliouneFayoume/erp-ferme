@@ -181,6 +181,148 @@ module.exports = function productionRoutes(pool) {
         }
     });
 
+    /**
+     * Déplacement de poissons d'un bassin à un autre (retour de Clovis, 2026-09-24 : les bassins gardent leur type,
+     * ce sont les poissons qui passent d'éclosion à élevage larvaire puis prégrossissement). Ajuste l'effectif des
+     * deux bassins (lots_production.quantite_initiale = « effectif actuel ») et l'espèce, puis journalise le
+     * mouvement (mouvements_bassins). Toutes les vérifications passent AVANT la première écriture.
+     *  - l'espèce suit les poissons : un bassin d'arrivée vide (ou sans espèce) prend celle du bassin de départ ;
+     *    un bassin de départ vidé n'a plus d'espèce ;
+     *  - un bassin d'arrivée qui contient déjà une AUTRE espèce la garde et la réponse porte un `avertissement`
+     *    (mélange possible mais rarement voulu) — le mouvement est enregistré avec l'espèce déplacée.
+     */
+    router.post('/mouvements', requireAuth(pool), checkRole(['chef_prod']), async (req, res) => {
+        const sourceId = Number(req.body.lot_source_id);
+        const destinationId = Number(req.body.lot_destination_id);
+        const quantite = Number(req.body.quantite);
+        const notes = req.body.notes === undefined || req.body.notes === null ? null : String(req.body.notes).trim() || null;
+        const dateMouvement = req.body.date_mouvement || new Date().toISOString().slice(0, 10);
+
+        if (!Number.isInteger(sourceId) || !Number.isInteger(destinationId) || sourceId <= 0 || destinationId <= 0) {
+            return res.status(400).json({ erreur: "Le bassin de départ et le bassin d'arrivée sont requis." });
+        }
+        if (sourceId === destinationId) {
+            return res.status(400).json({ erreur: "Le bassin d'arrivée doit être différent du bassin de départ." });
+        }
+        if (!Number.isInteger(quantite) || quantite <= 0) {
+            return res.status(400).json({ erreur: 'Le nombre de poissons déplacés doit être un entier positif.' });
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateMouvement))) {
+            return res.status(400).json({ erreur: 'Date de déplacement invalide.' });
+        }
+        if (notes && notes.length > 500) {
+            return res.status(400).json({ erreur: 'La note ne peut pas dépasser 500 caractères.' });
+        }
+        if (!(await verifierAccesLot(req.db, sourceId, req.user)) || !(await verifierAccesLot(req.db, destinationId, req.user))) {
+            return res.status(403).json({ erreur: 'Ces bassins ne relèvent pas de votre secteur (ou sont introuvables).' });
+        }
+
+        const client = req.db;
+        try {
+            await client.query('BEGIN');
+            // Verrou dans l'ordre des identifiants : deux déplacements croisés (A→B et B→A) ne peuvent pas se bloquer.
+            const lots = await client.query(
+                `SELECT id, code_lot, quantite_initiale, espece, statut FROM lots_production
+                 WHERE id IN ($1, $2) AND tenant_id = $3 AND deleted_at IS NULL ORDER BY id FOR UPDATE`,
+                [sourceId, destinationId, req.user.tenant_id]
+            );
+            if (lots.rows.length !== 2) {
+                await client.query('ROLLBACK');
+                return res.status(404).json({ erreur: 'Bassin introuvable.' });
+            }
+            const source = lots.rows.find((l) => Number(l.id) === sourceId);
+            const destination = lots.rows.find((l) => Number(l.id) === destinationId);
+
+            if (source.statut !== 'EN_COURS' || destination.statut !== 'EN_COURS') {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ erreur: 'Un bassin clôturé ne peut ni donner ni recevoir de poissons.' });
+            }
+            const effectifSource = Number(source.quantite_initiale);
+            const effectifDestination = Number(destination.quantite_initiale);
+            if (quantite > effectifSource) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ erreur: `Le bassin ${source.code_lot} ne contient que ${effectifSource} poisson(s) : impossible d'en déplacer ${quantite}.` });
+            }
+
+            const nouvelEffectifSource = effectifSource - quantite;
+            const nouvelEffectifDestination = effectifDestination + quantite;
+            const especeDeplacee = source.espece || null;
+            const especeSource = nouvelEffectifSource === 0 ? null : source.espece || null;
+            let especeDestination = destination.espece || null;
+            let avertissement = null;
+            if (effectifDestination === 0 || !especeDestination) {
+                especeDestination = especeDeplacee || especeDestination;
+            } else if (especeDeplacee && especeDeplacee.toLowerCase() !== especeDestination.toLowerCase()) {
+                avertissement = `Le bassin ${destination.code_lot} contenait déjà de l'espèce « ${especeDestination} » : elle est conservée alors que vous y avez ajouté « ${especeDeplacee} ».`;
+            }
+
+            await client.query(`UPDATE lots_production SET quantite_initiale = $1, espece = $2 WHERE id = $3`, [nouvelEffectifSource, especeSource, source.id]);
+            await client.query(`UPDATE lots_production SET quantite_initiale = $1, espece = $2 WHERE id = $3`, [nouvelEffectifDestination, especeDestination, destination.id]);
+            const mouvement = await client.query(
+                `INSERT INTO mouvements_bassins (tenant_id, lot_source_id, lot_destination_id, quantite, espece, date_mouvement, effectif_source_apres, effectif_destination_apres, notes, cree_par)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+                [req.user.tenant_id, source.id, destination.id, quantite, especeDeplacee, dateMouvement, nouvelEffectifSource, nouvelEffectifDestination, notes, req.user.id]
+            );
+            await client.query('COMMIT');
+
+            await logAudit(req.db, {
+                req,
+                table: 'mouvements_bassins',
+                rowId: mouvement.rows[0].id,
+                action: 'CREATE',
+                userId: req.user.id,
+                tenantId: req.user.tenant_id,
+                details: { de: source.code_lot, vers: destination.code_lot, quantite, espece: especeDeplacee, date: dateMouvement },
+            });
+            res.status(201).json({
+                mouvement: mouvement.rows[0],
+                source: { id: source.id, code_lot: source.code_lot, quantite: nouvelEffectifSource, espece: especeSource },
+                destination: { id: destination.id, code_lot: destination.code_lot, quantite: nouvelEffectifDestination, espece: especeDestination },
+                avertissement,
+            });
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => {});
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors du déplacement des poissons.' });
+        }
+    });
+
+    // Historique des déplacements (les plus récents d'abord). Un chef de prod ne voit que ceux qui touchent son secteur.
+    router.get('/mouvements', requireAuth(pool), async (req, res) => {
+        try {
+            const limite = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+            const params = [req.user.tenant_id];
+            let where = 'm.tenant_id = $1';
+            if (req.user.role === 'chef_prod' && req.user.secteur_id) {
+                params.push(req.user.secteur_id);
+                where += ` AND (ls.secteur_id = $${params.length} OR ld.secteur_id = $${params.length})`;
+            }
+            if (req.query.lot_id) {
+                params.push(Number(req.query.lot_id));
+                where += ` AND (m.lot_source_id = $${params.length} OR m.lot_destination_id = $${params.length})`;
+            }
+            params.push(limite);
+            const result = await req.db.query(
+                `SELECT m.*, ls.code_lot AS source_code, ld.code_lot AS destination_code,
+                        ss.nom AS source_secteur, sd.nom AS destination_secteur, u.nom_complet AS auteur
+                 FROM mouvements_bassins m
+                 JOIN lots_production ls ON ls.id = m.lot_source_id
+                 JOIN lots_production ld ON ld.id = m.lot_destination_id
+                 JOIN secteurs ss ON ss.id = ls.secteur_id
+                 JOIN secteurs sd ON sd.id = ld.secteur_id
+                 LEFT JOIN utilisateurs u ON u.id = m.cree_par
+                 WHERE ${where}
+                 ORDER BY m.date_mouvement DESC, m.id DESC
+                 LIMIT $${params.length}`,
+                params
+            );
+            res.json(result.rows);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: "Erreur lors de la récupération de l'historique des déplacements." });
+        }
+    });
+
     router.get('/releves', requireAuth(pool), async (req, res) => {
         const { lot_id } = req.query;
 
