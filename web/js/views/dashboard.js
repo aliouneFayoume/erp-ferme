@@ -15,15 +15,15 @@ window.Views.dashboard = {
     container.innerHTML = `
       ${
         alertes.length
-          ? `<div class="panel alert-panel">
-              <h2>⚠ Alertes</h2>
+          ? `<div class="panel alert-panel" role="status">
+              <h2>Alertes</h2>
               <ul class="alert-list">${alertes.map((a) => `<li>${esc(a)}</li>`).join('')}</ul>
             </div>`
           : ''
       }
 
       <div class="grid-stats">
-        ${statCard("Chiffre d'affaires du jour", `${fmt(stats.chiffreAffairesJour)} FCFA`)}
+        ${statCard("Chiffre d'affaires du jour", `${fmt(stats.chiffreAffairesJour)} FCFA`, null, false, true)}
         ${statCard('Commandes B2C du jour', stats.commandesB2C)}
         ${statCard('Stock total disponible', fmt(stats.stockTotal), 'tous secteurs, toutes unités confondues')}
         ${statCard('Encours B2B total', `${fmt(stats.encoursB2B)} FCFA`, 'crédit accordé aux pros')}
@@ -53,11 +53,15 @@ window.Views.dashboard = {
   },
 };
 
-function statCard(label, value, sub, attention) {
+// attention : valeur à surveiller (filet vert vif) ; brand : l'indicateur principal de l'écran, fond Sahel (un seul).
+// L'unité en fin de valeur ("88 600 FCFA") passe en plus petit, comme dans le kit.
+function statCard(label, value, sub, attention, brand) {
+  const m = typeof value === 'string' ? value.match(/^(.*\d)\s+([A-Za-zÀ-ÿ%]+)$/) : null;
+  const valeur = m ? `${m[1]}<span class="unit">${m[2]}</span>` : value;
   return `
-    <div class="stat-card${attention ? ' attention' : ''}">
+    <div class="stat-card${attention ? ' attention' : ''}${brand ? ' brand' : ''}">
       <div class="label">${label}</div>
-      <div class="value">${value}</div>
+      <div class="value">${valeur}</div>
       ${sub ? `<div class="sub">${sub}</div>` : ''}
     </div>
   `;

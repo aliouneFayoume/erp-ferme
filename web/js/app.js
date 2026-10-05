@@ -205,6 +205,43 @@ function jetonCss(nom) {
 }
 window.jetonCss = jetonCss;
 
+// Améliorations d'accessibilité appliquées à tout ce que les vues injectent dans la page (sans toucher
+// à chaque vue) : clavier adapté aux champs numériques et téléphone (kit : tel / numeric / decimal),
+// libellé de colonne sur chaque cellule de tableau (sert à l'affichage en cartes sur téléphone) et
+// alignement à droite des en-têtes de colonnes numériques.
+function ameliorerChamps(racine) {
+  racine.querySelectorAll('input:not([inputmode])').forEach((champ) => {
+    const nom = `${champ.name || ''} ${champ.id || ''}`;
+    if (champ.type === 'tel' || /(^|[\s_-])(tel|telephone|phone|whatsapp)/i.test(nom)) champ.setAttribute('inputmode', 'tel');
+    else if (champ.type === 'number') {
+      const decimal = champ.step === 'any' || (champ.step && Number(champ.step) % 1 !== 0) || /prix|montant|tarif|taux/i.test(nom);
+      champ.setAttribute('inputmode', decimal ? 'decimal' : 'numeric');
+    }
+  });
+}
+function ameliorerTableaux(racine) {
+  // idempotent : peut être rejoué quand des lignes sont ajoutées après coup à un tableau existant
+  const tableaux = new Set(racine.querySelectorAll('table'));
+  const parent = racine.closest('table');
+  if (parent) tableaux.add(parent);
+  tableaux.forEach((tableau) => {
+    const entetes = [...tableau.querySelectorAll('thead th')];
+    if (!entetes.length) return;
+    const lignes = [...tableau.querySelectorAll('tbody tr')].map((tr) => [...tr.children]).filter((c) => c.length === entetes.length && !c.some((td) => td.colSpan > 1));
+    lignes.forEach((cellules) => cellules.forEach((td, i) => td.setAttribute('data-label', entetes[i].textContent.trim())));
+    entetes.forEach((th, i) => {
+      if (lignes.length && lignes.every((cellules) => cellules[i].classList.contains('num'))) th.classList.add('num');
+    });
+  });
+}
+function ameliorerPage(racine) {
+  if (racine.nodeType !== 1) return;
+  ameliorerChamps(racine);
+  ameliorerTableaux(racine);
+}
+new MutationObserver((mutations) => mutations.forEach((m) => m.addedNodes.forEach(ameliorerPage))).observe(document.body, { childList: true, subtree: true });
+ameliorerPage(document.body);
+
 // Petite modale maison (remplace prompt()/confirm() natifs, peu fiables et intrusifs).
 // Usage : Modal.open('Titre', [{ name, label, type, value }]) -> Promise<values|null>
 // type: 'select' attend en plus { options: [{ value, label }, ...] }.
@@ -334,7 +371,7 @@ function numberStepperHTML(label, name, { value = 0, min, step = 1, entier = fal
         <input type="number" name="${name}" value="${value}" ${min !== undefined ? `min="${min}"` : ''} step="${entier ? 1 : 'any'}" data-step="${step}" inputmode="${entier ? 'numeric' : 'decimal'}" />
         <button type="button" class="stepper-btn" data-action="inc" aria-label="Augmenter">+</button>
       </div>
-      ${hint ? `<small style="display:block;color:var(--ink-muted);font-size:0.8em;margin-top:2px;font-weight:400">${hint}</small>` : ''}
+      ${hint ? `<small style="display:block;color:var(--ink-muted);font-size:13px;margin-top:2px;font-weight:400">${hint}</small>` : ''}
     </label>
   `;
 }
@@ -514,6 +551,12 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   const lienRenvoi = document.getElementById('login-renvoyer-verification');
   errEl.classList.add('hidden');
   lienRenvoi.classList.add('hidden');
+  const champs = e.target.querySelectorAll('input[name="email"], input[name="password"]');
+  champs.forEach((c) => c.removeAttribute('aria-invalid'));
+  const bouton = e.target.querySelector('button[type="submit"]');
+  const libelleBouton = bouton.textContent;
+  bouton.disabled = true;
+  bouton.textContent = 'Connexion…';
   try {
     const data = await Api.post('/auth/login', {
       email: form.get('email'),
@@ -532,9 +575,13 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   } catch (err) {
     errEl.textContent = err.message;
     errEl.classList.remove('hidden');
+    champs.forEach((c) => c.setAttribute('aria-invalid', 'true'));
     if (err.code === 'EMAIL_NON_VERIFIE') {
       lienRenvoi.classList.remove('hidden');
     }
+  } finally {
+    bouton.disabled = false;
+    bouton.textContent = libelleBouton;
   }
 });
 

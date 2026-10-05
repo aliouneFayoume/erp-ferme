@@ -13,8 +13,8 @@ window.Views.fournisseurs = {
     container.innerHTML = `
       ${
         alertes.length
-          ? `<div class="panel alert-panel">
-              <h2>⚠ Alertes de réapprovisionnement</h2>
+          ? `<div class="panel alert-panel" role="status">
+              <h2>Alertes de réapprovisionnement</h2>
               <ul class="alert-list">
                 ${alertes
                   .map((a) => `<li>${esc(a.produit_nom)} (${esc(a.secteur_nom)}) — ${fmt(a.quantite_disponible)} restant, seuil ${fmt(a.seuil_alerte)}</li>`)

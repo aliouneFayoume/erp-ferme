@@ -208,8 +208,8 @@ window.Views.comptabilite = {
 
       ${
         enRetardEntretien.length
-          ? `<div class="panel alert-panel">
-              <h2>⚠ Entretiens en retard</h2>
+          ? `<div class="panel alert-panel" role="status">
+              <h2>Entretiens en retard</h2>
               <ul class="alert-list">
                 ${enRetardEntretien.map((e) => `<li>${esc(e.nom)} — entretien prévu le ${fmtDate(e.prochain_entretien)}</li>`).join('')}
               </ul>

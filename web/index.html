@@ -22,12 +22,12 @@
       <p class="sub">Système de gestion — Avicole · Piscicole · Maraîcher</p>
       <form id="login-form">
         <label>Email
-          <input type="email" name="email" required autocomplete="email" />
+          <input type="email" name="email" required autocomplete="email" aria-describedby="login-error" />
         </label>
         <label>Mot de passe
-          <input type="password" name="password" required autocomplete="current-password" />
+          <input type="password" name="password" required autocomplete="current-password" aria-describedby="login-error" />
         </label>
-        <div id="login-error" class="login-error hidden"></div>
+        <div id="login-error" class="login-error hidden" role="alert"></div>
         <p id="login-renvoyer-verification" class="sub hidden" style="margin-top:-8px;">
           <a href="#" id="lien-renvoyer-verification">Renvoyer l'email de vérification</a>
         </p>
