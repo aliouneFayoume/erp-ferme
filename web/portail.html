@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ferme Massla — Espace client</title>
+  <title>Espace client — Massla</title>
   <link rel="icon" href="/icons/massla-favicon.svg" type="image/svg+xml" />
   <meta name="theme-color" content="#0F3D2E" />
   <link rel="preload" href="/fonts/Onest-Variable.woff2" as="font" type="font/woff2" crossorigin />
@@ -14,11 +14,13 @@
 
   <div id="login-screen">
     <div class="login-box">
-      <h1 data-brand>Ferme Massla</h1>
-      <p class="sub">Espace client — suivi de vos commandes, factures et demandes</p>
+      <img class="login-logo" src="/icons/massla-empile-blanc.svg" alt="Massla" />
+      <p class="login-ferme hidden" data-brand></p>
+      <h1>Espace client</h1>
+      <p class="sub">Suivez vos commandes, vos factures et vos demandes.</p>
       <form id="login-form">
         <label>Téléphone
-          <input type="tel" name="telephone" required autocomplete="tel" />
+          <input type="tel" name="telephone" required autocomplete="tel" placeholder="+221 77 123 45 67" />
         </label>
         <label>Code d'accès
           <input type="text" name="pin" required inputmode="numeric" maxlength="6" autocomplete="one-time-code" />
@@ -33,7 +35,7 @@
   <div id="app-shell" class="hidden">
     <header class="top">
       <div>
-        <div class="brand">Ferme Massla</div>
+        <div class="brand">Massla</div>
         <div class="sub">Espace client</div>
       </div>
       <div class="who">

@@ -148,35 +148,42 @@ label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { font-wei
 .stepper-btn:hover:not(:disabled) { background: var(--hover); filter: none; }
 .stepper-btn:active:not(:disabled) { background: var(--hover-strong); }
 
-/* ---------- Login ---------- */
+/* ---------- Pages d'entrée (connexion, inscription, vérification, paiement) : fond Sahel, comme la maquette du kit ---------- */
 #login-screen {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: var(--bg);
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: var(--space-8) var(--page-margin);
+  background: var(--sahel-900); color: var(--on-brand);
+  /* sur fond Sahel : focus en vert Dakar et rouge clair (valeur sombre du jeton --danger du kit) */
+  --focus: var(--dakar-500); --danger: #FF9B8F;
 }
-.login-box {
-  width: 100%;
-  max-width: 360px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 36px 32px;
-  box-shadow: var(--shadow-lg);
-}
-.login-box h1 { margin: 0 0 4px; font-size: 26px; line-height: 32px; letter-spacing: -0.3px; }
-.login-box p.sub { margin: 0 0 24px; color: var(--muted-2); font-size: 13px; }
-.login-box form { display: flex; flex-direction: column; gap: 14px; }
-.login-box button[type="submit"] { margin-top: 6px; }
-.login-error { color: var(--danger); font-size: 13px; }
-.login-success { color: var(--success); font-size: 13px; }
-.demo-accounts { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted-2); line-height: 1.6; }
-.demo-accounts b { color: var(--muted); }
+.login-box { width: 100%; max-width: 420px; }
+.login-logo { display: block; width: 180px; max-width: 55%; height: auto; margin: 0 auto var(--space-4); }
+#login-screen h1 { margin: 0 0 var(--space-1); color: var(--on-brand); font-size: 26px; line-height: 32px; letter-spacing: -0.3px; text-align: center; }
+.login-ferme { margin: 0 0 var(--space-1); text-align: center; font-size: 20px; line-height: 26px; font-weight: 700; color: var(--on-brand); }
+#login-screen p.sub { margin: 0 0 var(--space-6); color: var(--on-brand-muted); font-size: 16px; line-height: 24px; text-align: center; }
+#login-screen p.sub strong { color: var(--on-brand); }
+.login-box form { display: flex; flex-direction: column; gap: var(--space-4); }
+#login-screen label { color: var(--on-brand); }
+#login-screen input:not([type="checkbox"]):not([type="radio"]), #login-screen select { background: var(--sahel-800); color: var(--on-brand); border-color: var(--border-strong); }
+#login-screen input::placeholder { color: var(--on-brand-muted); opacity: 0.75; }
+#login-screen input[type="checkbox"], #login-screen input[type="radio"] { accent-color: var(--dakar-500); }
+#login-screen button[type="submit"] { margin-top: var(--space-2); min-height: var(--button-h); background: var(--dakar-500); color: var(--on-accent); }
+#login-screen button.secondary { color: var(--on-brand); border-color: var(--on-brand-line); }
+#login-screen button.secondary:hover:not(:disabled) { background: var(--on-brand-hover); }
+#login-screen a { color: var(--dakar-500); font-weight: 700; text-decoration: none; }
+#login-screen a:hover { text-decoration: underline; }
+#login-screen input[aria-invalid="true"] { border-color: var(--danger); }
+.login-aide { margin: 0; color: var(--on-brand-muted); font-size: 15px; line-height: 22px; text-align: center; }
+.login-lien { margin: var(--space-6) 0 0; text-align: center; font-size: 16px; color: var(--on-brand-muted); }
+.login-lien + .login-lien { margin-top: var(--space-2); }
+.login-legal { margin: var(--space-8) 0 0; text-align: center; font-size: 13px; line-height: 18px; color: var(--on-brand-muted); }
+.login-error { color: var(--danger); font-size: 15px; line-height: 22px; font-weight: 600; }
+.login-success { color: var(--success); font-size: 15px; font-weight: 600; }
+#login-screen .login-success { color: var(--dakar-500); }
 
 /* ---------- Coque : menu latéral Sahel + zone principale ---------- */
-#app-shell { min-height: 100vh; display: flex; }
+#app-shell { min-height: 100vh; display: flex; flex-direction: column; } /* espace client (portail.html) : en colonne */
+#app-shell.shell-staff { flex-direction: row; }                       /* application de gestion : menu latéral + zone principale */
 .shell-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 
 .topbar {
@@ -252,13 +259,37 @@ label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { font-wei
 .sidebar.collapsed .sidebar-collapse-toggle span { display: none; }
 .sidebar.collapsed .sidebar-collapse-toggle svg { transform: rotate(180deg); }
 
+/* En-tête de page : titre de l'écran (ou salutation sur le tableau de bord) */
+.page-head { width: 100%; max-width: var(--content-max); margin: 0 auto; padding: var(--space-6) var(--page-margin) 0; }
+.page-head h1 { margin: 0; font-size: 32px; line-height: 40px; letter-spacing: -0.4px; }
+.page-head p { margin: var(--space-1) 0 0; color: var(--ink-muted); font-size: 16px; line-height: 24px; }
 main {
   flex: 1 1 auto; min-width: 0; width: 100%; max-width: var(--content-max); margin: 0 auto;
-  padding: var(--space-6) var(--page-margin) var(--space-10);
+  padding: var(--space-5) var(--page-margin) var(--space-10);
 }
 
 /* Barre d'onglets : téléphone seulement (voir plus bas) */
 .tabbar { display: none; }
+
+/* ---------- Espace client (portail.html) : bandeau Sahel + onglets ---------- */
+#app-shell:not(.shell-staff) > header.top {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+  padding: var(--space-4) var(--page-margin); background: var(--sahel-900); color: var(--on-brand);
+}
+header.top .brand { font-size: 20px; line-height: 26px; font-weight: 800; letter-spacing: -0.3px; }
+header.top .sub { font-size: 14px; color: var(--on-brand-muted); }
+header.top .who { font-size: 14px; color: var(--on-brand-muted); text-align: right; }
+header.top .who button.secondary { color: var(--on-brand); border-color: var(--on-brand-line); }
+header.top .who button.secondary:hover:not(:disabled) { background: var(--on-brand-hover); }
+nav.tabs {
+  display: flex; gap: var(--space-2); overflow-x: auto; padding: var(--space-3) var(--page-margin);
+  background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20;
+}
+nav.tabs { scrollbar-width: none; }
+nav.tabs::-webkit-scrollbar { display: none; }
+nav.tabs button { flex: none; background: transparent; color: var(--ink-muted); box-shadow: none; font-size: 15px; }
+nav.tabs button:hover:not(:disabled) { background: var(--hover); filter: none; box-shadow: none; }
+nav.tabs button.active { background: var(--niayes-100); color: var(--sahel-900); }
 
 /* ---------- Cards / Stats ---------- */
 .grid-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 26px; }
@@ -405,7 +436,7 @@ td.num, th.num { text-align: right; font-family: var(--font-num); font-variant-n
 /* Téléphone : barre d'onglets en bas, menu complet en tiroir, tableaux en cartes */
 @media (max-width: 599px) {
   :root { --page-margin: 16px; }
-  #app-shell { display: block; }
+  #app-shell.shell-staff { display: block; }
   .shell-main { min-height: 100vh; }
   .sidebar, .sidebar.collapsed {
     --sidebar-w: min(300px, 86vw);
@@ -423,6 +454,8 @@ td.num, th.num { text-align: right; font-family: var(--font-num); font-variant-n
   .sidebar.collapsed nav button span { display: inline; }
 
   .topbar { height: 56px; gap: var(--space-2); }
+  .page-head { padding-top: var(--space-5); }
+  .page-head h1 { font-size: 26px; line-height: 32px; letter-spacing: -0.3px; }
   #who-name, #who-role, .sync-label { display: none; }
   .sync-indicator { padding: 0 var(--space-3); }
   .sync-indicator.pending .sync-count:not(.hidden) { display: inline; }

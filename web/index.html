@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="facebook-domain-verification" content="9zossd4w4chonula8gjqi6hjrlbwoj" />
-  <title>ERP Ferme Massla</title>
+  <title>Massla</title>
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icons/massla-favicon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/icons/massla-icone-app.svg" />
@@ -18,41 +18,42 @@
 
   <div id="login-screen">
     <div class="login-box">
-      <h1 data-brand>Ferme Massla</h1>
-      <p class="sub">Système de gestion — Avicole · Piscicole · Maraîcher</p>
+      <img class="login-logo" src="/icons/massla-empile-blanc.svg" alt="Massla" />
+      <p class="login-ferme hidden" data-brand></p>
+      <h1>Connectez-vous à votre compte</h1>
+      <p class="sub">Avicole · Piscicole · Maraîcher</p>
       <form id="login-form">
-        <label>Email
-          <input type="email" name="email" required autocomplete="email" aria-describedby="login-error" />
+        <label>Adresse e-mail
+          <input type="email" name="email" required autocomplete="email" placeholder="prenom@ferme.sn" aria-describedby="login-error" />
         </label>
         <label>Mot de passe
-          <input type="password" name="password" required autocomplete="current-password" aria-describedby="login-error" />
+          <input type="password" name="password" required autocomplete="current-password" placeholder="Votre mot de passe" aria-describedby="login-error" />
         </label>
         <div id="login-error" class="login-error hidden" role="alert"></div>
-        <p id="login-renvoyer-verification" class="sub hidden" style="margin-top:-8px;">
-          <a href="#" id="lien-renvoyer-verification">Renvoyer l'email de vérification</a>
+        <p id="login-renvoyer-verification" class="login-aide hidden">
+          <a href="#" id="lien-renvoyer-verification">Renvoyer l'e-mail de vérification</a>
         </p>
         <button type="submit">Se connecter</button>
       </form>
 
       <!-- Deuxième étape du login quand le compte a le MFA actif (voir routes/auth.js POST /mfa/verifier). -->
       <form id="mfa-challenge-form" class="hidden">
-        <p class="sub" id="mfa-challenge-texte"></p>
+        <p class="login-aide" id="mfa-challenge-texte"></p>
         <label>Code de vérification
           <input type="text" name="code" required autocomplete="one-time-code" inputmode="numeric" maxlength="6" />
         </label>
-        <div id="mfa-challenge-error" class="login-error hidden"></div>
+        <div id="mfa-challenge-error" class="login-error hidden" role="alert"></div>
         <button type="submit">Vérifier</button>
-        <button type="button" class="secondary" id="btn-mfa-challenge-annuler" style="margin-top:8px;">Annuler</button>
+        <button type="button" class="secondary" id="btn-mfa-challenge-annuler">Annuler</button>
       </form>
 
-      <p class="sub" style="margin-top:16px;">Nouveau client ? <a href="/inscription.html">Créer votre ferme</a></p>
-      <p class="sub" style="margin-top:4px;"><a href="/decouvrir">En savoir plus sur l'application</a></p>
-      <p class="sub" style="margin-top:16px; font-size:13px;">FAYSSALAME — Cité Castors Marine III Villa 48, Dakar, Sénégal</p>
-      <p class="sub" style="margin-top:2px; font-size:13px;">© 2026 FAYSSALAME — Tous droits réservés.</p>
+      <p class="login-lien">Pas encore de compte ? <a href="/inscription.html">Créer votre ferme</a></p>
+      <p class="login-lien"><a href="/decouvrir">Découvrir Massla</a></p>
+      <p class="login-legal">FAYSSALAME — Cité Castors Marine III Villa 48, Dakar, Sénégal<br />© 2026 FAYSSALAME — Tous droits réservés.</p>
     </div>
   </div>
 
-  <div id="app-shell" class="hidden">
+  <div id="app-shell" class="hidden shell-staff">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-logo">
         <img class="logo-full" src="/icons/massla-horizontal-blanc.svg" alt="Massla" />
@@ -71,7 +72,7 @@
         <button class="icon-btn menu-toggle" id="btn-menu-toggle" aria-label="Menu">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
         </button>
-        <div class="topbar-brand" id="topbar-brand">Ferme Massla</div>
+        <div class="topbar-brand" id="topbar-brand">Massla</div>
         <div class="topbar-who">
           <button class="secondary hidden" id="btn-retour-supervision">↩ Retour à la supervision</button>
           <span id="sync-indicator" class="sync-indicator synced" title="Toutes les actions sont synchronisées" role="status">
@@ -86,6 +87,10 @@
           <button class="secondary" id="btn-logout">Déconnexion</button>
         </div>
       </header>
+      <div class="page-head" id="page-head">
+        <h1 id="page-title"></h1>
+        <p id="page-sub" class="hidden"></p>
+      </div>
       <main id="view"></main>
     </div>
 

@@ -1,6 +1,6 @@
 {
-  "name": "ERP Ferme Massla",
-  "short_name": "Ferme Massla",
+  "name": "Massla",
+  "short_name": "Massla",
   "description": "Gestion intégrée Avicole, Piscicole et Maraîchage — production, ventes B2B/B2C, logistique et finances.",
   "start_url": "/",
   "scope": "/",

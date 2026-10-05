@@ -41,14 +41,6 @@ window.Views.dashboard = {
             </div>`
           : ''
       }
-
-      <div class="panel">
-        <h2>Bienvenue sur le tableau de bord</h2>
-        <p class="desc">
-          Vue transversale de l'exploitation. Utilisez le menu à gauche pour gérer la production,
-          le catalogue, les commandes B2B/B2C, la logistique et les finances.
-        </p>
-      </div>
     `;
   },
 };

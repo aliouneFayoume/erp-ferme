@@ -445,8 +445,29 @@ async function rafraichirAcces() {
   }
 }
 
+// En-tête de page (titre + sous-titre) : hors de la zone #view pour survivre aux rafraîchissements
+// partiels des vues. Le tableau de bord accueille la personne par son prénom, avec la date du jour.
+function majEnTetePage(key) {
+  const titre = document.getElementById('page-title');
+  const sous = document.getElementById('page-sub');
+  if (!titre || !sous) return;
+  const user = Api.getUser() || {};
+  if (key === 'dashboard') {
+    const prenom = String(user.nom_complet || '').trim().split(/\s+/)[0];
+    const jour = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    titre.textContent = prenom ? `Bon retour, ${prenom}` : 'Bon retour';
+    sous.textContent = `${jour.charAt(0).toUpperCase()}${jour.slice(1)} · voici où en est la ferme aujourd'hui`;
+    sous.classList.remove('hidden');
+  } else {
+    const def = TAB_DEFS.find((t) => t.key === key);
+    titre.textContent = def ? def.label : '';
+    sous.classList.add('hidden');
+  }
+}
+
 async function selectTab(key) {
   currentTab = key;
+  majEnTetePage(key);
   document.querySelectorAll('#tabs button').forEach((b) => {
     b.classList.toggle('active', b.dataset.key === key);
   });
@@ -531,8 +552,8 @@ function majBarreOnglets() {
 }
 
 function buildShell(user) {
-  document.getElementById('topbar-brand').textContent = user.organisation_nom || 'Ferme Massla';
-  document.title = user.organisation_nom ? `ERP ${user.organisation_nom}` : 'ERP Ferme Massla';
+  document.getElementById('topbar-brand').textContent = user.organisation_nom || 'Massla';
+  document.title = user.organisation_nom ? `${user.organisation_nom} · Massla` : 'Massla';
   document.getElementById('who-name').textContent = user.nom_complet || user.email;
   document.getElementById('who-role').textContent = roleLabel(user.role);
 
