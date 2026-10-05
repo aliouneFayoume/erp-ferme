@@ -127,10 +127,10 @@ const Views = {
                     <table>
                       <thead><tr><th>Produit</th><th>Qté</th><th>Sous-total</th></tr></thead>
                       <tbody>
-                        ${c.lignes.map((l) => `<tr><td>${esc(l.produit_nom)}</td><td>${l.quantite}</td><td class="num">${fmt(l.sous_total)} FCFA</td></tr>`).join('')}
+                        ${c.lignes.map((l) => `<tr><td>${esc(l.produit_nom)}</td><td>${l.quantite}</td><td class="num">${fmt(l.sous_total)} FCFA</td></tr>`).join('')}
                       </tbody>
                     </table>
-                    <p class="num" style="text-align:right; font-weight:700;">Total : ${fmt(c.montant_total)} FCFA</p>
+                    <p class="num" style="text-align:right; font-weight:700;">Total : ${fmt(c.montant_total)} FCFA</p>
                   </div>`
                 )
                 .join('')
@@ -153,7 +153,7 @@ const Views = {
                   <td>${esc(f.numero_commande)}</td>
                   <td>${fmtDate(f.date_echeance)}</td>
                   <td><span class="badge ${STATUT_FACTURE_BADGE[f.statut] || 'muted'}">${esc(STATUT_FACTURE_LABELS[f.statut] || f.statut)}</span></td>
-                  <td class="num">${fmt(f.montant_restant)} FCFA</td>
+                  <td class="num">${fmt(f.montant_restant)} FCFA</td>
                   <td><button class="secondary" data-pdf="${f.id}" data-numero="${esc(f.numero_commande)}">PDF</button></td>
                 </tr>`
               )
@@ -312,8 +312,8 @@ async function selectTab(key) {
 }
 
 function buildShell(client) {
-  document.querySelector('.brand').textContent = client.organisation_nom || 'Ferme Massla';
-  document.title = client.organisation_nom ? `${client.organisation_nom} — Espace client` : 'Ferme Massla — Espace client';
+  document.querySelector('.brand').textContent = client.organisation_nom || 'Massla';
+  document.title = client.organisation_nom ? `${client.organisation_nom} — Espace client` : 'Espace client — Massla';
   document.getElementById('who-name').textContent = client.nom;
   const nav = document.getElementById('tabs');
   nav.innerHTML = '';

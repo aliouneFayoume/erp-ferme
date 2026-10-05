@@ -67,8 +67,8 @@ window.Views.paie = {
                   <td>${e.type_contrat === 'JOURNALIER' ? '<span class="badge">Journalier</span>' : '<span class="badge">Mensuel</span>'}</td>
                   <td class="num">${
                     e.type_contrat === 'JOURNALIER'
-                      ? e.taux_journalier ? `${fmt(e.taux_journalier)} FCFA/jour` : '-'
-                      : e.salaire_brut_mensuel ? `${fmt(e.salaire_brut_mensuel)} FCFA/mois` : '-'
+                      ? e.taux_journalier ? `${fmt(e.taux_journalier)} FCFA/jour` : '-'
+                      : e.salaire_brut_mensuel ? `${fmt(e.salaire_brut_mensuel)} FCFA/mois` : '-'
                   }</td>
                   <td>${e.actif ? '<span class="badge ok">Actif</span>' : '<span class="badge muted">Inactif</span>'}</td>
                   <td class="actions-cell">
@@ -125,9 +125,9 @@ window.Views.paie = {
                     .map(
                       (b) => `<tr>
                         <td>${esc(b.nom_complet)}</td>
-                        <td class="num">${fmt(b.salaire_brut)} FCFA</td>
-                        <td class="num">${fmt(b.charges_sociales)} FCFA</td>
-                        <td class="num">${fmt(b.salaire_net)} FCFA</td>
+                        <td class="num">${fmt(b.salaire_brut)} FCFA</td>
+                        <td class="num">${fmt(b.charges_sociales)} FCFA</td>
+                        <td class="num">${fmt(b.salaire_net)} FCFA</td>
                         <td>${statutBulletinBadge(b.statut)}</td>
                         <td>${b.statut === 'EN_ATTENTE' ? `<button data-payer="${b.id}">Marquer payé</button>` : ''}</td>
                       </tr>`
@@ -251,7 +251,7 @@ window.Views.paie = {
           const jours = estJournalier ? (recapitulatif.find((r) => r.employe_id === emp.id)?.jours_travailles || 0) : null;
           const salaireSuggere = estJournalier ? jours * (emp.taux_journalier || 0) : emp.salaire_brut_mensuel || '';
           const labelSalaire = estJournalier
-            ? `Salaire brut (FCFA) — ${jours} jour(s) × ${fmt(emp.taux_journalier || 0)} FCFA`
+            ? `Salaire brut (FCFA) — ${jours} jour(s) × ${fmt(emp.taux_journalier || 0)} FCFA`
             : 'Salaire brut (FCFA)';
           const values = await Modal.open(`Bulletin de paie — ${emp.nom_complet} (${mois})`, [
             { name: 'salaire_brut', label: labelSalaire, type: 'number', value: salaireSuggere },

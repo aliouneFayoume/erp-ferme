@@ -1,5 +1,20 @@
 window.Views = window.Views || {};
 
+// Unité d'un produit (« 12 caisses ») : un nombre n'est jamais affiché seul.
+const UNITES_PRODUIT = { TETE: ['tête', 'têtes'], KG: ['kg', 'kg'], CAISSE: ['caisse', 'caisses'], BOTTES: ['botte', 'bottes'] };
+function quantiteAvecUnite(quantite, unite) {
+  const libelles = UNITES_PRODUIT[unite];
+  const n = Number(quantite) || 0;
+  return libelles ? `${fmt(n)}\u00a0${Math.abs(n) > 1 ? libelles[1] : libelles[0]}` : fmt(n);
+}
+// État du stock : épuisé (0), faible (au plus le seuil d'alerte) ou en stock.
+function etatStock(p) {
+  const dispo = Number(p.quantite_disponible) || 0;
+  if (dispo <= 0) return { code: 'epuise', libelle: 'Épuisé', classe: 'danger' };
+  if (dispo <= Number(p.seuil_alerte)) return { code: 'faible', libelle: 'Stock faible', classe: 'warn' };
+  return { code: 'ok', libelle: 'En stock', classe: 'ok' };
+}
+
 window.Views.catalogue = {
   async render(container) {
     const user = Api.getUser();
@@ -11,10 +26,48 @@ window.Views.catalogue = {
     const secteursRamassage = secteurs.filter((s) => s.nom === 'Avicole');
 
     container.innerHTML = `
+      <div class="panel">
+        <h2>Produits en stock</h2>
+        <p class="desc">Le stock est réservé séparément pour les ventes aux professionnels (B2B) et aux particuliers (B2C), pour éviter de vendre deux fois la même marchandise.</p>
+        <div class="barre-filtres">
+          <label>Rechercher un produit
+            <input type="search" id="recherche-produit" placeholder="Poulet, œufs, tomates…" autocomplete="off" />
+          </label>
+          <div class="puces" role="group" aria-label="Filtrer par état du stock">
+            <button type="button" class="puce" data-filtre="tous" aria-pressed="true">Tous · ${produits.length}</button>
+            <button type="button" class="puce" data-filtre="faible" aria-pressed="false">Stock faible · ${produits.filter((p) => etatStock(p).code === 'faible').length}</button>
+            <button type="button" class="puce" data-filtre="epuise" aria-pressed="false">Épuisé · ${produits.filter((p) => etatStock(p).code === 'epuise').length}</button>
+          </div>
+        </div>
+        <table id="table-produits">
+          <thead>
+            <tr><th>Produit</th><th>En stock</th><th>Secteur</th><th>Standard</th><th>Restaurant</th><th>Grossiste</th><th>Réservé B2B</th><th>Réservé B2C</th><th></th></tr>
+          </thead>
+          <tbody>
+            ${produits
+              .map(
+                (p) => `<tr data-nom="${esc(p.nom.toLowerCase())}" data-etat="${etatStock(p).code}">
+                  <td>${esc(p.nom)}</td>
+                  <td class="num"><b>${quantiteAvecUnite(p.quantite_disponible, p.unite_mesure)}</b> <span class="badge ${etatStock(p).classe}">${etatStock(p).libelle}</span></td>
+                  <td>${esc(p.secteur_nom)}</td>
+                  <td class="num">${fmt(p.prix_unitaire_b2c)}</td>
+                  <td class="num">${fmt(p.prix_unitaire_b2b)}</td>
+                  <td class="num">${p.prix_unitaire_grossiste != null ? fmt(p.prix_unitaire_grossiste) : `<span class="badge muted">= restaurant</span>`}</td>
+                  <td class="num">${fmt(p.quantite_reservee_b2b)}</td>
+                  <td class="num">${fmt(p.quantite_reservee_b2c)}</td>
+                  <td>${user.role === 'admin' ? `<button class="secondary" data-edit="${p.id}" data-b2b="${p.prix_unitaire_b2b}" data-b2c="${p.prix_unitaire_b2c}" data-gros="${p.prix_unitaire_grossiste ?? ''}">Tarifs</button>` : ''}</td>
+                </tr>`
+              )
+              .join('')}
+          </tbody>
+        </table>
+        <p class="empty hidden" id="aucun-produit">Aucun produit ne correspond.</p>
+      </div>
+
       ${
         user.role === 'admin'
-          ? `<div class="panel">
-              <h2>Nouveau produit</h2>
+          ? `<details class="panel pliable" ${produits.length ? '' : 'open'}>
+              <summary><h2>Ajouter un produit</h2></summary>
               <p class="desc">Grille tarifaire à 3 niveaux : standard (B2C), restaurant (B2B), grossiste (B2B gros volumes).</p>
               <form id="form-produit" class="form-grid" autocomplete="off">
                 <label>Secteur
@@ -35,38 +88,9 @@ window.Views.catalogue = {
                 <label>Stock initial<input type="number" name="quantite_initiale" value="0" /></label>
                 <button type="submit">Créer</button>
               </form>
-            </div>`
+            </details>`
           : ''
       }
-
-      <div class="panel">
-        <h2>Catalogue & stock</h2>
-        <p class="desc">Double pool de stock : réservations séparées B2B / B2C pour éviter les surventes croisées.</p>
-        <table>
-          <thead>
-            <tr><th>Produit</th><th>Secteur</th><th>Standard</th><th>Restaurant</th><th>Grossiste</th><th>Disponible</th><th>Réservé B2B</th><th>Réservé B2C</th><th></th></tr>
-          </thead>
-          <tbody>
-            ${produits
-              .map(
-                (p) => `<tr>
-                  <td>${esc(p.nom)}</td>
-                  <td>${esc(p.secteur_nom)}</td>
-                  <td class="num">${fmt(p.prix_unitaire_b2c)}</td>
-                  <td class="num">${fmt(p.prix_unitaire_b2b)}</td>
-                  <td class="num">${p.prix_unitaire_grossiste != null ? fmt(p.prix_unitaire_grossiste) : `<span class="badge muted">= restaurant</span>`}</td>
-                  <td class="num">
-                    ${p.quantite_disponible <= p.seuil_alerte ? `<span class="badge warn">${fmt(p.quantite_disponible)}</span>` : fmt(p.quantite_disponible)}
-                  </td>
-                  <td class="num">${fmt(p.quantite_reservee_b2b)}</td>
-                  <td class="num">${fmt(p.quantite_reservee_b2c)}</td>
-                  <td>${user.role === 'admin' ? `<button class="secondary" data-edit="${p.id}" data-b2b="${p.prix_unitaire_b2b}" data-b2c="${p.prix_unitaire_b2c}" data-gros="${p.prix_unitaire_grossiste ?? ''}">Tarifs</button>` : ''}</td>
-                </tr>`
-              )
-              .join('')}
-          </tbody>
-        </table>
-      </div>
 
       <div class="panel">
         <h2>Ramassage automatique (œufs)</h2>
@@ -96,6 +120,27 @@ window.Views.catalogue = {
         ${secteursRamassage.length === 0 ? '<p class="empty">Aucun secteur éligible.</p>' : ''}
       </div>
     `;
+
+    // Recherche et puces de filtre (côté écran, sur la liste déjà chargée)
+    const filtrer = () => {
+      const texte = (container.querySelector('#recherche-produit').value || '').trim().toLowerCase();
+      const etat = container.querySelector('.puce[aria-pressed="true"]')?.dataset.filtre || 'tous';
+      let visibles = 0;
+      container.querySelectorAll('#table-produits tbody tr').forEach((tr) => {
+        const ok = (!texte || tr.dataset.nom.includes(texte)) && (etat === 'tous' || tr.dataset.etat === etat);
+        tr.classList.toggle('hidden', !ok);
+        if (ok) visibles += 1;
+      });
+      container.querySelector('#table-produits').classList.toggle('hidden', visibles === 0);
+      container.querySelector('#aucun-produit').classList.toggle('hidden', visibles !== 0);
+    };
+    container.querySelector('#recherche-produit').addEventListener('input', filtrer);
+    container.querySelectorAll('.puce').forEach((puce) => {
+      puce.addEventListener('click', () => {
+        container.querySelectorAll('.puce').forEach((p) => p.setAttribute('aria-pressed', String(p === puce)));
+        filtrer();
+      });
+    });
 
     const formProduit = container.querySelector('#form-produit');
     if (formProduit) {

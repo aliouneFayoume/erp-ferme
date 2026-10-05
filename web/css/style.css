@@ -20,6 +20,7 @@
   --ic-alert: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
   --ic-x: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='m15 9-6 6'/%3E%3Cpath d='m9 9 6 6'/%3E%3C/svg%3E");
   --ic-info: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4'/%3E%3Cpath d='M12 8h.01'/%3E%3C/svg%3E");
+  --ic-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --ic-circle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3C/svg%3E");
   --shadow-lg: 0 16px 40px rgba(15, 61, 46, 0.18), 0 6px 14px rgba(15, 61, 46, 0.08); /* --shadow-sm/md : kit */
   --ease: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -173,6 +174,10 @@ label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { font-wei
 #login-screen a { color: var(--dakar-500); font-weight: 700; text-decoration: none; }
 #login-screen a:hover { text-decoration: underline; }
 #login-screen input[aria-invalid="true"] { border-color: var(--danger); }
+/* Pastille d'état des pages de retour de paiement : coche (transmis) ou croix (annulé), jamais la couleur seule */
+.icone-etat { width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto var(--space-4); background: var(--dakar-500); color: var(--on-accent); }
+.icone-etat svg { width: 36px; height: 36px; }
+.icone-etat.neutre { background: var(--on-brand-chip); color: var(--on-brand); }
 .login-aide { margin: 0; color: var(--on-brand-muted); font-size: 15px; line-height: 22px; text-align: center; }
 .login-lien { margin: var(--space-6) 0 0; text-align: center; font-size: 16px; color: var(--on-brand-muted); }
 .login-lien + .login-lien { margin-top: var(--space-2); }
@@ -307,7 +312,7 @@ nav.tabs button.active { background: var(--niayes-100); color: var(--sahel-900);
 .stat-card .sub { font-size: 13px; line-height: 18px; color: var(--ink-muted); }
 /* Indicateur principal de l'écran (un seul) : fond Sahel */
 .stat-card.brand { background: var(--sahel-900); border-color: var(--sahel-900); }
-.stat-card.brand .label { color: var(--on-brand); opacity: 0.85; }
+.stat-card.brand .label, .stat-card.brand .sub { color: var(--on-brand); opacity: 0.85; }
 .stat-card.brand .value, .stat-card.brand .value .unit { color: var(--on-brand); }
 
 .panel {
@@ -366,7 +371,13 @@ td.num, th.num { text-align: right; font-family: var(--font-num); font-variant-n
   box-shadow: var(--shadow-sm); transition: box-shadow var(--ease), transform var(--ease); background: var(--card);
 }
 .lot-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
-.lot-card .code { font-weight: 700; font-size: 16px; }
+.lot-card .lot-entete { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.lot-card .code { font-weight: 700; font-size: 18px; line-height: 24px; color: var(--sahel-900); }
+.lot-card .kpi span { color: var(--ink-muted); }
+.lot-card .kpi-grand { flex-direction: column; align-items: flex-start; padding: var(--space-2) 0; }
+.lot-card .kpi-grand b { font-family: var(--font-num); font-size: 28px; line-height: 32px; letter-spacing: -0.3px; font-variant-numeric: tabular-nums; }
+.lot-card .kpi-grand .unit { font-size: 15px; font-weight: 600; margin-left: 4px; letter-spacing: 0; }
+.lot-card .lot-action { width: 100%; margin-top: var(--space-3); min-height: var(--btn-h); font-size: 16px; }
 .lot-card .meta { font-size: 13px; color: var(--muted-2); margin: 4px 0 10px; }
 .lot-card .kpi { display: flex; justify-content: space-between; font-size: 14px; padding: 3px 0; }
 
@@ -391,6 +402,30 @@ td.num, th.num { text-align: right; font-family: var(--font-num); font-variant-n
 
 .lignes-builder { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
 .ligne-row { display: grid; grid-template-columns: 2fr 1fr auto; gap: 8px; align-items: center; }
+
+/* Panneau repliable (création d'un lot, d'un produit…) : la saisie courante reste en haut de l'écran */
+.pliable > summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); min-height: var(--tap-min);
+}
+.pliable > summary::-webkit-details-marker { display: none; }
+.pliable > summary h2 { margin: 0; }
+.pliable > summary::after {
+  content: ""; flex: none; width: 24px; height: 24px; background-color: var(--dakar-700); transition: transform var(--ease);
+  -webkit-mask: var(--ic-chevron) center / contain no-repeat; mask: var(--ic-chevron) center / contain no-repeat;
+}
+.pliable[open] > summary::after { transform: rotate(180deg); }
+.pliable[open] > summary { margin-bottom: var(--space-2); }
+
+/* Recherche et puces de filtre */
+.barre-filtres { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-4); }
+.puces { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.puce {
+  background: var(--surface); color: var(--ink); border: 1.5px solid var(--border-strong); box-shadow: none;
+  border-radius: 999px; min-height: var(--tap-min); padding: 0 var(--space-4); font-size: 15px; font-weight: 600;
+}
+.puce:hover:not(:disabled) { background: var(--hover); filter: none; box-shadow: none; }
+.puce[aria-pressed="true"] { background: var(--sahel-900); color: var(--on-brand); border-color: var(--sahel-900); }
 
 .pill-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .pill { font-size: 13px; padding: 3px 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }
@@ -489,28 +524,29 @@ td.num, th.num { text-align: right; font-family: var(--font-num); font-variant-n
   .stepper-btn { font-size: 22px; }
   .form-grid button[type="submit"] { grid-column: 1 / -1; }
 
-  /* Tableaux → liste de cartes : chaque ligne devient une carte, chaque cellule « libellé : valeur » */
+  /* Tableaux → liste de cartes : la première cellule sert de titre, les autres s'affichent en deux colonnes
+     (libellé au-dessus de la valeur), les boutons occupent toute la largeur de la carte */
   table.en-cartes, table.en-cartes tbody, table.en-cartes tr, table.en-cartes td { display: block; }
   table.en-cartes thead { display: none; }
   table.en-cartes tr {
-    border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2) var(--space-4);
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-4);
+    border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4);
     margin-bottom: var(--space-3); background: var(--card);
   }
-  table.en-cartes tr:last-child td { border-bottom: 1px solid var(--border); }
-  table.en-cartes td {
-    display: flex; justify-content: space-between; align-items: center; gap: var(--space-4);
-    padding: var(--space-2) 0; border-bottom: 1px solid var(--border); text-align: right;
+  table.en-cartes td { padding: var(--space-2) 0; border-bottom: 0; text-align: left; min-width: 0; overflow-wrap: anywhere; font-size: 16px; line-height: 22px; }
+  table.en-cartes td::before { content: attr(data-label); display: block; margin-bottom: 2px; font-size: 13px; line-height: 18px; font-weight: 600; color: var(--ink-muted); }
+  table.en-cartes td:first-child {
+    grid-column: 1 / -1; font-size: 18px; font-weight: 700; color: var(--sahel-900);
+    padding-bottom: var(--space-3); margin-bottom: var(--space-1); border-bottom: 1px solid var(--border);
   }
-  table.en-cartes td:last-child, table.en-cartes tr:last-child td:last-child { border-bottom: 0; }
-  table.en-cartes td::before { content: attr(data-label); flex: none; font-weight: 600; color: var(--ink-muted); text-align: left; }
-  table.en-cartes td:not([data-label])::before { display: none; }
+  table.en-cartes td:first-child::before, table.en-cartes td:not([data-label])::before, table.en-cartes td[data-label=""]::before { display: none; }
+  table.en-cartes td:not([data-label]), table.en-cartes td[data-label=""], table.en-cartes td.actions-cell { grid-column: 1 / -1; }
   table.en-cartes td.num { white-space: normal; }
-  table.en-cartes td { font-size: 16px; line-height: 22px; }
-  table.en-cartes td::before { font-size: 15px; }
+  table.en-cartes td button { width: 100%; margin-top: var(--space-1); }
+  table.en-cartes td.actions-cell { flex-direction: column; }
   .panel .desc { font-size: 15px; }
   .lot-card .kpi { font-size: 15px; }
   .lot-card .meta { font-size: 14px; }
-  table.en-cartes td.actions-cell { justify-content: flex-end; }
 }
 @media (max-width: 359px) {
   .grid-stats { grid-template-columns: 1fr; }

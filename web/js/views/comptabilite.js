@@ -130,16 +130,16 @@ window.Views.comptabilite = {
               .map(
                 (p) => `<tr>
                   <td>${esc(p.secteur_nom)}</td>
-                  <td class="num">${fmt(p.chiffreAffaires)} FCFA</td>
-                  <td class="num">${fmt(p.depenses)} FCFA</td>
-                  <td class="num"><b style="color:${p.marge >= 0 ? 'var(--success)' : 'var(--danger)'}">${fmt(p.marge)} FCFA</b></td>
+                  <td class="num">${fmt(p.chiffreAffaires)} FCFA</td>
+                  <td class="num">${fmt(p.depenses)} FCFA</td>
+                  <td class="num"><b style="color:${p.marge >= 0 ? 'var(--success)' : 'var(--danger)'}">${fmt(p.marge)} FCFA</b></td>
                 </tr>`
               )
               .join('')}
             <tr>
               <td>Général (non rattaché)</td>
               <td class="num">-</td>
-              <td class="num">${fmt(analytique.depensesGenerales)} FCFA</td>
+              <td class="num">${fmt(analytique.depensesGenerales)} FCFA</td>
               <td class="num">-</td>
             </tr>
           </tbody>
@@ -157,7 +157,7 @@ window.Views.comptabilite = {
                 .map(
                   (cat) => `<tr>
                     <td>${esc(cat)}</td>
-                    ${colonnesPole.map((p) => `<td class="num">${fmt((p.parCategorie || {})[cat] || 0)} FCFA</td>`).join('')}
+                    ${colonnesPole.map((p) => `<td class="num">${fmt((p.parCategorie || {})[cat] || 0)} FCFA</td>`).join('')}
                   </tr>`
                 )
                 .join('')}
@@ -194,7 +194,7 @@ window.Views.comptabilite = {
                         <td>${fmtDate(d.date_depense)}</td>
                         <td>${esc(d.secteur_nom) || 'Général'}</td>
                         <td>${esc(d.categorie)}</td>
-                        <td class="num">${fmt(d.montant)} FCFA</td>
+                        <td class="num">${fmt(d.montant)} FCFA</td>
                         <td>${esc(d.description) || ''}</td>
                         <td><button class="secondary" data-del-depense="${d.id}">Supprimer</button></td>
                       </tr>`
@@ -264,7 +264,7 @@ window.Views.comptabilite = {
                   <td>${esc(e.categorie) || '-'}</td>
                   <td>${esc(e.secteur_nom) || '-'}</td>
                   <td>${etatBadge(e.etat)}</td>
-                  <td class="num">${e.valeur_nette_comptable != null ? `${fmt(e.valeur_nette_comptable)} FCFA` : '-'}</td>
+                  <td class="num">${e.valeur_nette_comptable != null ? `${fmt(e.valeur_nette_comptable)} FCFA` : '-'}</td>
                   <td>${e.prochain_entretien ? `<span class="badge ${retard ? 'danger' : 'ok'}">${fmtDate(e.prochain_entretien)}</span>` : '-'}</td>
                   <td class="actions-cell">
                     <button class="secondary" data-modifier="${e.id}">Modifier</button>
@@ -448,7 +448,7 @@ window.Views.comptabilite = {
                           (h) => `<tr>
                             <td>${fmtDate(h.date_entretien)}</td>
                             <td>${esc(h.description) || '-'}</td>
-                            <td class="num">${h.cout ? `${fmt(h.cout)} FCFA` : '-'}</td>
+                            <td class="num">${h.cout ? `${fmt(h.cout)} FCFA` : '-'}</td>
                             <td>${fmtDate(h.prochain_entretien)}</td>
                           </tr>`
                         )
@@ -673,7 +673,7 @@ function renderReleves(container, releves, paiements) {
           (r) => `<tr>
             <td>${fmtDate(r.date_operation)}</td>
             <td>${esc(r.libelle)}</td>
-            <td class="num">${fmt(r.montant)} FCFA</td>
+            <td class="num">${fmt(r.montant)} FCFA</td>
             <td><span class="badge ${r.type_operation === 'CREDIT' ? 'ok' : 'muted'}">${esc(r.type_operation)}</span></td>
             <td>${
               r.rapproche
@@ -691,7 +691,7 @@ function renderReleves(container, releves, paiements) {
                       ${paiementsDisponibles
                         .map(
                           (p) =>
-                            `<option value="${p.id}" ${r.suggestion && r.suggestion.id === p.id ? 'selected' : ''}>${esc(p.client_nom)} — ${fmt(p.montant)} FCFA (${esc(p.methode_paiement)})</option>`
+                            `<option value="${p.id}" ${r.suggestion && r.suggestion.id === p.id ? 'selected' : ''}>${esc(p.client_nom)} — ${fmt(p.montant)} FCFA (${esc(p.methode_paiement)})</option>`
                         )
                         .join('')}
                     </select>

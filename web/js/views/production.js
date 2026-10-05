@@ -42,12 +42,14 @@ window.Views.production = {
     container.innerHTML = `
       ${offlineBanner()}
       <div class="panel">
-        <div class="panel-row">
-          <div>
-            <h2>Nouveau lot de production</h2>
-            <p class="desc" style="margin-bottom:0">Créer un lot / bande / cycle d'élevage</p>
-          </div>
-        </div>
+        <h2>Lots en cours</h2>
+        <p class="desc">Touchez « Saisir un relevé » sur un lot pour noter la journée : mortalité, aliment, poids, taille…</p>
+        <div class="card-list" id="lots-list"></div>
+      </div>
+
+      <details class="panel pliable" ${lots.some((l) => l.statut === 'EN_COURS') ? '' : 'open'}>
+        <summary><h2>Nouveau lot de production</h2></summary>
+        <p class="desc">Créer un lot, une bande ou un cycle d'élevage.</p>
         <form id="form-lot" class="form-grid" autocomplete="off">
           <label>Secteur
             <select name="secteur_id" id="select-secteur-lot" required>
@@ -80,13 +82,7 @@ window.Views.production = {
           </label>
           <button type="submit">Créer le lot</button>
         </form>
-      </div>
-
-      <div class="panel">
-        <h2>Lots en cours</h2>
-        <p class="desc">Cliquez sur un lot pour saisir un relevé journalier (mortalité, alimentation, biométrie…)</p>
-        <div class="card-list" id="lots-list"></div>
-      </div>
+      </details>
 
       <div class="panel">
         <h2>Lots clôturés</h2>
@@ -152,6 +148,12 @@ const estPiscicole = (nom, nomParent) => nom === 'Piscicole' || nomParent === 'P
 const LOT_STATUT_BADGE = { EN_COURS: 'ok', ABATTAGE: 'info', TERMINE: 'muted', PERDU: 'danger' };
 const LOT_STATUT_LABEL = { EN_COURS: 'En cours', ABATTAGE: 'Abattage', TERMINE: 'Terminé', PERDU: 'Perdu' };
 
+// Unité de l'effectif d'un lot (« sujets », « plants »…), pour ne jamais afficher un nombre nu.
+function uniteLot(l) {
+  if (SECTEUR_UNITE[l.secteur_nom]) return SECTEUR_UNITE[l.secteur_nom];
+  return estPiscicole(l.secteur_nom, l.secteur_parent_nom) ? 'poissons' : '';
+}
+
 function lotDataAttr(l) {
   return JSON.stringify({ id: l.id, code_lot: l.code_lot, secteur_nom: l.secteur_nom, statut: l.statut }).replace(/'/g, '&#39;');
 }
@@ -178,15 +180,17 @@ function renderLotsList(container, lots) {
         const optionFin = l.secteur_nom === 'Avicole' ? `<option value="ABATTAGE">Envoyé à l'abattage</option>` : `<option value="TERMINE">Terminé (récolté/vendu)</option>`;
         return `
         <div class="lot-card">
-          <span class="tag-secteur">${esc(l.secteur_nom)}</span>
-          <div class="code" style="margin-top:8px">${esc(l.code_lot)}${l.culture ? ` — ${esc(l.culture)}` : ''}</div>
-          <div class="meta">Démarré le ${fmtDate(l.date_demarrage)} · ${esc(l.statut)}</div>
-          <div class="kpi"><span>${l.secteur_nom === 'Maraîcher' ? 'Nombre de plants' : 'Effectif actuel'}</span><b>${fmt(l.quantite_initiale)}</b></div>
+          <div class="lot-entete">
+            <div class="code">${esc(l.code_lot)}${l.culture ? ` — ${esc(l.culture)}` : ''}</div>
+            <span class="tag-secteur">${esc(l.secteur_nom)}</span>
+          </div>
+          <div class="meta">Démarré le ${fmtDate(l.date_demarrage)} · ${LOT_STATUT_LABEL[l.statut] || esc(l.statut)}</div>
+          <div class="kpi kpi-grand"><span>${l.secteur_nom === 'Maraîcher' ? 'Nombre de plants' : 'Effectif actuel'}</span><b>${fmt(l.quantite_initiale)}${uniteLot(l) ? `<span class="unit">${uniteLot(l)}</span>` : ''}</b></div>
           ${estPiscicole(l.secteur_nom, l.secteur_parent_nom) && Number(l.quantite_initiale) === 0 ? '<div class="kpi"><span>État</span><b><span class="badge muted">Bassin vide</span></b></div>' : ''}
           ${l.espece ? `<div class="kpi"><span>Espèce</span><b>${esc(l.espece)}</b></div>` : ''}
           ${badgeRecolte}
-          <button class="secondary" style="margin-top:10px;width:100%" data-lot='${lotDataAttr(l)}'>
-            Saisir un relevé / voir le FCR
+          <button class="lot-action" data-lot='${lotDataAttr(l)}'>
+            Saisir un relevé
           </button>
           <button class="secondary btn-modifier-lot" style="margin-top:6px;width:100%" data-lot-id="${l.id}" data-quantite="${l.quantite_initiale}" data-date="${l.date_demarrage ? String(l.date_demarrage).slice(0, 10) : ''}" data-espece="${esc(l.espece || '')}" data-piscicole="${estPiscicole(l.secteur_nom, l.secteur_parent_nom) ? '1' : ''}">
             Modifier
@@ -540,6 +544,12 @@ async function openRelevePanel(container, lot) {
     try {
       await Api.post('/production/sync', { releves: [releve] });
       showToast('Relevé synchronisé.', 'success');
+      // la mortalité saisie change l'effectif : on rafraîchit les cartes de lots sans quitter l'écran
+      try {
+        renderLotsList(container, await Api.get('/production/lots'));
+      } catch (err) {
+        /* les cartes se mettront à jour à la prochaine ouverture de l'écran */
+      }
       openRelevePanel(container, lot);
     } catch (err) {
       showToast(err.message, 'error');

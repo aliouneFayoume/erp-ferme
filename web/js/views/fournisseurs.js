@@ -95,7 +95,7 @@ window.Views.fournisseurs = {
                 (c) => `<tr>
                   <td>${esc(c.numero_commande)}</td>
                   <td>${esc(c.fournisseur_nom)}</td>
-                  <td class="num">${fmt(c.montant_total)} FCFA</td>
+                  <td class="num">${fmt(c.montant_total)} FCFA</td>
                   <td>${fmtDate(c.date_livraison_prevue)}</td>
                   <td>${statutCommandeFournisseurBadge(c.statut)}</td>
                   <td>${
@@ -182,7 +182,7 @@ window.Views.fournisseurs = {
         const prix = Number(row.querySelector('.ligne-prix').value || 0);
         total += qte * prix;
       });
-      container.querySelector('#total-estime').textContent = `${fmt(total)} FCFA`;
+      container.querySelector('#total-estime').textContent = `${fmt(total)} FCFA`;
     }
 
     addLigneRow();
@@ -235,5 +235,5 @@ window.Views.fournisseurs = {
 
 function statutCommandeFournisseurBadge(statut) {
   const map = { COMMANDEE: 'warn', RECUE: 'ok', ANNULEE: 'danger' };
-  return `<span class="badge ${map[statut] || 'muted'}">${statut.replace('_', ' ')}</span>`;
+  return `<span class="badge ${map[statut] || 'muted'}">${libelleStatut(statut)}</span>`;
 }

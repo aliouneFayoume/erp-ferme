@@ -47,7 +47,7 @@ window.Views.clients = {
                   <td>${esc(c.nom)}${c.est_abonne ? ' <span class="badge info">abonné</span>' : ''}</td>
                   <td><span class="badge ${c.type_client === 'B2B' ? 'muted' : 'ok'}">${esc(c.type_client)}</span></td>
                   <td>${esc(c.categorie_tarifaire) || '-'}</td>
-                  <td>${esc(c.telephone)}</td>
+                  <td>${esc(fmtTel(c.telephone))}</td>
                   <td class="num">${c.type_client === 'B2B' ? `${fmt(c.solde_encours)} / ${fmt(c.limite_credit)}` : '-'}</td>
                   <td class="num">${Number(c.gps_lat).toFixed(4)}, ${Number(c.gps_lng).toFixed(4)}</td>
                   <td class="actions-cell">

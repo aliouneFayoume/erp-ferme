@@ -189,7 +189,7 @@ function renderLignesActivite(fermes) {
       const st = ACTIVITE_STATUT[f.statut];
       const abo = f.abonnement
         ? f.abonnement.actif
-          ? `<span class="badge ok">${Number(f.abonnement.montant_mensuel) === 0 ? 'Gratuit (partenaire)' : `Tarif : ${fmt(f.abonnement.montant_mensuel)} FCFA/mois`}</span>`
+          ? `<span class="badge ok">${Number(f.abonnement.montant_mensuel) === 0 ? 'Gratuit (partenaire)' : `Tarif : ${fmt(f.abonnement.montant_mensuel)} FCFA/mois`}</span>`
           : '<span class="badge danger">Abonnement suspendu</span>'
         : '<span class="badge muted">Sans abonnement</span>';
       const principales = f.principales_saisies_7j.length
@@ -444,7 +444,7 @@ function renderLignesFacturesSaas(factures) {
         <td>${esc(f.organisation_nom)}</td>
         <td>${f.type === 'CONFIGURATION' ? 'Configuration' : 'Abonnement'}</td>
         <td>${esc(f.periode) || '-'}</td>
-        <td>${Number(f.montant).toLocaleString('fr-FR')} FCFA</td>
+        <td>${Number(f.montant).toLocaleString('fr-FR')} FCFA</td>
         <td>${fmtDate(f.date_echeance)}</td>
         <td><span class="badge ${FACTURE_SAAS_STATUT_BADGE[f.statut] || 'muted'}">${esc(FACTURE_SAAS_STATUT_LABELS[f.statut] || f.statut)}</span></td>
         <td style="white-space:nowrap">${
@@ -646,19 +646,19 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
           </form>
         </div>
 
-        <p class="desc">${esc(catalogue.socleEssentiel.label)} — ${catalogue.socleEssentiel.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois (toujours inclus)</p>
+        <p class="desc">${esc(catalogue.socleEssentiel.label)} — ${catalogue.socleEssentiel.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois (toujours inclus)</p>
         <p class="desc"><b>Les modules cochés donnent réellement accès</b> : un module décoché disparaît du menu de la ferme et son API est refusée, immédiatement à l'enregistrement. Le Pack tout compris ouvre tout. Une ferme sans abonnement enregistré n'est pas restreinte.</p>
         <form id="form-abonnement-saas" class="form-grid" autocomplete="off">
           <label style="flex-direction: row; align-items: center; gap: 8px;">
             <input type="checkbox" name="pack" style="width:auto" ${surPack ? 'checked' : ''} />
-            ${esc(catalogue.packToutCompris.label)} (${catalogue.packToutCompris.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois)
+            ${esc(catalogue.packToutCompris.label)} (${catalogue.packToutCompris.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois)
           </label>
           <div id="modules-a-la-carte" style="${surPack ? 'opacity: 0.4;' : ''}">
             ${catalogue.modules
               .map(
                 (m) => `<label style="flex-direction: row; align-items: center; gap: 8px;">
                   <input type="checkbox" name="module" value="${m.cle}" style="width:auto" ${surPack || modulesActifs.includes(m.cle) ? 'checked' : ''} />
-                  ${esc(m.label)} (${m.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois)
+                  ${esc(m.label)} (${m.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois)
                 </label>`
               )
               .join('')}

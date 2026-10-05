@@ -136,12 +136,34 @@ window.fmt = fmt;
 
 // Formatte une date SQL (DATE ou TIMESTAMP) en JJ/MM/AAAA sans glissement de fuseau horaire :
 // on lit directement les composants "YYYY-MM-DD" plutôt que de passer par new Date(...).toLocaleDateString().
+// Format court du kit : « 1er oct. 2026 ».
+const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 function fmtDate(dateStr) {
   if (!dateStr) return '-';
   const [y, m, d] = String(dateStr).slice(0, 10).split('-');
-  return `${d}/${m}/${y}`;
+  const mois = MOIS_COURTS[Number(m) - 1];
+  if (!mois) return `${d}/${m}/${y}`;
+  return `${Number(d) === 1 ? '1er' : Number(d)} ${mois} ${y}`;
 }
 window.fmtDate = fmtDate;
+
+// Téléphone au format du kit : « +221 77 123 45 67 » (numéros sénégalais ; tout autre numéro est laissé tel quel).
+function fmtTel(tel) {
+  const chiffres = String(tel || '').replace(/[^\d+]/g, '');
+  const m = chiffres.match(/^(?:\+221|00221)?(7\d)(\d{3})(\d{2})(\d{2})$/);
+  return m ? `+221 ${m[1]} ${m[2]} ${m[3]} ${m[4]}` : String(tel || '');
+}
+window.fmtTel = fmtTel;
+
+// Libellé français d'un état technique (EN_RETARD → « En retard ») pour les badges et boutons.
+const LIBELLES_STATUT = {
+  EN_ATTENTE: 'En attente', PREPAREE: 'Préparée', EN_LIVRAISON: 'En livraison', LIVREE: 'Livrée', ANNULEE: 'Annulée',
+  A_PAYER: 'À payer', PAYEE_PARTIEL: 'Payée en partie', PAYEE: 'Payée', EN_RETARD: 'En retard',
+  VALIDE: 'Validé', ECHOUE: 'Échoué', COMMANDEE: 'Commandée', RECUE: 'Reçue',
+  A_FAIRE: 'À faire', EN_COURS: 'En cours', TERMINEE: 'Terminée', ECHOUEE: 'Échouée',
+};
+window.libelleStatut = (code) =>
+  LIBELLES_STATUT[code] || String(code).replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
 
 // Échappement HTML : toute donnée provenant d'une saisie utilisateur (nom, notes, libellé...) doit
 // passer par ici avant d'être insérée dans un template littéral assigné à innerHTML, sans quoi un

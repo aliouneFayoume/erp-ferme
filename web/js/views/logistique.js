@@ -46,9 +46,9 @@ async function renderLivreur(container) {
   } else if (!caisseDuJour) {
     caisseHtml = `<button id="btn-ouvrir-caisse">Ouvrir ma caisse du jour</button>`;
   } else if (caisseDuJour.statut === 'OUVERTE') {
-    caisseHtml = `<span class="badge ok">Ouverte — ${fmt(caisseDuJour.montant_theorique)} FCFA encaissés</span>`;
+    caisseHtml = `<span class="badge ok">Ouverte — ${fmt(caisseDuJour.montant_theorique)} FCFA encaissés</span>`;
   } else {
-    caisseHtml = `<span class="badge muted">Clôturée par le comptable — ${fmt(caisseDuJour.montant_theorique)} FCFA théorique, ${fmt(caisseDuJour.montant_depose)} FCFA déposé (écart ${fmt(caisseDuJour.ecart)})</span>`;
+    caisseHtml = `<span class="badge muted">Clôturée par le comptable — ${fmt(caisseDuJour.montant_theorique)} FCFA théorique, ${fmt(caisseDuJour.montant_depose)} FCFA déposé (écart ${fmt(caisseDuJour.ecart)})</span>`;
   }
 
   container.innerHTML = `
@@ -133,7 +133,7 @@ async function renderLivreur(container) {
           </div>
           <div class="meta">${esc(t.adresse) || ''} · GPS ${Number(t.gps_lat).toFixed(4)}, ${Number(t.gps_lng).toFixed(4)}</div>
           <div class="kpi"><span>Commande</span><b>${esc(t.numero_commande)}</b></div>
-          <div class="kpi"><span>Montant</span><b>${fmt(t.montant_total)} FCFA</b></div>
+          <div class="kpi"><span>Montant</span><b>${fmt(t.montant_total)} FCFA</b></div>
           <div class="kpi"><span>Statut</span><b>${esc(t.statut)}</b></div>
           ${
             enAttente
@@ -265,7 +265,7 @@ async function renderGestion(container) {
               ? commandesPreparees
                   .map(
                     (c) => `<tr>
-                      <td>${esc(c.numero_commande)}</td><td>${esc(c.client_nom)}</td><td class="num">${fmt(c.montant_total)} FCFA</td>
+                      <td>${esc(c.numero_commande)}</td><td>${esc(c.client_nom)}</td><td class="num">${fmt(c.montant_total)} FCFA</td>
                       <td>
                         <select class="select-livreur" data-commande="${c.id}">
                           ${livreurs.map((l) => `<option value="${l.id}">${esc(l.nom_complet)}</option>`).join('')}
@@ -344,5 +344,5 @@ async function renderGestion(container) {
 
 function statutLivraisonBadge(statut) {
   const map = { A_FAIRE: 'warn', EN_COURS: 'info', TERMINEE: 'ok', ECHOUEE: 'danger' };
-  return `<span class="badge ${map[statut] || 'muted'}">${statut.replace('_', ' ')}</span>`;
+  return `<span class="badge ${map[statut] || 'muted'}">${libelleStatut(statut)}</span>`;
 }

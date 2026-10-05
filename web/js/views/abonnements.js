@@ -19,7 +19,7 @@ window.Views.abonnements = {
             <select name="client_id" required>${clients.map((c) => `<option value="${c.id}">${esc(c.nom)}</option>`).join('')}</select>
           </label>
           <label>Produit
-            <select name="produit_id" required>${produits.map((p) => `<option value="${p.id}">${esc(p.nom)} (${fmt(p.prix_unitaire_b2c)} FCFA)</option>`).join('')}</select>
+            <select name="produit_id" required>${produits.map((p) => `<option value="${p.id}">${esc(p.nom)} (${fmt(p.prix_unitaire_b2c)} FCFA)</option>`).join('')}</select>
           </label>
           <label>Quantité<input type="number" name="quantite" min="1" value="1" required /></label>
           <label>Fréquence

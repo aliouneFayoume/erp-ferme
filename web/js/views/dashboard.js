@@ -23,10 +23,10 @@ window.Views.dashboard = {
       }
 
       <div class="grid-stats">
-        ${statCard("Chiffre d'affaires du jour", `${fmt(stats.chiffreAffairesJour)} FCFA`, null, false, true)}
+        ${statCard("Chiffre d'affaires du jour", `${fmt(stats.chiffreAffairesJour)} FCFA`, null, false, true)}
         ${statCard('Commandes B2C du jour', stats.commandesB2C)}
         ${statCard('Stock total disponible', fmt(stats.stockTotal), 'tous secteurs, toutes unités confondues')}
-        ${statCard('Encours B2B total', `${fmt(stats.encoursB2B)} FCFA`, 'crédit accordé aux pros')}
+        ${statCard('Encours B2B total', `${fmt(stats.encoursB2B)} FCFA`, 'crédit accordé aux pros')}
         ${statCard('Caisses chauffeur ouvertes', stats.caissesOuvertes)}
         ${statCard('Lots de production actifs', stats.lotsActifs)}
         ${statCard('Récoltes proches (≤7j)', stats.recoltesProches, 'secteurs à suivi de récolte', stats.recoltesProches > 0)}
@@ -37,7 +37,7 @@ window.Views.dashboard = {
           ? `<div class="panel">
               <h2>Chiffre d'affaires — 14 derniers jours</h2>
               <p class="desc">Évolution des commandes facturées (hors annulées).</p>
-              ${lineChartSvg(stats.chiffreAffairesParJour, { unit: ' FCFA' })}
+              ${lineChartSvg(stats.chiffreAffairesParJour, { unit: ' FCFA' })}
             </div>`
           : ''
       }
@@ -47,6 +47,7 @@ window.Views.dashboard = {
 
 // attention : valeur à surveiller (filet vert vif) ; brand : l'indicateur principal de l'écran, fond Sahel (un seul).
 // L'unité en fin de valeur ("88 600 FCFA") passe en plus petit, comme dans le kit.
+window.statCard = statCard;
 function statCard(label, value, sub, attention, brand) {
   const m = typeof value === 'string' ? value.match(/^(.*\d)\s+([A-Za-zÀ-ÿ%]+)$/) : null;
   const valeur = m ? `${m[1]}<span class="unit">${m[2]}</span>` : value;

@@ -9,18 +9,31 @@ window.Views.finance = {
       Api.get('/commandes'),
     ]);
 
+    // Indicateurs : calculés sur les données déjà chargées (aucun nouvel appel serveur).
+    const somme = (lignes, champ) => lignes.reduce((t, l) => t + (Number(l[champ]) || 0), 0);
+    const encaisse = somme(paiements.filter((p) => p.statut === 'VALIDE'), 'montant');
+    const enAttente = somme(factures.filter((f) => f.statut === 'A_PAYER' || f.statut === 'PAYEE_PARTIEL'), 'montant_restant');
+    const enRetard = somme(factures.filter((f) => f.statut === 'EN_RETARD'), 'montant_restant');
+    const nbRetard = factures.filter((f) => f.statut === 'EN_RETARD').length;
+
     container.innerHTML = `
+      <div class="grid-stats">
+        ${statCard('Encaissé', `${fmt(encaisse)}\u00a0FCFA`, 'paiements validés', false, true)}
+        ${statCard('En attente de paiement', `${fmt(enAttente)}\u00a0FCFA`, 'factures à régler')}
+        ${statCard('En retard', `${fmt(enRetard)}\u00a0FCFA`, nbRetard ? `${nbRetard} facture${nbRetard > 1 ? 's' : ''} à relancer` : 'rien à relancer', nbRetard > 0)}
+      </div>
+
       <div class="panel">
         <h2>Initier un paiement Mobile Money</h2>
-        <p class="desc">Crée une facture PayDunya réelle (Wave / Orange Money / carte). Le paiement reste "EN_ATTENTE" jusqu'à confirmation automatique par PayDunya.</p>
+        <p class="desc">Crée une facture PayDunya réelle (Wave / Orange Money / carte). Le paiement reste « En attente » jusqu'à la confirmation automatique de PayDunya.</p>
         <form id="form-paiement" class="form-grid" autocomplete="off">
           <label>Commande
             <select name="commande_id" required>
-              ${commandes.filter((c) => c.statut !== 'ANNULEE').map((c) => `<option value="${c.id}" data-client="${c.client_id}">${esc(c.numero_commande)} — ${esc(c.client_nom)} (${fmt(c.montant_total)} FCFA)</option>`).join('')}
+              ${commandes.filter((c) => c.statut !== 'ANNULEE').map((c) => `<option value="${c.id}" data-client="${c.client_id}">${esc(c.numero_commande)} — ${esc(c.client_nom)} (${fmt(c.montant_total)} FCFA)</option>`).join('')}
             </select>
           </label>
           <label>Montant<input type="number" name="montant" required /></label>
-          <label>Provider
+          <label>Moyen de paiement
             <select name="provider"><option value="WAVE">Wave</option><option value="ORANGE_MONEY">Orange Money</option></select>
           </label>
           <button type="submit">Initier le paiement</button>
@@ -50,7 +63,7 @@ window.Views.finance = {
                   <td>${esc(f.client_nom)}</td>
                   <td><span class="badge ${f.type_client === 'B2B' ? 'muted' : 'ok'}">${esc(f.type_client)}</span></td>
                   <td>${fmtDate(f.date_echeance)}</td>
-                  <td class="num">${fmt(f.montant_restant)} FCFA</td>
+                  <td class="num">${fmt(f.montant_restant)} FCFA</td>
                   <td>${factureBadge(f.statut)}${noteRelance(f)}</td>
                   <td style="white-space:nowrap">
                     <button class="secondary" data-facture-pdf="${f.id}" data-numero="${esc(f.numero_commande)}">PDF</button>
@@ -156,7 +169,7 @@ function facturesEnRetardBanner(factures) {
   const enRetard = factures.filter((f) => f.statut === 'EN_RETARD');
   if (enRetard.length === 0) return '';
   const total = enRetard.reduce((s, f) => s + Number(f.montant_restant), 0);
-  return `<div class="offline-banner"><span>${enRetard.length} facture(s) en retard, ${fmt(total)} FCFA au total</span></div>`;
+  return `<div class="offline-banner"><span>${enRetard.length} facture(s) en retard, ${fmt(total)} FCFA au total</span></div>`;
 }
 
 function renderPaiements(container, paiements) {
@@ -167,7 +180,7 @@ function renderPaiements(container, paiements) {
           (p) => `<tr>
             <td>${esc(p.reference_transaction) || '-'}</td>
             <td>${esc(p.client_nom)}</td>
-            <td class="num">${fmt(p.montant)} FCFA</td>
+            <td class="num">${fmt(p.montant)} FCFA</td>
             <td>${esc(p.methode_paiement)}</td>
             <td>${paiementBadge(p.statut)}</td>
           </tr>`
@@ -188,9 +201,9 @@ function noteRelance(f) {
 
 function factureBadge(statut) {
   const map = { A_PAYER: 'warn', PAYEE_PARTIEL: 'info', PAYEE: 'ok', EN_RETARD: 'danger' };
-  return `<span class="badge ${map[statut] || 'muted'}">${statut.replace('_', ' ')}</span>`;
+  return `<span class="badge ${map[statut] || 'muted'}">${libelleStatut(statut)}</span>`;
 }
 function paiementBadge(statut) {
   const map = { EN_ATTENTE: 'warn', VALIDE: 'ok', ECHOUE: 'danger' };
-  return `<span class="badge ${map[statut] || 'muted'}">${statut}</span>`;
+  return `<span class="badge ${map[statut] || 'muted'}">${libelleStatut(statut)}</span>`;
 }

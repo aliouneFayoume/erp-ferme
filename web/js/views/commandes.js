@@ -41,7 +41,7 @@ window.Views.commandes = {
                   <td>${esc(c.numero_commande)}</td>
                   <td>${esc(c.client_nom)}</td>
                   <td><span class="badge ${c.type_client === 'B2B' ? 'muted' : 'ok'}">${c.type_client}</span></td>
-                  <td class="num">${fmt(c.montant_total)} FCFA</td>
+                  <td class="num">${fmt(c.montant_total)} FCFA</td>
                   <td>${statutBadge(c.statut)}</td>
                   <td>${statutActions(c)}</td>
                 </tr>`
@@ -98,7 +98,7 @@ window.Views.commandes = {
         const qte = Number(row.querySelector('.ligne-qte').value || 0);
         total += prixPourClient(opt, client) * qte;
       });
-      container.querySelector('#total-estime').textContent = `${fmt(total)} FCFA`;
+      container.querySelector('#total-estime').textContent = `${fmt(total)} FCFA`;
     }
 
     container.querySelector('#select-client').addEventListener('change', updateTotal);
@@ -142,11 +142,11 @@ function statutBadge(statut) {
     LIVREE: 'ok',
     ANNULEE: 'danger',
   };
-  return `<span class="badge ${map[statut] || 'muted'}">${statut.replace('_', ' ')}</span>`;
+  return `<span class="badge ${map[statut] || 'muted'}">${libelleStatut(statut)}</span>`;
 }
 
 function statutActions(c) {
   const next = { EN_ATTENTE: 'PREPAREE', PREPAREE: 'EN_LIVRAISON', EN_LIVRAISON: 'LIVREE' }[c.statut];
   if (!next) return '';
-  return `<button class="secondary" data-set-statut="${next}" data-id="${c.id}">→ ${next.replace('_', ' ')}</button>`;
+  return `<button class="secondary" data-set-statut="${next}" data-id="${c.id}">→ ${libelleStatut(next)}</button>`;
 }
