@@ -83,8 +83,8 @@ let dernierNombreEchecs = 0;
 async function tenterSyncHorsLigne() {
   const { reussies, sessionExpiree } = await OfflineQueue.synchroniser();
   if (reussies > 0) {
-    showToast(`${reussies} action(s) hors-ligne envoyée(s) au serveur.`, 'success');
-    if (currentTab === 'logistique') selectTab('logistique');
+    showToast(`${reussies} action(s) hors ligne envoyée(s) au serveur.`, 'success');
+    if (currentTab === 'logistique' || currentTab === 'production') selectTab(currentTab);
   }
   if (sessionExpiree) {
     if (!sessionExpireeToastShown) {
@@ -241,7 +241,30 @@ window.jetonCss = jetonCss;
 // à chaque vue) : clavier adapté aux champs numériques et téléphone (kit : tel / numeric / decimal),
 // libellé de colonne sur chaque cellule de tableau (sert à l'affichage en cartes sur téléphone) et
 // alignement à droite des en-têtes de colonnes numériques.
+// Champs posés en ligne dans un tableau ou une carte, sans <label> visible : on leur donne un nom accessible
+// (lecteur d'écran, saisie vocale) à partir de leur rôle et du contexte de la ligne.
+const NOMS_CHAMPS = {
+  'select-produit-oeufs': 'Produit alimenté par les œufs',
+  'input-oeufs-par-plateau': 'Œufs par plateau',
+  'ligne-produit': 'Produit', 'ligne-qte': 'Quantité', 'ligne-designation': 'Article', 'ligne-unite': 'Unité',
+  'ligne-prix': 'Prix unitaire', 'ligne-intrant': 'Intrant lié au stock',
+  'select-paiement': 'Paiement à rapprocher',
+  'select-aliment-defaut': 'Aliment par défaut',
+  'select-cloture': 'Motif de clôture du lot',
+};
+function nommerChampsSansLibelle(racine) {
+  racine.querySelectorAll('input:not([type="hidden"]):not([type="file"]), select, textarea').forEach((champ) => {
+    if (champ.closest('label') || champ.getAttribute('aria-label') || champ.getAttribute('aria-labelledby')) return;
+    if (champ.id && document.querySelector(`label[for="${champ.id}"]`)) return;
+    let nom = [...champ.classList].map((c) => NOMS_CHAMPS[c]).find(Boolean) || champ.getAttribute('placeholder') || champ.getAttribute('title');
+    if (!nom) return;
+    const contexte = champ.closest('.lot-card')?.querySelector('.code')?.textContent || champ.closest('tr')?.firstElementChild?.textContent;
+    if (contexte && contexte.trim() && !champ.classList.contains('ligne-designation')) nom += ` — ${contexte.trim().slice(0, 40)}`;
+    champ.setAttribute('aria-label', nom);
+  });
+}
 function ameliorerChamps(racine) {
+  nommerChampsSansLibelle(racine);
   racine.querySelectorAll('input:not([inputmode])').forEach((champ) => {
     const nom = `${champ.name || ''} ${champ.id || ''}`;
     if (champ.type === 'tel' || /(^|[\s_-])(tel|telephone|phone|whatsapp)/i.test(nom)) champ.setAttribute('inputmode', 'tel');
@@ -331,10 +354,32 @@ window.Modal = Modal;
 // on l'ouvre seulement au moment de choisir, la carte occupe presque tout l'écran pour cliquer
 // précisément, puis on la referme explicitement une fois le point validé (ou annulé).
 // Usage : MapPicker.open({ lat, lng, markers: [{ lat, lng, label }] }) -> Promise<{lat,lng}|null>
+// Leaflet (carte) n'est chargé qu'au moment où une carte s'ouvre : il n'alourdit plus le premier écran
+// (≈ 56 Ko compressés + une connexion vers un autre domaine, sur chaque page, même sans carte).
+let promesseLeaflet = null;
+function chargerLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (!promesseLeaflet) {
+    promesseLeaflet = new Promise((resolve) => {
+      const css = document.createElement('link');
+      css.rel = 'stylesheet';
+      css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(css);
+      const js = document.createElement('script');
+      js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      js.onload = () => resolve(window.L || null);
+      js.onerror = () => { promesseLeaflet = null; resolve(null); }; // hors ligne : on pourra réessayer plus tard
+      document.head.appendChild(js);
+    });
+  }
+  return promesseLeaflet;
+}
+window.chargerLeaflet = chargerLeaflet;
+
 const MapPicker = {
   open({ lat, lng, markers = [] } = {}) {
-    return new Promise((resolve) => {
-      if (!window.L) { resolve(null); return; }
+    return chargerLeaflet().then((L) => new Promise((resolve) => {
+      if (!L) { showToast('Carte indisponible : vérifiez votre connexion.', 'error'); resolve(null); return; }
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay';
       overlay.innerHTML = `
@@ -383,7 +428,7 @@ const MapPicker = {
         if (e.target === overlay) close(null);
       });
       btnOk.addEventListener('click', () => close(picked));
-    });
+    }));
   },
 };
 window.MapPicker = MapPicker;

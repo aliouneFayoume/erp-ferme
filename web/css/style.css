@@ -373,7 +373,7 @@ td.num, th.num { text-align: right; font-family: var(--font-num); font-variant-n
 .lot-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
 .lot-card .lot-entete { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
 .lot-card .code { font-weight: 700; font-size: 18px; line-height: 24px; color: var(--sahel-900); }
-.lot-card .kpi span { color: var(--ink-muted); }
+.lot-card .kpi > span:first-child { color: var(--ink-muted); }
 .lot-card .kpi-grand { flex-direction: column; align-items: flex-start; padding: var(--space-2) 0; }
 .lot-card .kpi-grand b { font-family: var(--font-num); font-size: 28px; line-height: 32px; letter-spacing: -0.3px; font-variant-numeric: tabular-nums; }
 .lot-card .kpi-grand .unit { font-size: 15px; font-weight: 600; margin-left: 4px; letter-spacing: 0; }

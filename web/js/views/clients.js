@@ -64,24 +64,19 @@ window.Views.clients = {
     `;
 
     const btnChoisirCarte = container.querySelector('#btn-choisir-carte');
-    if (window.L) {
-      btnChoisirCarte.addEventListener('click', async () => {
-        const latInput = container.querySelector('input[name="gps_lat"]');
-        const lngInput = container.querySelector('input[name="gps_lng"]');
-        const point = await MapPicker.open({
-          lat: latInput.value ? Number(latInput.value) : null,
-          lng: lngInput.value ? Number(lngInput.value) : null,
-          markers: clients.map((c) => ({ lat: c.gps_lat, lng: c.gps_lng, label: `${esc(c.nom)} (${esc(c.type_client)})` })),
-        });
-        if (point) {
-          latInput.value = point.lat.toFixed(8);
-          lngInput.value = point.lng.toFixed(8);
-        }
+    btnChoisirCarte.addEventListener('click', async () => {
+      const latInput = container.querySelector('input[name="gps_lat"]');
+      const lngInput = container.querySelector('input[name="gps_lng"]');
+      const point = await MapPicker.open({
+        lat: latInput.value ? Number(latInput.value) : null,
+        lng: lngInput.value ? Number(lngInput.value) : null,
+        markers: clients.map((c) => ({ lat: c.gps_lat, lng: c.gps_lng, label: `${esc(c.nom)} (${esc(c.type_client)})` })),
       });
-    } else {
-      btnChoisirCarte.disabled = true;
-      btnChoisirCarte.title = 'Carte indisponible (hors-ligne).';
-    }
+      if (point) {
+        latInput.value = point.lat.toFixed(8);
+        lngInput.value = point.lng.toFixed(8);
+      }
+    });
 
     container.querySelector('#form-client').addEventListener('submit', async (e) => {
       e.preventDefault();

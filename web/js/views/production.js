@@ -534,7 +534,7 @@ async function openRelevePanel(container, lot) {
         body: { releves: [releve] },
         label: `Relevé ${lot.code_lot} — ${releve.date_releve}`,
       });
-      showToast('Hors-ligne : relevé mis en file (IndexedDB). Il sera synchronisé au retour du réseau.', 'warn');
+      showToast('Hors ligne : relevé gardé sur cet appareil. Il sera envoyé dès le retour du réseau.', 'warn');
       await updateOfflineBanner(container);
       e.target.reset();
       idReleve = nouvelIdReleve(); // le relevé en file garde SON identifiant ; le suivant en aura un autre
@@ -570,8 +570,8 @@ async function updateOfflineBanner(container) {
   banner.classList.remove('hidden');
   banner.innerHTML = `
     <span>
-      ${offline ? '📴 Mode hors-ligne (PWA offline-first) — les relevés sont mis en file locale.' : '🟢 En ligne.'}
-      ${q.length ? ` ${q.length} action(s) en attente de synchronisation.` : ''}
+      ${offline ? '<strong>Hors ligne.</strong> Vos relevés sont gardés sur cet appareil et partiront dès le retour du réseau.' : '<strong>En ligne.</strong>'}
+      ${q.length ? ` ${q.length} action(s) en attente d'envoi.` : ''}
     </span>
     <span style="display:flex;gap:8px;align-items:center">
       <label style="flex-direction:row;align-items:center;gap:6px;font-size:13px">
@@ -588,7 +588,11 @@ async function updateOfflineBanner(container) {
   if (syncBtn) {
     syncBtn.addEventListener('click', async () => {
       const { reussies } = await OfflineQueue.synchroniser();
-      if (reussies > 0) showToast(`${reussies} action(s) hors-ligne synchronisée(s).`, 'success');
+      if (reussies > 0) {
+        showToast(`${reussies} action(s) hors ligne envoyée(s).`, 'success');
+        await window.Views.production.render(container); // les effectifs changent avec les relevés envoyés
+        return;
+      }
       await updateOfflineBanner(container);
     });
   }

@@ -80,7 +80,8 @@ async function renderLivreur(container) {
     </div>
   `;
 
-  if (window.L) {
+  chargerLeaflet().then((L) => {
+    if (!L) return;
     const map = L.map('tournee-map').setView([depot.lat, depot.lng], 11);
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Tiles © Esri — Source: Esri, DeLorme, NAVTEQ',
@@ -118,7 +119,7 @@ async function renderLivreur(container) {
       L.polyline(pointsOrdre, { color: jetonCss('--senegal-50'), weight: 3, opacity: 0.9, dashArray: '6 6' }).addTo(map);
       map.fitBounds(pointsOrdre, { padding: [24, 24] });
     }
-  }
+  }).catch(() => {});
 
   const list = container.querySelector('#tournee-list');
   list.innerHTML = tournees.length
