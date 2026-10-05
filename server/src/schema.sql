@@ -815,8 +815,9 @@ CREATE TABLE paiements_saas (
 -- AVIS PUBLICS (site vitrine massla.sn/decouvrir)
 -- --------------------------------------------------------
 -- Avis laissés par les visiteurs du site vitrine — délibérément SANS tenant_id : un avis ne
--- concerne aucune ferme cliente précise, c'est un visiteur qui commente son expérience. Pas de RLS
--- ici (voir rls-policies.sql), comme `roles` : donnée globale à la plateforme, pas au tenant. Un
+-- concerne aucune ferme cliente précise, c'est un visiteur qui commente son expérience. Donnée globale
+-- à la plateforme, pas au tenant : RLS actif mais avec des policies dédiées sans notion de tenant
+-- (voir rls-policies.sql et migration-32 : sans elles, tout INSERT du formulaire public est rejeté). Un
 -- formulaire public sans validation humaine est une invitation au spam/contenu abusif — approuve
 -- vaut FALSE par défaut, seul un superviseur peut publier (routes/plateforme.js), jamais le visiteur
 -- lui-même (routes/avis.js force approuve=FALSE côté serveur, ignore toute valeur envoyée).

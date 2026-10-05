@@ -302,3 +302,16 @@ DROP POLICY IF EXISTS plateforme_seulement ON paiements_saas;
 CREATE POLICY plateforme_seulement ON paiements_saas
     USING (is_plateforme_admin())
     WITH CHECK (is_plateforme_admin());
+
+-- Avis publics du site vitrine (migration-32) : table globale SANS tenant_id, écrite par un visiteur sans compte.
+-- Policies réservées à erp_app (jamais PUBLIC : l'API REST Supabase, clé « anon », doit rester sans accès, sinon
+-- n'importe qui pourrait publier un avis sans modération). Pas de policy DELETE : refusé.
+DROP POLICY IF EXISTS avis_depot_public ON avis_publics;
+DROP POLICY IF EXISTS avis_lecture ON avis_publics;
+DROP POLICY IF EXISTS avis_moderation ON avis_publics;
+CREATE POLICY avis_depot_public ON avis_publics FOR INSERT TO erp_app
+    WITH CHECK (approuve = FALSE);
+CREATE POLICY avis_lecture ON avis_publics FOR SELECT TO erp_app
+    USING (true);
+CREATE POLICY avis_moderation ON avis_publics FOR UPDATE TO erp_app
+    USING (true) WITH CHECK (true);

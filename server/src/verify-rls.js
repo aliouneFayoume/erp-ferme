@@ -239,11 +239,38 @@ async function main() {
             await poserPlateforme(client, false);
             const ticketsSansPlateforme = await client.query(`SELECT id FROM tickets WHERE id IN ($1, $2)`, [ticketA, ticketB]);
             verifier('tickets : is_plateforme_admin retiré, contexte A ne voit plus le ticket de B', ticketsSansPlateforme.rows.length === 1 && ticketsSansPlateforme.rows[0].id === ticketA);
+
+            // 10. avis_publics (formulaire public de massla.sn/decouvrir) : table globale SANS tenant_id, écrite par
+            //     un visiteur sans compte (aucun contexte tenant). Régression 2026-10-05 : RLS actif sans policy =>
+            //     chaque INSERT était rejeté et aucun avis n'a jamais été enregistré.
+            await poserContexte(client, null);
+            await poserPlateforme(client, false);
+            const avisDepose = await client
+                .query(`INSERT INTO avis_publics (nom, note, commentaire, approuve) VALUES ('verify-rls visiteur', 4, 'Avis de test', FALSE)`)
+                .then(() => true, () => false);
+            verifier('avis_publics : un visiteur (sans contexte tenant) peut déposer un avis en attente', avisDepose);
+
+            const avisDejaApprouve = await client
+                .query(`INSERT INTO avis_publics (nom, note, commentaire, approuve) VALUES ('verify-rls tricheur', 5, 'Déjà publié', TRUE)`)
+                .then(() => true, () => false);
+            verifier("avis_publics : impossible de déposer un avis déjà approuvé (la modération ne se contourne pas)", !avisDejaApprouve);
+
+            const avisLus = await client.query(`SELECT id FROM avis_publics WHERE nom = 'verify-rls visiteur'`);
+            verifier("avis_publics : l'avis en attente reste lisible côté application (lien d'approbation)", avisLus.rows.length === 1);
+
+            const avisApprouve = await client.query(`UPDATE avis_publics SET approuve = TRUE WHERE id = $1 RETURNING id`, [avisLus.rows[0] ? avisLus.rows[0].id : null]);
+            verifier("avis_publics : l'approbation (UPDATE) fonctionne", avisApprouve.rows.length === 1);
+
+            const avisSupprime = await client
+                .query(`DELETE FROM avis_publics WHERE nom = 'verify-rls visiteur' RETURNING id`)
+                .then((r) => r.rows.length > 0, () => false);
+            verifier("avis_publics : aucune suppression possible depuis l'application", !avisSupprime);
         } finally {
             client.release();
         }
     } finally {
         // --- Nettoyage (rôle propriétaire, ordre inverse des FK). ---
+        await admin.query(`DELETE FROM avis_publics WHERE nom LIKE 'verify-rls%'`).catch(() => {});
         await admin.query(`DELETE FROM factures_saas WHERE tenant_id IN ($1, $2)`, [tenantA, tenantB]).catch(() => {});
         await admin.query(`DELETE FROM organisation_abonnement_saas WHERE tenant_id IN ($1, $2)`, [tenantA, tenantB]).catch(() => {});
         await admin.query(`DELETE FROM ticket_messages WHERE ticket_id IN ($1, $2)`, [ticketA, ticketB]).catch(() => {});
