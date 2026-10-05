@@ -54,7 +54,7 @@ const BUNDLES = {
   // decouvrir.html, fin de <body> — modal de demande de démonstration (section #contact) et section "Avis
   // clients" (chargement + modal de soumission) : deux fonctionnalités propres à cette page,
   // regroupées dans un seul bundle plutôt qu'un fichier par mini-fonctionnalité.
-  'contact-decouvrir.min.js': ['js/contact-decouvrir.js', 'js/avis-decouvrir.js'],
+  'contact-decouvrir.min.js': ['js/contact-decouvrir.js', 'js/avis-decouvrir.js', 'js/decouvrir-ui.js'],
   // portail.html
   'portail.min.js': ['js/branding.js', 'js/portail.js'],
   // verifier-email.html (lien reçu par email, voir server/src/email.js)

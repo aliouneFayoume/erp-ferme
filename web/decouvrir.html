@@ -3,724 +3,483 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gestion de ferme avicole, piscicole, maraîchère et d'élevage au Sénégal — ERP Ferme</title>
-  <meta name="description" content="Logiciel de gestion pour fermes avicoles, piscicoles, maraîchères et d'élevage au Sénégal. Suivi de production et stock, paiement Wave/Orange Money, rappels WhatsApp, fonctionne hors ligne. Démonstration gratuite." />
+  <title>Massla — Logiciel de gestion de ferme au Sénégal (avicole, piscicole, maraîchère, élevage)</title>
+  <meta name="description" content="Massla, l'ERP des fermes sénégalaises : suivi de production et de stock, paiement Wave et Orange Money, rappels WhatsApp, fonctionne hors ligne. Démonstration gratuite." />
   <link rel="canonical" href="https://massla.sn/decouvrir" />
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="fr_SN" />
-  <meta property="og:title" content="Gestion de ferme avicole, piscicole, maraîchère et d'élevage au Sénégal — ERP Ferme" />
+  <meta property="og:site_name" content="Massla" />
+  <meta property="og:title" content="Massla — Logiciel de gestion de ferme au Sénégal" />
   <meta property="og:description" content="Suivez votre production, votre stock et vos paiements depuis votre téléphone, même sans connexion internet. Wave, Orange Money et rappels WhatsApp intégrés." />
   <meta property="og:url" content="https://massla.sn/decouvrir" />
-  <meta property="og:image" content="https://massla.sn/icons/og-image.png" />
+  <meta property="og:image" content="https://massla.sn/img/og-massla.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:type" content="image/png" />
-  <meta property="og:image:alt" content="ERP Ferme Massla — gestion de ferme avicole, piscicole, maraîchère et d'élevage au Sénégal" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta property="og:image:alt" content="Massla — le logiciel de gestion pensé pour les fermes sénégalaises" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:image" content="https://massla.sn/icons/og-image.png" />
-  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
-  <meta name="theme-color" content="#1A1A1A" />
+  <meta name="twitter:image" content="https://massla.sn/img/og-massla.jpg" />
+  <link rel="icon" href="/icons/massla-favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icons/massla-icone-app.svg" />
+  <meta name="theme-color" content="#0F3D2E" />
+  <link rel="preload" href="/fonts/Onest-Variable.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/img/hero-1200.webp" as="image" imagesrcset="/img/hero-640.webp 640w, /img/hero-1200.webp 1200w" imagesizes="(min-width: 1024px) 560px, 100vw" fetchpriority="high" />
+  <link rel="stylesheet" href="/css/massla-tokens.css" />
+  <link rel="stylesheet" href="/css/decouvrir.css" />
   <script src="/js/dist/marketing.min.js"></script>
-  <style>
-  :root {
-    --bg: #F6F6F7;
-    --surface: #FFFFFF;
-    --surface-2: #EFEFF0;
-    --text: #1A1A1A;
-    --muted: #616161;
-    --muted-2: #8A8A8A;
-    --border: #E3E3E3;
-    --primary: #2C6ECB;
-    --primary-strong: #1F52A0;
-    --primary-tint: #E7F0FC;
-    --avicole: #A67C2E;
-    --avicole-tint: #F5EEDD;
-    --piscicole: #3B7D7D;
-    --piscicole-tint: #E4EFEE;
-    --maraicher: #5B8C3A;
-    --maraicher-tint: #EBF1E4;
-    --elevage: #8C5A3B;
-    --elevage-tint: #F1E6DD;
-    --success: #2E7D46;
-    --danger: #C0392B;
-    --shadow: 0 1px 2px rgba(26, 26, 26, 0.05), 0 10px 28px rgba(26, 26, 26, 0.06);
-    --display: "Avenir Next", "Century Gothic", "Futura", -apple-system, "Segoe UI", sans-serif;
-    --body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  }
-
-  :root[data-theme="dark"] {
-    --bg: #17181A;
-    --surface: #1F2023;
-    --surface-2: #26282B;
-    --text: #F1F1F0;
-    --muted: #B2B2AF;
-    --muted-2: #8C8C89;
-    --border: #34363A;
-    --primary: #6FA3E8;
-    --primary-strong: #8FB8EE;
-    --primary-tint: #1E2A3B;
-    --avicole: #D2A652;
-    --avicole-tint: #34291A;
-    --piscicole: #6FADAC;
-    --piscicole-tint: #1B2B2A;
-    --maraicher: #8FBE68;
-    --maraicher-tint: #212D1B;
-    --elevage: #D9A87C;
-    --elevage-tint: #332318;
-    --success: #6FBE86;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px rgba(0, 0, 0, 0.35);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #17181A;
-      --surface: #1F2023;
-      --surface-2: #26282B;
-      --text: #F1F1F0;
-      --muted: #B2B2AF;
-      --muted-2: #8C8C89;
-      --border: #34363A;
-      --primary: #6FA3E8;
-      --primary-strong: #8FB8EE;
-      --primary-tint: #1E2A3B;
-      --avicole: #D2A652;
-      --avicole-tint: #34291A;
-      --piscicole: #6FADAC;
-      --piscicole-tint: #1B2B2A;
-      --maraicher: #8FBE68;
-      --maraicher-tint: #212D1B;
-      --elevage: #D9A87C;
-      --elevage-tint: #332318;
-      --success: #6FBE86;
-      --danger: #E2867A;
-      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px rgba(0, 0, 0, 0.35);
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://massla.sn/#organisation",
+      "name": "Massla",
+      "legalName": "FAYSSALAME",
+      "url": "https://massla.sn",
+      "logo": "https://massla.sn/icons/massla-icone-app.svg",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "Cité Castors Marine III, Villa 48",
+        "addressLocality": "Dakar",
+        "addressCountry": "SN"
+      }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "Massla",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web, Android, iOS",
+      "inLanguage": "fr",
+      "description": "Logiciel de gestion pour fermes avicoles, piscicoles, maraîchères et d'élevage au Sénégal : production, stock, paiements Wave et Orange Money, rappels WhatsApp, fonctionne hors ligne.",
+      "publisher": {
+        "@id": "https://massla.sn/#organisation"
+      },
+      "offers": [
+        {
+          "@type": "Offer",
+          "name": "Socle Essentiel (par mois)",
+          "price": "25000",
+          "priceCurrency": "XOF"
+        },
+        {
+          "@type": "Offer",
+          "name": "Pack tout compris (par mois)",
+          "price": "85000",
+          "priceCurrency": "XOF"
+        },
+        {
+          "@type": "Offer",
+          "name": "Mise en place (une seule fois)",
+          "price": "75000",
+          "priceCurrency": "XOF"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Quel est le meilleur logiciel de gestion pour une ferme au Sénégal ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Le meilleur outil est celui construit pour votre réalité de terrain, pas un logiciel générique importé. Massla est pensé spécifiquement pour les fermes avicoles, piscicoles, maraîchères et d'élevage sénégalaises, avec paiement mobile local et fonctionnement hors ligne."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Peut-on utiliser l'application sans connexion internet ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Oui. L'application continue de fonctionner sans réseau et synchronise automatiquement toutes les données dès que la connexion revient — conçue pour les zones rurales où le réseau n'est pas toujours stable."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Comment encaisser mes clients avec Wave ou Orange Money ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Wave et Orange Money sont directement intégrés à l'application : quand un client paie, sa facture se met à jour automatiquement, sans ressaisie manuelle de votre part."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "L'application convient-elle à une petite ferme familiale ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Oui, à condition d'avoir au moins un employé au-delà du propriétaire et un volume de ventes régulier. Le Socle Essentiel permet de démarrer simplement, et des modules peuvent être ajoutés plus tard selon la croissance de la ferme."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Combien coûte un logiciel de gestion agricole au Sénégal ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "À partir de 25 000 FCFA par mois pour le Socle Essentiel (tableau de bord, production, catalogue et stock, intrants, gestion des utilisateurs), avec des modules additionnels selon vos besoins : Clients & Abonnements, Commandes & Fournisseurs, Comptabilité et Paie à 10 000 FCFA chacun, Support client à 5 000 FCFA, Logistique, Finance (paiement mobile) et Élevage à 15 000 FCFA chacun — ou un pack tout compris à 85 000 FCFA par mois avec tous les modules inclus. Une mise en place unique de 75 000 FCFA est facturée au démarrage."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Mes données sont-elles en sécurité ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Oui. Chaque ferme a ses propres données, totalement isolées des autres fermes clientes au niveau de la base de données. Les comptes sont protégés par un mot de passe renforcé obligatoire, une vérification d'adresse e-mail, et une authentification à deux facteurs disponible pour les comptes administrateurs."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Dans quelles régions intervenez-vous ?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Actuellement à Thiès, Mbour et la Petite Côte, Kaolack, Saint-Louis, ainsi que dans la ceinture maraîchère et avicole autour de Dakar — Rufisque, Bambilor et Sangalkam."
+          }
+        }
+      ]
     }
-  }
-
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--body);
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-  }
-
-  a { color: var(--primary); }
-
-  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 1.5rem; }
-  .narrow { max-width: 700px; }
-
-  .topbar {
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-  }
-  .topbar .wrap {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 1rem 1.5rem;
-  }
-  .logo {
-    font-family: var(--display);
-    font-weight: 700;
-    font-size: 1.1rem;
-    letter-spacing: -0.01em;
-  }
-  .logo span { color: var(--primary); }
-  .topbar nav { display: flex; gap: 1.4rem; align-items: center; }
-  .topbar nav a {
-    font-size: 0.88rem; color: var(--muted); text-decoration: none; font-weight: 600;
-  }
-  .topbar nav a:hover { color: var(--text); }
-  .topbar .cta-small {
-    font-size: 0.85rem; font-weight: 700; color: #fff;
-    background: var(--primary); border-radius: 6px; padding: 0.5rem 0.9rem;
-    text-decoration: none;
-  }
-  .topbar-links { display: flex; align-items: center; gap: 1.4rem; }
-
-  .hero { padding: 4.5rem 0 3.5rem; }
-  .eyebrow {
-    display: inline-block;
-    font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase;
-    color: var(--primary-strong); background: var(--primary-tint);
-    border-radius: 20px; padding: 0.35rem 0.85rem; font-weight: 700;
-    margin-bottom: 1.2rem;
-  }
-  h1 {
-    font-family: var(--display);
-    font-size: clamp(2rem, 5vw, 3rem);
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    line-height: 1.12;
-    margin: 0 0 1.1rem;
-    text-wrap: balance;
-    max-width: 18ch;
-  }
-  h1 em { font-style: normal; color: var(--primary); }
-  .lede { font-size: 1.15rem; color: var(--muted); max-width: 56ch; margin: 0 0 2rem; }
-
-  .cta-row { display: flex; flex-wrap: wrap; gap: 0.9rem; margin-bottom: 1.4rem; }
-  .btn {
-    display: inline-flex; align-items: center; gap: 0.5rem;
-    font-size: 0.96rem; font-weight: 700; text-decoration: none;
-    border-radius: 8px; padding: 0.8rem 1.4rem;
-  }
-  .btn-primary { background: var(--primary); color: #fff; }
-  .btn-primary:hover { background: var(--primary-strong); }
-  .btn-ghost { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
-
-  .trust-line { font-size: 0.88rem; color: var(--muted-2); }
-  .trust-line strong { color: var(--text); }
-
-  .sector-strip {
-    display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 2.2rem;
-  }
-  .sector-pill {
-    font-size: 0.82rem; font-weight: 700; border-radius: 20px;
-    padding: 0.4rem 0.95rem;
-  }
-  .sector-pill.avicole { background: var(--avicole-tint); color: var(--avicole); }
-  .sector-pill.piscicole { background: var(--piscicole-tint); color: var(--piscicole); }
-  .sector-pill.maraicher { background: var(--maraicher-tint); color: var(--maraicher); }
-  .sector-pill.elevage { background: var(--elevage-tint); color: var(--elevage); }
-
-  section { padding: 3.4rem 0; border-top: 1px solid var(--border); }
-  .section-label {
-    font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase;
-    color: var(--muted-2); font-weight: 700; margin: 0 0 0.6rem;
-  }
-  h2 {
-    font-family: var(--display);
-    font-size: clamp(1.5rem, 3.4vw, 2rem);
-    font-weight: 700; letter-spacing: -0.01em;
-    margin: 0 0 1rem; text-wrap: balance;
-  }
-  .section-lede { font-size: 1.02rem; color: var(--muted); max-width: 60ch; margin: 0 0 2rem; }
-
-  .problem-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1rem; }
-  .problem-card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 1.2rem 1.3rem; box-shadow: var(--shadow);
-  }
-  .problem-card p { margin: 0; font-size: 0.95rem; color: var(--text); }
-
-  .sector-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.2rem; }
-  .sector-card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-    overflow: hidden; box-shadow: var(--shadow);
-  }
-  .sector-card .band { height: 5px; }
-  .sector-card.avicole .band { background: var(--avicole); }
-  .sector-card.piscicole .band { background: var(--piscicole); }
-  .sector-card.maraicher .band { background: var(--maraicher); }
-  .sector-card.elevage .band { background: var(--elevage); }
-  .sector-card-body { padding: 1.4rem 1.5rem; }
-  .sector-card h3 {
-    font-family: var(--display); font-size: 1.15rem; font-weight: 700; margin: 0 0 0.7rem;
-  }
-  .sector-card.avicole h3 { color: var(--avicole); }
-  .sector-card.piscicole h3 { color: var(--piscicole); }
-  .sector-card.maraicher h3 { color: var(--maraicher); }
-  .sector-card.elevage h3 { color: var(--elevage); }
-  .sector-card ul { margin: 0; padding-left: 1.1rem; }
-  .sector-card li { font-size: 0.92rem; color: var(--muted); margin-bottom: 0.4rem; }
-  .sector-card li::marker { color: inherit; }
-
-  .steps-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.4rem; }
-  .step-num {
-    font-family: var(--display); font-size: 1.6rem; font-weight: 700;
-    color: var(--primary); margin-bottom: 0.5rem;
-  }
-  .steps-row h3 { font-size: 1rem; margin: 0 0 0.4rem; }
-  .steps-row p { font-size: 0.9rem; color: var(--muted); margin: 0; }
-
-  .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.2rem; }
-  .feature-card { display: flex; gap: 0.9rem; align-items: flex-start; }
-  .feature-icon {
-    flex-shrink: 0; width: 2.1rem; height: 2.1rem; border-radius: 8px;
-    background: var(--primary-tint); color: var(--primary-strong);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.05rem; font-weight: 700;
-  }
-  .feature-card h4 { margin: 0 0 0.3rem; font-size: 0.96rem; }
-  .feature-card p { margin: 0; font-size: 0.88rem; color: var(--muted); }
-
-  .case-study {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-    padding: 2rem 2.2rem; box-shadow: var(--shadow);
-    display: grid; grid-template-columns: auto 1fr; gap: 1.6rem; align-items: center;
-  }
-  .case-badge {
-    font-family: var(--display); font-weight: 700; font-size: 1.3rem;
-    width: 4.5rem; height: 4.5rem; border-radius: 50%;
-    background: var(--maraicher-tint); color: var(--maraicher);
-    display: flex; align-items: center; justify-content: center;
-  }
-  .case-study blockquote {
-    margin: 0 0 0.7rem; font-size: 1.1rem; font-style: italic;
-    font-family: var(--display); font-weight: 500; line-height: 1.4;
-  }
-  .case-study cite { font-size: 0.85rem; color: var(--muted); font-style: normal; }
-  @media (max-width: 560px) { .case-study { grid-template-columns: 1fr; text-align: left; } .case-badge { width: 3.5rem; height: 3.5rem; font-size: 1rem; } }
-
-  .avis-header {
-    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
-    gap: 1rem; margin: 2.2rem 0 1.2rem;
-  }
-  .avis-header h3 { margin: 0; font-size: 1.02rem; }
-  .avis-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1.1rem; }
-  .avis-card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-    padding: 1.3rem 1.4rem;
-  }
-  .avis-stars { color: var(--primary); font-size: 0.95rem; letter-spacing: 0.12em; margin-bottom: 0.6rem; }
-  .avis-card p { margin: 0 0 0.8rem; font-size: 0.9rem; color: var(--text); }
-  .avis-card cite { font-size: 0.8rem; color: var(--muted); font-style: normal; }
-  .modal-box textarea {
-    width: 100%; padding: 0.65rem 0.8rem; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--bg); color: var(--text); font-size: 0.95rem; font-family: inherit; resize: vertical;
-  }
-  .modal-box textarea:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
-
-  .price-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.1rem; }
-  .price-card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-    padding: 1.5rem 1.4rem; box-shadow: var(--shadow); display: flex; flex-direction: column;
-  }
-  .price-card.featured { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary), var(--shadow); }
-  .price-tag {
-    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-    color: var(--primary-strong); background: var(--primary-tint);
-    border-radius: 20px; padding: 0.2rem 0.6rem; align-self: flex-start; margin-bottom: 0.8rem;
-  }
-  .price-card h3 { margin: 0 0 0.3rem; font-size: 1.05rem; }
-  .price-amount {
-    font-family: var(--display); font-size: 1.6rem; font-weight: 700;
-    color: var(--text); margin-bottom: 0.2rem; font-variant-numeric: tabular-nums;
-  }
-  .price-period { font-size: 0.8rem; color: var(--muted-2); margin-bottom: 1rem; }
-  .price-card p.desc { font-size: 0.87rem; color: var(--muted); margin: 0; }
-  .price-note { font-size: 0.85rem; color: var(--muted); margin-top: 1.2rem; }
-  .price-savings {
-    font-size: 0.82rem; font-weight: 600; color: var(--success); margin: 0.6rem 0 0;
-    padding-top: 0.6rem; border-top: 1px dashed var(--border);
-  }
-
-  .price-breakdown { margin-top: 1.1rem; }
-  .price-breakdown summary { font-size: 0.92rem; }
-  .module-table { margin-top: 0.9rem; }
-  .module-row {
-    display: flex; justify-content: space-between; gap: 1rem;
-    padding: 0.55rem 0; border-bottom: 1px solid var(--border);
-    font-size: 0.9rem;
-  }
-  .module-row span:first-child { color: var(--text); }
-  .module-row span:last-child { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
-  .module-row em { font-style: normal; color: var(--muted-2); font-size: 0.82rem; }
-  .module-row.total {
-    border-bottom: none; border-top: 2px solid var(--text); margin-top: 0.2rem;
-    padding-top: 0.7rem; font-weight: 700;
-  }
-  .module-row.total span:last-child { color: var(--text); font-size: 1rem; }
-
-  .price-compare {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.4rem;
-    margin-top: 1.4rem; padding: 1.1rem 1.2rem; background: var(--surface-2);
-    border-radius: 10px;
-  }
-  .compare-side { display: flex; flex-direction: column; gap: 0.15rem; }
-  .compare-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-2); }
-  .compare-amount { font-family: var(--display); font-weight: 700; font-size: 1.15rem; font-variant-numeric: tabular-nums; color: var(--muted); }
-  .compare-side--pack .compare-amount { color: var(--primary-strong); }
-  .compare-arrow { color: var(--muted-2); font-size: 1.3rem; }
-  .savings-badge {
-    margin-left: auto; font-size: 0.78rem; font-weight: 700; color: var(--success);
-    background: color-mix(in srgb, var(--success) 16%, transparent);
-    border-radius: 20px; padding: 0.3rem 0.7rem; white-space: nowrap;
-  }
-  @media (max-width: 560px) { .savings-badge { margin-left: 0; } }
-
-  details {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 1rem 1.3rem; margin-bottom: 0.8rem;
-  }
-  summary {
-    font-weight: 700; font-size: 0.98rem; cursor: pointer;
-    list-style: none; display: flex; justify-content: space-between; align-items: center;
-    gap: 1rem;
-  }
-  summary::-webkit-details-marker { display: none; }
-  summary::after { content: "+"; font-size: 1.3rem; color: var(--primary); flex-shrink: 0; }
-  details[open] summary::after { content: "–"; }
-  details p { margin: 0.8rem 0 0; font-size: 0.92rem; color: var(--muted); max-width: 62ch; }
-
-  .zones { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-  .zones span {
-    font-size: 0.85rem; color: var(--muted); background: var(--surface-2);
-    border: 1px solid var(--border); border-radius: 20px; padding: 0.35rem 0.85rem;
-  }
-
-  .final-cta {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
-    padding: 2.6rem 2rem; text-align: center; box-shadow: var(--shadow);
-  }
-  .final-cta h2 { max-width: none; }
-  .final-cta p { max-width: 50ch; margin: 0 auto 1.6rem; color: var(--muted); }
-  .final-cta .cta-row { justify-content: center; margin-bottom: 0; }
-
-  .modal-overlay {
-    position: fixed; inset: 0; background: rgba(20, 20, 20, 0.55);
-    display: flex; align-items: center; justify-content: center;
-    padding: 1.2rem; z-index: 100;
-  }
-  .modal-overlay[hidden] { display: none; }
-  .modal-box {
-    background: var(--surface); border-radius: 16px; box-shadow: var(--shadow);
-    max-width: 440px; width: 100%; padding: 2rem; text-align: left;
-    max-height: 90vh; overflow-y: auto; position: relative;
-  }
-  .modal-box h3 { margin: 0 0 0.4rem; font-family: var(--display); font-size: 1.25rem; }
-  .modal-lede { margin: 0 0 1.5rem; color: var(--muted); font-size: 0.92rem; }
-  .modal-close {
-    position: absolute; top: 1.1rem; right: 1.1rem; background: none; border: none;
-    font-size: 1.4rem; line-height: 1; color: var(--muted-2); cursor: pointer; padding: 0.2rem;
-  }
-  .modal-close:hover { color: var(--text); }
-  .form-field { margin-bottom: 1.1rem; }
-  .form-field label { display: block; font-size: 0.82rem; font-weight: 700; margin-bottom: 0.4rem; }
-  .form-field input, .form-field select {
-    width: 100%; padding: 0.65rem 0.8rem; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--bg); color: var(--text); font-size: 0.95rem; font-family: inherit;
-  }
-  .form-field input:focus, .form-field select:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
-  .modal-box form .btn { width: 100%; border: none; cursor: pointer; font-family: inherit; justify-content: center; }
-  .modal-box form .btn:disabled { opacity: 0.6; cursor: default; }
-  .form-error { color: var(--danger); font-size: 0.85rem; margin: -0.4rem 0 1rem; }
-  .form-hint { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 0.25rem; }
-  .form-success p:first-child { color: var(--success); font-weight: 700; margin: 0 0 0.4rem; }
-  .form-success p:last-child { color: var(--muted); margin: 0; }
-
-  footer {
-    border-top: 1px solid var(--border); padding: 2.4rem 0; margin-top: 1rem;
-  }
-  .footer-row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; align-items: center; }
-  .footer-row .logo { font-size: 1rem; }
-  footer .fine { font-size: 0.8rem; color: var(--muted-2); }
-
-  @media (max-width: 640px) {
-    .topbar nav a:not(.se-connecter) { display: none; }
-    section { padding: 2.4rem 0; }
-    .hero { padding: 3rem 0 2.4rem; }
-  }
-  </style>
+  ]
+}
+  </script>
 </head>
 <body>
 
-<div class="topbar">
+<a class="aller-au-contenu" href="#contenu">Aller au contenu</a>
+
+<header class="entete">
   <div class="wrap">
-    <div class="logo">ERP <span>Ferme</span></div>
-    <div class="topbar-links">
-      <nav>
-        <a href="#secteurs">Secteurs</a>
-        <a href="#fonctionnalites">Fonctionnalités</a>
-        <a href="#tarifs">Tarifs</a>
-        <a href="#faq">FAQ</a>
-        <a class="se-connecter" href="/">Se connecter</a>
-      </nav>
-      <a class="cta-small" href="#contact" data-open-contact data-track="clic_cta_topbar">Démo gratuite</a>
+    <a class="logo-entete" href="/decouvrir" aria-label="Massla — accueil"><img src="/icons/massla-horizontal-blanc.svg" alt="Massla" width="140" height="32" /></a>
+    <nav class="nav-principal" aria-label="Navigation principale">
+      <a href="#secteurs">Secteurs</a>
+      <a href="#fonctionnalites">Fonctionnalités</a>
+      <a href="#tarifs">Tarifs</a>
+      <a href="#faq">FAQ</a>
+      <a href="/">Se connecter</a>
+    </nav>
+    <div class="entete-actions">
+      <a class="btn btn-accent btn-petit entete-demo" href="#contact" data-open-contact data-track="clic_cta_topbar">Démo gratuite</a>
+      <details class="menu-mobile">
+        <summary aria-label="Menu"><span class="sr-only">Menu</span></summary>
+        <nav aria-label="Menu">
+          <a href="#secteurs">Secteurs</a>
+          <a href="#fonctionnalites">Fonctionnalités</a>
+          <a href="#tarifs">Tarifs</a>
+          <a href="#faq">FAQ</a>
+          <a href="/">Se connecter</a>
+          <a class="btn btn-accent" href="#contact" data-open-contact data-track="clic_cta_menu_mobile">Demander ma démo gratuite</a>
+        </nav>
+      </details>
     </div>
   </div>
-</div>
+</header>
 
-<div class="wrap">
+<main id="contenu">
 
-  <section class="hero" style="border-top:none;">
-    <span class="eyebrow">Gestion de ferme au Sénégal</span>
-    <h1>Le logiciel de gestion pensé pour les fermes <em>sénégalaises</em></h1>
-    <p class="lede">Avicole, piscicole, maraîcher, élevage — suivez votre production, votre stock et vos paiements depuis votre téléphone, même sans connexion internet stable. Encaissez par Wave et Orange Money, relancez vos clients par WhatsApp, automatiquement.</p>
-    <div class="cta-row">
-      <a class="btn btn-primary" href="#contact" data-open-contact data-track="clic_cta_hero">Demander une démonstration gratuite</a>
-      <a class="btn btn-ghost" href="#tarifs">Voir les tarifs</a>
-    </div>
-    <p class="trust-line">Utilisé chaque jour sur le terrain par <strong>Ferme Massla</strong>, au Sénégal.</p>
-    <div class="sector-strip">
-      <span class="sector-pill avicole">Aviculture</span>
-      <span class="sector-pill piscicole">Pisciculture</span>
-      <span class="sector-pill maraicher">Maraîchage</span>
-      <span class="sector-pill elevage">Élevage</span>
-    </div>
-  </section>
-
-  <section id="probleme">
-    <p class="section-label">Le constat</p>
-    <h2>La plupart des fermes au Sénégal gèrent encore leur production de mémoire</h2>
-    <p class="section-lede">Un cahier qui se perd, un client qui n'a jamais été relancé, un stock qui ne correspond plus à rien à la fin du mois — ce ne sont pas des erreurs isolées, ce sont les limites normales d'une gestion sans outil adapté.</p>
-    <div class="problem-grid">
-      <div class="problem-card"><p>Impossible de savoir en un coup d'œil combien de sacs d'aliment, de poissons ou de plants il reste réellement.</p></div>
-      <div class="problem-card"><p>Des factures clients qui restent impayées simplement parce que personne n'a pensé à relancer à temps.</p></div>
-      <div class="problem-card"><p>Une ferme qui dépend entièrement de la mémoire d'une seule personne — souvent le gérant lui-même.</p></div>
-      <div class="problem-card"><p>Des logiciels de gestion existants pensés pour des bureaux, pas pour le terrain sénégalais et ses coupures réseau.</p></div>
+  <section class="hero section-claire">
+    <div class="wrap">
+      <div class="hero-texte">
+        <p class="surtitre">Gestion de ferme au Sénégal</p>
+        <h1>Le logiciel de gestion pensé pour les fermes <em>sénégalaises</em></h1>
+        <p class="chapeau">Avicole, piscicole, maraîcher, élevage — suivez votre production, votre stock et vos paiements depuis votre téléphone, même sans connexion internet stable. Encaissez par Wave et Orange Money, relancez vos clients par WhatsApp, automatiquement.</p>
+        <div class="cta-row" id="hero-cta">
+          <a class="btn btn-principal" href="#contact" data-open-contact data-track="clic_cta_hero">Demander ma démo gratuite</a>
+          <a class="btn btn-contour" href="#tarifs">Voir les tarifs</a>
+        </div>
+        <p class="ligne-confiance">Utilisé chaque jour sur le terrain par <strong>Ferme Massla</strong>, au Sénégal.</p>
+        <ul class="puces-secteurs" aria-label="Secteurs couverts">
+          <li class="puce-secteur">Aviculture</li>
+          <li class="puce-secteur">Pisciculture</li>
+          <li class="puce-secteur">Maraîchage</li>
+          <li class="puce-secteur">Élevage</li>
+        </ul>
+      </div>
+      <figure class="hero-visuel" style="margin:0">
+        <img src="/img/hero-1200.webp" srcset="/img/hero-640.webp 640w, /img/hero-1200.webp 1200w" sizes="(min-width: 1024px) 560px, 100vw" width="1200" height="686" fetchpriority="high" decoding="async" alt="Un gérant consulte son tableau de bord Massla sur son téléphone, au milieu de ses cultures" />
+        <figcaption class="hero-legende">Image illustrative.</figcaption>
+      </figure>
     </div>
   </section>
 
-  <section id="secteurs">
-    <p class="section-label">La solution</p>
-    <h2>Un outil de gestion agricole adapté à chaque secteur</h2>
-    <p class="section-lede">Pas un logiciel générique importé : chaque module est construit autour des besoins réels d'une ferme avicole, piscicole, maraîchère ou d'élevage au Sénégal.</p>
-    <div class="sector-grid">
-      <div class="sector-card avicole">
-        <div class="band"></div>
-        <div class="sector-card-body">
-          <h3>Gestion de ferme avicole</h3>
-          <ul>
-            <li>Suivi des lots, de la mortalité et de la croissance</li>
-            <li>Stock d'aliment et d'intrants en temps réel</li>
-            <li>Ventes d'œufs et de volailles, encaissement immédiat</li>
-          </ul>
-        </div>
-      </div>
-      <div class="sector-card piscicole">
-        <div class="band"></div>
-        <div class="sector-card-body">
-          <h3>Gestion de ferme piscicole</h3>
-          <ul>
-            <li>Suivi des bassins, densité et rendement par cycle</li>
-            <li>Alimentation et traitements enregistrés au quotidien</li>
-            <li>Récoltes et ventes suivies jusqu'au paiement</li>
-          </ul>
-        </div>
-      </div>
-      <div class="sector-card maraicher">
-        <div class="band"></div>
-        <div class="sector-card-body">
-          <h3>Gestion de ferme maraîchère</h3>
-          <ul>
-            <li>Suivi des parcelles et des cycles de culture</li>
-            <li>Récoltes, pertes et stocks de produits frais</li>
-            <li>Ventes aux clients et aux marchés, en un seul endroit</li>
-          </ul>
-        </div>
-      </div>
-      <div class="sector-card elevage">
-        <div class="band"></div>
-        <div class="sector-card-body">
-          <h3>Gestion d'élevage</h3>
-          <ul>
-            <li>Suivi individuel bovins, ovins et caprins</li>
-            <li>Généalogie et reproduction sur plusieurs générations</li>
-            <li>Historique complet par animal : santé, poids, mouvements</li>
-          </ul>
-        </div>
+  <section id="probleme" class="section-blanche">
+    <div class="wrap">
+      <p class="surtitre">Le constat</p>
+      <h2>La plupart des fermes au Sénégal gèrent encore leur production de mémoire</h2>
+      <p class="intro">Un cahier qui se perd, un client qui n'a jamais été relancé, un stock qui ne correspond plus à rien à la fin du mois — ce ne sont pas des erreurs isolées, ce sont les limites normales d'une gestion sans outil adapté.</p>
+      <div class="grille grille-4">
+        <div class="carte"><span class="pastille"><span class="ico ic-livre" aria-hidden="true"></span></span><p>Impossible de savoir en un coup d'œil combien de sacs d'aliment, de poissons ou de plants il reste réellement.</p></div>
+        <div class="carte"><span class="pastille"><span class="ico ic-facture" aria-hidden="true"></span></span><p>Des factures clients qui restent impayées simplement parce que personne n'a pensé à relancer à temps.</p></div>
+        <div class="carte"><span class="pastille"><span class="ico ic-personne" aria-hidden="true"></span></span><p>Une ferme qui dépend entièrement de la mémoire d'une seule personne — souvent le gérant lui-même.</p></div>
+        <div class="carte"><span class="pastille"><span class="ico ic-wifi-barre" aria-hidden="true"></span></span><p>Des logiciels de gestion existants pensés pour des bureaux, pas pour le terrain sénégalais et ses coupures réseau.</p></div>
       </div>
     </div>
   </section>
 
-  <section id="comment">
-    <p class="section-label">Mise en route</p>
-    <h2>Trois étapes pour démarrer</h2>
-    <div class="steps-row">
-      <div><div class="step-num">01</div><h3>Démonstration gratuite</h3><p>15 minutes sur votre téléphone, sans engagement, avec un exemple concret adapté à votre secteur.</p></div>
-      <div><div class="step-num">02</div><h3>Configuration de votre ferme</h3><p>Vos modules, vos données existantes et votre équipe sont mis en place avant le premier jour d'utilisation.</p></div>
-      <div><div class="step-num">03</div><h3>Suivi au quotidien</h3><p>Production, stock, paiements et relances clients suivis depuis votre téléphone, chaque jour, sur le terrain.</p></div>
+  <section id="secteurs" class="section-claire">
+    <div class="wrap">
+      <p class="surtitre">La solution</p>
+      <h2>Un outil de gestion agricole adapté à chaque secteur</h2>
+      <p class="intro">Pas un logiciel générique importé : chaque module est construit autour des besoins réels d'une ferme avicole, piscicole, maraîchère ou d'élevage au Sénégal.</p>
+      <div class="grille grille-4">
+        <article class="secteur-card">
+          <img src="/img/secteur-avicole.webp" width="720" height="411" loading="lazy" decoding="async" alt="Un éleveur consulte son téléphone dans un bâtiment avicole" />
+          <div class="secteur-corps">
+            <h3>Gestion de ferme avicole</h3>
+            <ul>
+              <li>Suivi des lots, de la mortalité et de la croissance</li>
+              <li>Stock d'aliment et d'intrants en temps réel</li>
+              <li>Ventes d'œufs et de volailles, encaissement immédiat</li>
+            </ul>
+            <a class="btn-lien" href="#contact" data-open-contact data-track="clic_secteur_avicole">Voir ce module en démo</a>
+          </div>
+        </article>
+        <article class="secteur-card">
+          <img src="/img/secteur-piscicole.webp" width="720" height="411" loading="lazy" decoding="async" alt="Un pisciculteur remonte son filet dans un bassin" />
+          <div class="secteur-corps">
+            <h3>Gestion de ferme piscicole</h3>
+            <ul>
+              <li>Suivi des bassins, densité et rendement par cycle</li>
+              <li>Alimentation et traitements enregistrés au quotidien</li>
+              <li>Récoltes et ventes suivies jusqu'au paiement</li>
+            </ul>
+            <a class="btn-lien" href="#contact" data-open-contact data-track="clic_secteur_piscicole">Voir ce module en démo</a>
+          </div>
+        </article>
+        <article class="secteur-card">
+          <img src="/img/secteur-maraicher.webp" width="720" height="411" loading="lazy" decoding="async" alt="Une maraîchère récolte des tomates dans son champ" />
+          <div class="secteur-corps">
+            <h3>Gestion de ferme maraîchère</h3>
+            <ul>
+              <li>Suivi des parcelles et des cycles de culture</li>
+              <li>Récoltes, pertes et stocks de produits frais</li>
+              <li>Ventes aux clients et aux marchés, en un seul endroit</li>
+            </ul>
+            <a class="btn-lien" href="#contact" data-open-contact data-track="clic_secteur_maraicher">Voir ce module en démo</a>
+          </div>
+        </article>
+        <article class="secteur-card">
+          <img src="/img/secteur-elevage.webp" width="720" height="411" loading="lazy" decoding="async" alt="Un éleveur avec son zébu, ses moutons et ses chèvres" />
+          <div class="secteur-corps">
+            <h3>Gestion d'élevage</h3>
+            <ul>
+              <li>Suivi individuel bovins, ovins et caprins</li>
+              <li>Généalogie et reproduction sur plusieurs générations</li>
+              <li>Historique complet par animal : santé, poids, mouvements</li>
+            </ul>
+            <a class="btn-lien" href="#contact" data-open-contact data-track="clic_secteur_elevage">Voir ce module en démo</a>
+          </div>
+        </article>
+      </div>
+      <p class="legende-images">Images illustratives.</p>
     </div>
   </section>
 
-  <section id="fonctionnalites">
-    <p class="section-label">Fonctionnalités</p>
-    <h2>Tout ce qu'il faut pour ne plus rien perdre de vue</h2>
-    <div class="feature-grid">
-      <div class="feature-card"><div class="feature-icon">✓</div><div><h4>Fonctionne sans internet</h4><p>Les données se synchronisent automatiquement dès que la connexion revient — conçu pour le terrain.</p></div></div>
-      <div class="feature-card"><div class="feature-icon">₣</div><div><h4>Wave &amp; Orange Money</h4><p>Encaissez vos clients directement, sans ressaisir chaque paiement à la main.</p></div></div>
-      <div class="feature-card"><div class="feature-icon">↩</div><div><h4>Rappels WhatsApp automatiques</h4><p>Une facture toujours impayée 7 jours après son échéance est relancée automatiquement par WhatsApp (une fois votre compte WhatsApp Business connecté) — et vous pouvez relancer à la main quand vous voulez.</p></div></div>
-      <div class="feature-card"><div class="feature-icon">☰</div><div><h4>Tableau de bord en temps réel</h4><p>Production, stock et finances visibles d'un coup d'œil, à jour à chaque instant.</p></div></div>
-      <div class="feature-card"><div class="feature-icon">◎</div><div><h4>Toute votre équipe connectée</h4><p>Chaque employé voit la même information, même en votre absence de la ferme.</p></div></div>
-      <div class="feature-card"><div class="feature-icon">＋</div><div><h4>Modules à la carte</h4><p>Activez uniquement ce dont votre ferme a besoin aujourd'hui, ajoutez le reste plus tard.</p></div></div>
-      <div class="feature-card"><div class="feature-icon">🔒</div><div><h4>Comptes sécurisés</h4><p>Mot de passe renforcé, vérification d'email et authentification à deux facteurs pour protéger vos données.</p></div></div>
+  <section id="fonctionnalites" class="section-blanche">
+    <div class="wrap">
+      <p class="surtitre">Fonctionnalités</p>
+      <h2>Tout ce qu'il faut pour ne plus rien perdre de vue</h2>
+      <div class="grille grille-3">
+        <div class="carte fonction"><span class="pastille"><span class="ico ic-wifi-barre" aria-hidden="true"></span></span><div><h3>Fonctionne sans internet</h3><p>Les données se synchronisent automatiquement dès que la connexion revient — conçu pour le terrain.</p></div></div>
+        <div class="carte fonction"><span class="pastille"><span class="ico ic-portefeuille" aria-hidden="true"></span></span><div><h3>Wave &amp; Orange Money</h3><p>Encaissez vos clients directement, sans ressaisir chaque paiement à la main.</p></div></div>
+        <div class="carte fonction"><span class="pastille"><span class="ico ic-message" aria-hidden="true"></span></span><div><h3>Rappels WhatsApp automatiques</h3><p>Une facture toujours impayée 7 jours après son échéance est relancée automatiquement par WhatsApp (une fois votre compte WhatsApp Business connecté) — et vous pouvez relancer à la main quand vous voulez.</p></div></div>
+        <div class="carte fonction"><span class="pastille"><span class="ico ic-tableau" aria-hidden="true"></span></span><div><h3>Tableau de bord en temps réel</h3><p>Production, stock et finances visibles d'un coup d'œil, à jour à chaque instant.</p></div></div>
+        <div class="carte fonction"><span class="pastille"><span class="ico ic-equipe" aria-hidden="true"></span></span><div><h3>Toute votre équipe connectée</h3><p>Chaque employé voit la même information, même en votre absence de la ferme.</p></div></div>
+        <div class="carte fonction"><span class="pastille"><span class="ico ic-modules" aria-hidden="true"></span></span><div><h3>Modules à la carte</h3><p>Activez uniquement ce dont votre ferme a besoin aujourd'hui, ajoutez le reste plus tard.</p></div></div>
+        <div class="carte fonction"><span class="pastille"><span class="ico ic-cadenas" aria-hidden="true"></span></span><div><h3>Comptes sécurisés</h3><p>Mot de passe renforcé, vérification d'e-mail et authentification à deux facteurs pour protéger vos données.</p></div></div>
+        <div class="carte carte-demo"><h3>Voyez-le sur votre téléphone</h3><p>Une démonstration de 15 minutes, avec un exemple adapté à votre secteur.</p><a class="btn btn-accent" href="#contact" data-open-contact data-track="clic_cta_fonctionnalites">Demander ma démo gratuite</a></div>
+      </div>
     </div>
   </section>
 
-  <section id="preuve">
-    <p class="section-label">Preuve sur le terrain</p>
-    <h2>Une vraie ferme, pas une démo</h2>
-    <div class="case-study">
-      <div class="case-badge">FM</div>
-      <div>
+  <section id="preuve" class="section-sahel">
+    <div class="wrap">
+      <p class="surtitre">Preuve sur le terrain</p>
+      <h2>Une vraie ferme, pas une démo</h2>
+      <figure class="citation" style="margin-left:0;margin-right:0;margin-bottom:0">
         <blockquote>« Chaque matin, avant même de sortir dans les enclos, un coup d'œil sur le téléphone suffit pour savoir où en est la ferme. »</blockquote>
-        <cite>Ferme Massla — utilisatrice quotidienne de l'ERP</cite>
-      </div>
-    </div>
+        <figcaption><cite>Ferme Massla — utilisatrice quotidienne de Massla</cite><span class="etiquette">Notre ferme pilote</span></figcaption>
+      </figure>
 
-    <div class="avis-header">
-      <h3>Avis clients</h3>
-      <button type="button" class="btn btn-ghost" id="btn-open-avis-modal" data-track="clic_ouvrir_modal_avis">Laisser un avis</button>
-    </div>
-    <div class="avis-grid" id="avis-grid" hidden></div>
-  </section>
-
-  <section id="tarifs">
-    <p class="section-label">Tarifs</p>
-    <h2>Un tarif adapté à la taille de votre ferme</h2>
-    <p class="section-lede">Aucun frais caché, aucune fonctionnalité imposée — vous payez pour ce que vous utilisez réellement.</p>
-    <div class="price-grid">
-      <div class="price-card">
-        <span class="price-tag">Pour démarrer</span>
-        <h3>Socle Essentiel</h3>
-        <div class="price-amount">25 000 F</div>
-        <div class="price-period">par mois</div>
-        <p class="desc">Tableau de bord, production (lots, relevés quotidiens, ramassage des œufs), catalogue et stock, intrants (aliment, engrais…), gestion des utilisateurs et sécurité renforcée — l'essentiel pour professionnaliser le suivi de votre ferme.</p>
-      </div>
-      <div class="price-card">
-        <span class="price-tag">À la carte</span>
-        <h3>Modules additionnels</h3>
-        <div class="price-amount">5 000 – 15 000 F</div>
-        <div class="price-period">par module / mois</div>
-        <p class="desc">Finances, Clients, Livraison, Élevage, Paie, Fournisseurs — ajoutés au rythme de votre croissance.</p>
-      </div>
-      <div class="price-card featured">
-        <span class="price-tag">Le plus complet</span>
-        <h3>Pack tout compris</h3>
-        <div class="price-amount">85 000 F</div>
-        <div class="price-period">par mois</div>
-        <p class="desc">Tous les modules inclus (dont Élevage et Paie), rappels WhatsApp et paiement mobile compris.</p>
-        <p class="price-savings">Économie de 30 000 F/mois (≈26%) par rapport à l'achat des modules à la carte.</p>
-      </div>
-      <div class="price-card">
-        <span class="price-tag">Une seule fois</span>
-        <h3>Mise en place</h3>
-        <div class="price-amount">75 000 F</div>
-        <div class="price-period">à la signature</div>
-        <p class="desc">Configuration de votre ferme, import de vos données et formation de votre équipe — en plus de l'abonnement mensuel.</p>
-      </div>
-    </div>
-
-    <details class="price-breakdown">
-      <summary>Voir le détail, module par module</summary>
-      <div class="module-table">
-        <div class="module-row"><span>Socle Essentiel <em>— tableau de bord, production, catalogue &amp; stock, intrants, utilisateurs — inclus dans tout abonnement</em></span><span>25 000 F</span></div>
-        <div class="module-row"><span>Clients &amp; Abonnements <em>— fichier clients, accès portail client, abonnements récurrents</em></span><span>10 000 F</span></div>
-        <div class="module-row"><span>Commandes &amp; Fournisseurs <em>— commandes clients, fournisseurs et achats</em></span><span>10 000 F</span></div>
-        <div class="module-row"><span>Comptabilité <em>— dépenses, marges par secteur, immobilisations, rapprochement bancaire</em></span><span>10 000 F</span></div>
-        <div class="module-row"><span>Support client <em>— tickets de vos clients</em></span><span>5 000 F</span></div>
-        <div class="module-row"><span>Logistique <em>— tournées de livraison et caisse chauffeur</em></span><span>15 000 F</span></div>
-        <div class="module-row"><span>Finance <em>— encaissement Wave / Orange Money</em></span><span>15 000 F</span></div>
-        <div class="module-row"><span>Élevage <em>— suivi individuel bovins, ovins, caprins</em></span><span>15 000 F</span></div>
-        <div class="module-row"><span>Paie <em>— salariés et journaliers</em></span><span>10 000 F</span></div>
-        <div class="module-row total"><span>Total à la carte</span><span>115 000 F / mois</span></div>
-      </div>
-      <div class="price-compare">
-        <div class="compare-side">
-          <span class="compare-label">Sans le pack</span>
-          <span class="compare-amount">115 000 F/mois</span>
+      <div class="avis-bloc">
+        <div class="avis-entete">
+          <h3 class="avis-titre">Avis clients</h3>
+          <button type="button" class="btn btn-contour-clair btn-petit" id="btn-open-avis-modal" data-track="clic_ouvrir_modal_avis">Laisser un avis</button>
         </div>
-        <span class="compare-arrow" aria-hidden="true">→</span>
-        <div class="compare-side compare-side--pack">
-          <span class="compare-label">Avec le Pack tout compris</span>
-          <span class="compare-amount">85 000 F/mois</span>
-        </div>
-        <span class="savings-badge">− 30 000 F/mois (≈26%)</span>
+        <div class="avis-grid" id="avis-grid" hidden></div>
       </div>
-      <p class="price-note">Un tarif de groupe est possible pour un réseau de fermes accompagné par une même structure (coopérative, ONG, institution) — à discuter lors de la démonstration.</p>
-    </details>
-    <p class="price-note">Les tarifs peuvent varier selon la taille de votre exploitation — confirmés lors de la démonstration gratuite.</p>
-  </section>
-
-  <section id="faq">
-    <p class="section-label">Questions fréquentes</p>
-    <h2>Ce que demandent les gérants de ferme</h2>
-
-    <details open>
-      <summary>Quel est le meilleur logiciel de gestion pour une ferme au Sénégal ?</summary>
-      <p>Le meilleur outil est celui construit pour votre réalité de terrain, pas un logiciel générique importé. ERP Ferme est pensé spécifiquement pour les fermes avicoles, piscicoles, maraîchères et d'élevage sénégalaises, avec paiement mobile local et fonctionnement hors ligne.</p>
-    </details>
-
-    <details>
-      <summary>Peut-on utiliser l'application sans connexion internet ?</summary>
-      <p>Oui. L'application continue de fonctionner sans réseau et synchronise automatiquement toutes les données dès que la connexion revient — conçue pour les zones rurales où le réseau n'est pas toujours stable.</p>
-    </details>
-
-    <details>
-      <summary>Comment encaisser mes clients avec Wave ou Orange Money ?</summary>
-      <p>Wave et Orange Money sont directement intégrés à l'application : quand un client paie, sa facture se met à jour automatiquement, sans ressaisie manuelle de votre part.</p>
-    </details>
-
-    <details>
-      <summary>L'application convient-elle à une petite ferme familiale ?</summary>
-      <p>Oui, à condition d'avoir au moins un employé au-delà du propriétaire et un volume de ventes régulier. Le Socle Essentiel permet de démarrer simplement, et des modules peuvent être ajoutés plus tard selon la croissance de la ferme.</p>
-    </details>
-
-    <details>
-      <summary>Combien coûte un logiciel de gestion agricole au Sénégal ?</summary>
-      <p>À partir de 25 000 FCFA par mois pour le Socle Essentiel (tableau de bord, production, catalogue et stock, intrants, gestion des utilisateurs), avec des modules additionnels selon vos besoins : Clients &amp; Abonnements, Commandes &amp; Fournisseurs, Comptabilité et Paie à 10 000 FCFA chacun, Support client à 5 000 FCFA, Logistique, Finance (paiement mobile) et Élevage à 15 000 FCFA chacun — ou un pack tout compris à 85 000 FCFA par mois avec tous les modules inclus. Une mise en place unique de 75 000 FCFA est facturée au démarrage.</p>
-    </details>
-
-    <details>
-      <summary>Mes données sont-elles en sécurité ?</summary>
-      <p>Oui. Chaque ferme a ses propres données, totalement isolées des autres fermes clientes au niveau de la base de données. Les comptes sont protégés par un mot de passe renforcé obligatoire, une vérification d'adresse email, et une authentification à deux facteurs disponible pour les comptes administrateurs.</p>
-    </details>
-
-    <details>
-      <summary>Dans quelles régions intervenez-vous ?</summary>
-      <p>Actuellement à Thiès, Mbour et la Petite Côte, Kaolack, Saint-Louis, ainsi que dans la ceinture maraîchère et avicole autour de Dakar — Rufisque, Bambilor et Sangalkam.</p>
-    </details>
-  </section>
-
-  <section id="zones" style="padding-top: 0; border-top: none;">
-    <div class="zones">
-      <span>Thiès</span><span>Mbour</span><span>Petite Côte</span><span>Kaolack</span>
-      <span>Saint-Louis</span><span>Rufisque</span><span>Bambilor</span><span>Sangalkam</span><span>Dakar</span>
     </div>
   </section>
 
-  <section id="contact">
-    <div class="final-cta">
+  <section id="comment" class="section-claire">
+    <div class="wrap">
+      <p class="surtitre">Mise en route</p>
+      <h2>Trois étapes pour démarrer</h2>
+      <div class="etapes">
+        <div class="etape"><div class="etape-num">01</div><h3>Démonstration gratuite</h3><p>15 minutes sur votre téléphone, sans engagement, avec un exemple concret adapté à votre secteur.</p></div>
+        <div class="etape"><div class="etape-num">02</div><h3>Configuration de votre ferme</h3><p>Vos modules, vos données existantes et votre équipe sont mis en place avant le premier jour d'utilisation.</p></div>
+        <div class="etape"><div class="etape-num">03</div><h3>Suivi au quotidien</h3><p>Production, stock, paiements et relances clients suivis depuis votre téléphone, chaque jour, sur le terrain.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tarifs" class="section-sahel">
+    <div class="wrap">
+      <p class="surtitre">Tarifs</p>
+      <h2>Un tarif adapté à la taille de votre ferme</h2>
+      <p class="intro">Aucun frais caché, aucune fonctionnalité imposée — vous payez pour ce que vous utilisez réellement.</p>
+      <div class="tarifs">
+        <div class="tarif">
+          <span class="etiquette-prix">Pour démarrer</span>
+          <h3>Socle Essentiel</h3>
+          <div class="montant">25&nbsp;000<span class="devise">FCFA</span></div>
+          <div class="periode">par mois</div>
+          <p class="desc">Tableau de bord, production (lots, relevés quotidiens, ramassage des œufs), catalogue et stock, intrants (aliment, engrais…), gestion des utilisateurs et sécurité renforcée — l'essentiel pour professionnaliser le suivi de votre ferme.</p>
+        </div>
+        <div class="tarif">
+          <span class="etiquette-prix">À la carte</span>
+          <h3>Modules additionnels</h3>
+          <div class="montant">5&nbsp;000 à 15&nbsp;000<span class="devise">FCFA</span></div>
+          <div class="periode">par module et par mois</div>
+          <p class="desc">Finances, Clients, Livraison, Élevage, Paie, Fournisseurs — ajoutés au rythme de votre croissance.</p>
+        </div>
+        <div class="tarif vedette">
+          <span class="badge-plus">Le plus complet</span>
+          <h3>Pack tout compris</h3>
+          <div class="montant">85&nbsp;000<span class="devise">FCFA</span></div>
+          <div class="periode">par mois</div>
+          <p class="desc">Tous les modules inclus (dont Élevage et Paie), rappels WhatsApp et paiement mobile compris.</p>
+          <p class="economie">Économie de 30&nbsp;000&nbsp;FCFA par mois (≈&nbsp;26&nbsp;%) par rapport à l'achat des modules à la carte.</p>
+        </div>
+        <div class="tarif">
+          <span class="etiquette-prix">Une seule fois</span>
+          <h3>Mise en place</h3>
+          <div class="montant">75&nbsp;000<span class="devise">FCFA</span></div>
+          <div class="periode">à la signature</div>
+          <p class="desc">Configuration de votre ferme, import de vos données et formation de votre équipe — en plus de l'abonnement mensuel.</p>
+        </div>
+      </div>
+
+      <details class="detail-tarifs" data-track="ouvre_detail_tarifs">
+        <summary>Voir le détail, module par module</summary>
+        <div class="lignes-modules">
+          <div class="ligne-module"><span>Socle Essentiel <em>tableau de bord, production, catalogue &amp; stock, intrants, utilisateurs — inclus dans tout abonnement</em></span><span>25&nbsp;000&nbsp;FCFA</span></div>
+          <div class="ligne-module"><span>Clients &amp; Abonnements <em>fichier clients, accès portail client, abonnements récurrents</em></span><span>10&nbsp;000&nbsp;FCFA</span></div>
+          <div class="ligne-module"><span>Commandes &amp; Fournisseurs <em>commandes clients, fournisseurs et achats</em></span><span>10&nbsp;000&nbsp;FCFA</span></div>
+          <div class="ligne-module"><span>Comptabilité <em>dépenses, marges par secteur, immobilisations, rapprochement bancaire</em></span><span>10&nbsp;000&nbsp;FCFA</span></div>
+          <div class="ligne-module"><span>Support client <em>tickets de vos clients</em></span><span>5&nbsp;000&nbsp;FCFA</span></div>
+          <div class="ligne-module"><span>Logistique <em>tournées de livraison et caisse chauffeur</em></span><span>15&nbsp;000&nbsp;FCFA</span></div>
+          <div class="ligne-module"><span>Finance <em>encaissement Wave / Orange Money</em></span><span>15&nbsp;000&nbsp;FCFA</span></div>
+          <div class="ligne-module"><span>Élevage <em>suivi individuel bovins, ovins, caprins</em></span><span>15&nbsp;000&nbsp;FCFA</span></div>
+          <div class="ligne-module"><span>Paie <em>salariés et journaliers</em></span><span>10&nbsp;000&nbsp;FCFA</span></div>
+          <div class="ligne-module total"><span>Total à la carte</span><span>115&nbsp;000&nbsp;FCFA / mois</span></div>
+        </div>
+        <div class="comparaison">
+          <div class="cote"><small>Sans le pack</small><strong>115&nbsp;000&nbsp;FCFA/mois</strong></div>
+          <div class="cote"><small>Avec le Pack tout compris</small><strong>85&nbsp;000&nbsp;FCFA/mois</strong></div>
+          <span class="badge-eco">− 30&nbsp;000&nbsp;FCFA/mois (≈&nbsp;26&nbsp;%)</span>
+        </div>
+        <p class="note-tarifs">Un tarif de groupe est possible pour un réseau de fermes accompagné par une même structure (coopérative, ONG, institution) — à discuter lors de la démonstration.</p>
+      </details>
+      <p class="note-tarifs">Les tarifs peuvent varier selon la taille de votre exploitation — confirmés lors de la démonstration gratuite.</p>
+    </div>
+  </section>
+
+  <section id="faq" class="section-claire">
+    <div class="wrap">
+      <p class="surtitre">Questions fréquentes</p>
+      <h2>Ce que demandent les gérants de ferme</h2>
+      <div class="faq">
+        <details name="faq" open>
+          <summary>Quel est le meilleur logiciel de gestion pour une ferme au Sénégal ?</summary>
+          <p>Le meilleur outil est celui construit pour votre réalité de terrain, pas un logiciel générique importé. Massla est pensé spécifiquement pour les fermes avicoles, piscicoles, maraîchères et d'élevage sénégalaises, avec paiement mobile local et fonctionnement hors ligne.</p>
+        </details>
+        <details name="faq">
+          <summary>Peut-on utiliser l'application sans connexion internet ?</summary>
+          <p>Oui. L'application continue de fonctionner sans réseau et synchronise automatiquement toutes les données dès que la connexion revient — conçue pour les zones rurales où le réseau n'est pas toujours stable.</p>
+        </details>
+        <details name="faq">
+          <summary>Comment encaisser mes clients avec Wave ou Orange Money ?</summary>
+          <p>Wave et Orange Money sont directement intégrés à l'application : quand un client paie, sa facture se met à jour automatiquement, sans ressaisie manuelle de votre part.</p>
+        </details>
+        <details name="faq">
+          <summary>L'application convient-elle à une petite ferme familiale ?</summary>
+          <p>Oui, à condition d'avoir au moins un employé au-delà du propriétaire et un volume de ventes régulier. Le Socle Essentiel permet de démarrer simplement, et des modules peuvent être ajoutés plus tard selon la croissance de la ferme.</p>
+        </details>
+        <details name="faq">
+          <summary>Combien coûte un logiciel de gestion agricole au Sénégal ?</summary>
+          <p>À partir de 25&nbsp;000&nbsp;FCFA par mois pour le Socle Essentiel (tableau de bord, production, catalogue et stock, intrants, gestion des utilisateurs), avec des modules additionnels selon vos besoins : Clients &amp; Abonnements, Commandes &amp; Fournisseurs, Comptabilité et Paie à 10&nbsp;000&nbsp;FCFA chacun, Support client à 5&nbsp;000&nbsp;FCFA, Logistique, Finance (paiement mobile) et Élevage à 15&nbsp;000&nbsp;FCFA chacun — ou un pack tout compris à 85&nbsp;000&nbsp;FCFA par mois avec tous les modules inclus. Une mise en place unique de 75&nbsp;000&nbsp;FCFA est facturée au démarrage.</p>
+        </details>
+        <details name="faq">
+          <summary>Mes données sont-elles en sécurité ?</summary>
+          <p>Oui. Chaque ferme a ses propres données, totalement isolées des autres fermes clientes au niveau de la base de données. Les comptes sont protégés par un mot de passe renforcé obligatoire, une vérification d'adresse e-mail, et une authentification à deux facteurs disponible pour les comptes administrateurs.</p>
+        </details>
+        <details name="faq">
+          <summary>Dans quelles régions intervenez-vous ?</summary>
+          <p>Actuellement à Thiès, Mbour et la Petite Côte, Kaolack, Saint-Louis, ainsi que dans la ceinture maraîchère et avicole autour de Dakar — Rufisque, Bambilor et Sangalkam.</p>
+          <ul class="zones" aria-label="Zones d'intervention">
+            <li>Thiès</li><li>Mbour</li><li>Petite Côte</li><li>Kaolack</li><li>Saint-Louis</li><li>Rufisque</li><li>Bambilor</li><li>Sangalkam</li><li>Dakar</li>
+          </ul>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section id="contact" class="section-sahel final">
+    <div class="wrap">
       <h2>Voyez l'application tourner sur votre propre téléphone</h2>
-      <p>Une démonstration gratuite de 15 minutes, sans engagement — le même outil utilisé chaque jour par la Ferme Massla.</p>
+      <p class="intro">Une démonstration gratuite de 15 minutes, sans engagement — le même outil utilisé chaque jour par la Ferme Massla.</p>
       <div class="cta-row">
-        <button type="button" class="btn btn-primary" id="btn-open-contact-modal" data-open-contact data-track="clic_ouvrir_modal_contact">Demander ma démonstration gratuite</button>
-        <a class="btn btn-ghost" href="https://wa.me/14165266293" target="_blank" rel="noopener" data-track="contact_whatsapp">Écrire sur WhatsApp</a>
+        <button type="button" class="btn btn-accent" id="btn-open-contact-modal" data-open-contact data-track="clic_ouvrir_modal_contact">Demander ma démo gratuite</button>
+        <!-- À REMPLACER dès que le numéro WhatsApp Business sénégalais (+221) est disponible : wa.me/221XXXXXXXXX -->
+        <a class="btn btn-contour-clair" href="https://wa.me/14165266293?text=Bonjour%2C%20je%20souhaite%20une%20d%C3%A9monstration%20de%20Massla%20pour%20ma%20ferme." target="_blank" rel="noopener" data-track="contact_whatsapp">Écrire sur WhatsApp</a>
       </div>
     </div>
   </section>
 
-</div>
+</main>
 
-<footer>
-  <div class="wrap footer-row">
-    <div class="logo">ERP <span>Ferme</span></div>
-    <p class="fine">Gestion de ferme avicole, piscicole, maraîchère et d'élevage — Sénégal</p>
-  </div>
+<footer class="pied">
   <div class="wrap">
-    <p class="fine">FAYSSALAME — Cité Castors Marine III Villa 48, Dakar, Sénégal</p>
-    <p class="fine">© 2026 FAYSSALAME — Tous droits réservés.</p>
+    <img src="/icons/massla-empile-blanc.svg" alt="Massla" width="150" height="166" loading="lazy" />
+    <nav aria-label="Pied de page">
+      <a href="#secteurs">Secteurs</a>
+      <a href="#tarifs">Tarifs</a>
+      <a href="#faq">FAQ</a>
+      <a href="/">Se connecter</a>
+    </nav>
+    <div>
+      <!-- À COMPLÉTER : NINEA et RCCM de FAYSSALAME, numéro WhatsApp +221 -->
+      <p class="legal">Massla est un produit de FAYSSALAME — Cité Castors Marine III, Villa 48, Dakar, Sénégal.</p>
+      <p class="legal">© 2026 FAYSSALAME — Tous droits réservés.</p>
+    </div>
   </div>
 </footer>
 
+<div class="barre-demo" id="barre-demo">
+  <a class="btn btn-accent" href="#contact" data-open-contact data-track="clic_cta_barre_fixe">Demander ma démo gratuite</a>
+</div>
+
 <div class="modal-overlay" id="modal-contact" hidden>
   <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-contact-title">
-    <button type="button" class="modal-close" id="modal-contact-close" aria-label="Fermer">&times;</button>
-    <h3 id="modal-contact-title">Demander une démonstration gratuite</h3>
+    <button type="button" class="modal-close" id="modal-contact-close" aria-label="Fermer">Fermer</button>
+    <h3 id="modal-contact-title">Demander ma démo gratuite</h3>
     <p class="modal-lede">Laissez vos coordonnées, nous vous recontactons rapidement pour organiser votre démonstration gratuite.</p>
     <form id="form-contact" novalidate>
+      <div class="form-field">
+        <label for="contact-whatsapp">Numéro WhatsApp</label>
+        <input type="tel" id="contact-whatsapp" name="whatsapp" required autocomplete="tel" inputmode="tel" placeholder="77 000 00 00" />
+        <small class="form-hint">Sénégal : 9 chiffres suffisent (ex. 77 000 00 00). Autre pays : ajoutez l'indicatif, par exemple +33.</small>
+      </div>
       <div class="form-field">
         <label for="contact-nom">Prénom et nom</label>
         <input type="text" id="contact-nom" name="nom" required maxlength="100" autocomplete="name" />
       </div>
       <div class="form-field">
-        <label for="contact-email">Adresse courriel</label>
+        <label for="contact-email">Adresse e-mail</label>
         <input type="email" id="contact-email" name="email" required autocomplete="email" />
       </div>
-      <div class="form-field">
-        <label for="contact-whatsapp">Numéro de téléphone WhatsApp</label>
-        <input type="tel" id="contact-whatsapp" name="whatsapp" required autocomplete="tel" placeholder="+221 77 000 00 00" />
-        <small class="form-hint">Avec l'indicatif du pays. Pour le Sénégal, les 9 chiffres suffisent (ex. 77 000 00 00).</small>
-      </div>
-      <p class="form-error" id="contact-error" hidden></p>
-      <button type="submit" class="btn btn-primary" id="contact-submit">Envoyer ma demande</button>
+      <p class="form-error" id="contact-error" role="alert" hidden></p>
+      <button type="submit" class="btn btn-principal" id="contact-submit">Envoyer ma demande</button>
     </form>
-    <div class="form-success" id="contact-success" hidden>
+    <div class="form-success" id="contact-success" role="status" hidden>
       <p>Merci ! Votre demande a bien été envoyée.</p>
       <p>Nous vous recontacterons très vite.</p>
     </div>
@@ -729,7 +488,7 @@
 
 <div class="modal-overlay" id="modal-avis" hidden>
   <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-avis-title">
-    <button type="button" class="modal-close" id="modal-avis-close" aria-label="Fermer">&times;</button>
+    <button type="button" class="modal-close" id="modal-avis-close" aria-label="Fermer">Fermer</button>
     <h3 id="modal-avis-title">Laisser un avis</h3>
     <p class="modal-lede">Votre avis sera publié après vérification par notre équipe.</p>
     <form id="form-avis" novalidate>
@@ -738,27 +497,27 @@
         <input type="text" id="avis-nom" name="nom" required maxlength="100" autocomplete="name" />
       </div>
       <div class="form-field">
-        <label for="avis-ferme">Nom de votre ferme (optionnel)</label>
+        <label for="avis-ferme">Nom de votre ferme (facultatif)</label>
         <input type="text" id="avis-ferme" name="nomFerme" maxlength="100" />
       </div>
       <div class="form-field">
         <label for="avis-note">Votre note</label>
         <select id="avis-note" name="note" required>
-          <option value="5">★★★★★ — Excellent</option>
-          <option value="4">★★★★☆ — Très bien</option>
-          <option value="3">★★★☆☆ — Correct</option>
-          <option value="2">★★☆☆☆ — Décevant</option>
-          <option value="1">★☆☆☆☆ — Insuffisant</option>
+          <option value="5">5 sur 5 — Excellent</option>
+          <option value="4">4 sur 5 — Très bien</option>
+          <option value="3">3 sur 5 — Correct</option>
+          <option value="2">2 sur 5 — Décevant</option>
+          <option value="1">1 sur 5 — Insuffisant</option>
         </select>
       </div>
       <div class="form-field">
         <label for="avis-commentaire">Votre commentaire</label>
         <textarea id="avis-commentaire" name="commentaire" required maxlength="600" rows="4"></textarea>
       </div>
-      <p class="form-error" id="avis-error" hidden></p>
-      <button type="submit" class="btn btn-primary" id="avis-submit">Envoyer mon avis</button>
+      <p class="form-error" id="avis-error" role="alert" hidden></p>
+      <button type="submit" class="btn btn-principal" id="avis-submit">Envoyer mon avis</button>
     </form>
-    <div class="form-success" id="avis-success" hidden>
+    <div class="form-success" id="avis-success" role="status" hidden>
       <p>Merci pour votre avis !</p>
       <p>Il sera publié après vérification par notre équipe.</p>
     </div>
