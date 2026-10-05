@@ -1,0 +1,120 @@
+/* Copie du kit de marque Massla (02_Couleurs/massla-tokens.css). Seul changement : chemin de la police (/fonts/). Ne pas éditer à la main : régénérer depuis le kit. */
+:root {
+  /* Massla — jetons de design (thème clair). Source : tokens.json */
+  --sahel-900: #0F3D2E;
+  --dakar-500: #32C24D;
+  --dakar-700: #1A7A34;
+  --niayes-100: #DDF2E1;
+  --senegal-50: #F3F8F3;
+  --surface: #FFFFFF;
+  --ink: #17241D;
+  --ink-muted: #4A5A51;
+  --on-brand: #F3F8F3;
+  --on-accent: #0F3D2E;
+  --border: #DCE3DD;
+  --border-strong: #6F8077;
+  --focus: #1A7A34;
+  --success-ink: #1E6B3A;
+  --success-bg: #DDF2E1;
+  --warning-ink: #F3F8F3;
+  --warning-bg: #0F3D2E;
+  --danger: #B42318;
+  --danger-ink: #FFFFFF;
+  --danger-bg: #B42318;
+  --info-ink: #0F3D2E;
+  --info-bg: #E6ECE7;
+  --font-text: "Onest", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --font-num: "Onest", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-16: 64px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+  --shadow-sm: 0 1px 2px rgba(15,61,46,0.08);
+  --shadow-md: 0 8px 24px rgba(15,61,46,0.12);
+  --tap-min: 48px;
+  --button-h: 54px;
+  --input-h: 52px;
+  --tabbar-h: 64px;
+  --content-max: 1280px;
+  --bp-tablet: 600px;
+  --bp-desktop: 1024px;
+  --bp-wide: 1440px;
+}
+
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --dakar-700: #5AD86F;
+  --niayes-100: #16402F;
+  --senegal-50: #0B1F18;
+  --surface: #13302A;
+  --ink: #F2F0EA;
+  --ink-muted: #A9BDB2;
+  --on-accent: #0B1F18;
+  --border: #24493C;
+  --border-strong: #6B8A7A;
+  --focus: #5AD86F;
+  --success-ink: #5AD86F;
+  --success-bg: #16402F;
+  --warning-ink: #0F3D2E;
+  --warning-bg: #F2F0EA;
+  --danger: #FF9B8F;
+  --info-ink: #F2F0EA;
+  --info-bg: #1C3A31;
+}}
+:root[data-theme="dark"] {
+  --dakar-700: #5AD86F;
+  --niayes-100: #16402F;
+  --senegal-50: #0B1F18;
+  --surface: #13302A;
+  --ink: #F2F0EA;
+  --ink-muted: #A9BDB2;
+  --on-accent: #0B1F18;
+  --border: #24493C;
+  --border-strong: #6B8A7A;
+  --focus: #5AD86F;
+  --success-ink: #5AD86F;
+  --success-bg: #16402F;
+  --warning-ink: #0F3D2E;
+  --warning-bg: #F2F0EA;
+  --danger: #FF9B8F;
+  --info-ink: #F2F0EA;
+  --info-bg: #1C3A31;
+}
+
+@font-face { font-family: "Onest"; src: url("/fonts/Onest-Variable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+/* Téléphone (< 600 px) */
+.m-display { font-family: var(--font-text); font-size: 32px; line-height: 38px; font-weight: 800; letter-spacing: -0.5px; }
+.m-h1 { font-family: var(--font-text); font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: -0.3px; }
+.m-h2 { font-family: var(--font-text); font-size: 20px; line-height: 26px; font-weight: 700; }
+.m-h3 { font-family: var(--font-text); font-size: 17px; line-height: 24px; font-weight: 600; }
+.m-body { font-family: var(--font-text); font-size: 16px; line-height: 24px; font-weight: 400; }
+.m-label { font-family: var(--font-text); font-size: 15px; line-height: 20px; font-weight: 600; }
+.m-caption { font-family: var(--font-text); font-size: 13px; line-height: 18px; font-weight: 500; }
+/* Tablette (600 – 1023 px) */
+.t-display { font-family: var(--font-text); font-size: 40px; line-height: 46px; font-weight: 800; letter-spacing: -0.6px; }
+.t-h1 { font-family: var(--font-text); font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.4px; }
+.t-h2 { font-family: var(--font-text); font-size: 22px; line-height: 28px; font-weight: 700; }
+.t-h3 { font-family: var(--font-text); font-size: 18px; line-height: 26px; font-weight: 600; }
+.t-body { font-family: var(--font-text); font-size: 17px; line-height: 26px; font-weight: 400; }
+.t-label { font-family: var(--font-text); font-size: 15px; line-height: 20px; font-weight: 600; }
+.t-caption { font-family: var(--font-text); font-size: 13px; line-height: 18px; font-weight: 500; }
+/* Ordinateur (≥ 1024 px) */
+.d-display { font-family: var(--font-text); font-size: 56px; line-height: 60px; font-weight: 800; letter-spacing: -1px; }
+.d-h1 { font-family: var(--font-text); font-size: 32px; line-height: 40px; font-weight: 700; letter-spacing: -0.4px; }
+.d-h2 { font-family: var(--font-text); font-size: 22px; line-height: 30px; font-weight: 700; }
+.d-h3 { font-family: var(--font-text); font-size: 17px; line-height: 24px; font-weight: 600; }
+.d-body { font-family: var(--font-text); font-size: 16px; line-height: 24px; font-weight: 400; }
+.d-label { font-family: var(--font-text); font-size: 14px; line-height: 20px; font-weight: 600; }
+.d-caption { font-family: var(--font-text); font-size: 13px; line-height: 18px; font-weight: 500; }
+/* Chiffres */
+.num-kpi { font-family: var(--font-num); font-size: 28px; line-height: 32px; font-weight: 700; letter-spacing: -0.3px; font-variant-numeric: tabular-nums; }
+.num-table { font-family: var(--font-num); font-size: 15px; line-height: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }

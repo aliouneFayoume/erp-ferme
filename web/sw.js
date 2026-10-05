@@ -1,17 +1,20 @@
 // Service worker : cache l'app shell pour un fonctionnement installable et hors-ligne
 // (terrain PWA offline-first, cahier des charges §4). Les appels /api/* ne sont jamais
 // mis en cache : ils doivent toujours refléter l'état réel du serveur.
+// v24 : charte Massla (jetons CSS + police Onest + icône) ajoutés à l'app shell hors-ligne.
 // v23 : le JS de l'app shell est maintenant fusionné+minifié en un seul fichier (web/build.js) —
 // une seule entrée à tenir à jour au lieu d'une par vue (un ancien drift avait laissé paie.js hors
 // de cette liste alors qu'index.html le chargeait déjà). Incrémenté pour que les clients déjà
 // installés purgent l'ancien cache plutôt que de continuer à réclamer les anciens chemins par-vue.
-const CACHE_NAME = 'erp-ferme-shell-v23';
+const CACHE_NAME = 'erp-ferme-shell-v24';
 
 const APP_SHELL = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/icons/icon.svg',
+  '/icons/massla-icone-app.svg',
+  '/css/massla-tokens.css',
+  '/fonts/Onest-Variable.woff2',
   '/css/style.css',
   '/js/dist/app.min.js',
 ];

@@ -1,0 +1,54 @@
+/* Massla — composants de base. Dépend de tokens.css (variables) et de la police Onest. */
+.ms-root{font-family:"Onest",var(--font-text),system-ui,sans-serif;color:var(--ink);font-size:16px;line-height:24px}
+.ms-num{font-variant-numeric:tabular-nums}
+/* Boutons */
+.ms-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);min-height:var(--button-h);padding:0 var(--space-6);border-radius:var(--radius-lg);border:0;font-family:"Onest",var(--font-text),system-ui,sans-serif;font-size:16px;font-weight:700;line-height:20px;cursor:pointer}
+.ms-btn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.ms-btn--primary{background:var(--sahel-900);color:var(--on-brand)}
+.ms-btn--accent{background:var(--dakar-500);color:var(--on-accent)}
+.ms-btn--secondary{background:transparent;color:var(--ink);border:1.5px solid var(--border-strong)}
+.ms-btn--text{background:transparent;color:var(--dakar-700);padding:0 var(--space-3);min-height:var(--tap-min);text-decoration:underline;text-underline-offset:3px}
+.ms-btn--block{width:100%}
+.ms-btn[disabled]{opacity:.45;cursor:not-allowed}
+/* Champs */
+.ms-field{display:flex;flex-direction:column;gap:var(--space-2)}
+.ms-label{font-size:15px;line-height:20px;font-weight:600;color:var(--ink)}
+.ms-input{height:var(--input-h);box-sizing:border-box;padding:0 var(--space-4);border-radius:var(--radius-md);border:1.5px solid var(--border-strong);background:var(--surface);color:var(--ink);font-family:"Onest",var(--font-text),system-ui,sans-serif;font-size:16px}
+.ms-input::placeholder{color:var(--ink-muted)}
+.ms-input:focus{outline:2px solid var(--focus);outline-offset:2px;border-color:var(--focus)}
+.ms-input--error{border-color:var(--danger)}
+.ms-help{font-size:13px;line-height:18px;color:var(--ink-muted)}
+.ms-help--error{color:var(--danger);font-weight:600}
+/* Badges de statut */
+.ms-badge{display:inline-flex;align-items:center;gap:var(--space-1);padding:var(--space-1) var(--space-3);border-radius:var(--radius-sm);font-size:13px;line-height:18px;font-weight:700}
+.ms-badge svg{width:14px;height:14px;flex:none}
+.ms-badge--success{background:var(--success-bg);color:var(--success-ink)}
+.ms-badge--warning{background:var(--warning-bg);color:var(--warning-ink)}
+.ms-badge--warning svg{color:var(--dakar-500)}
+.ms-badge--danger{background:var(--danger-bg);color:var(--danger-ink)}
+.ms-badge--info{background:var(--info-bg);color:var(--info-ink);box-shadow:inset 0 0 0 1px var(--border)}
+/* Carte KPI */
+.ms-kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-1);min-width:0}
+.ms-kpi__label{font-size:13px;line-height:18px;font-weight:500;color:var(--ink-muted)}
+.ms-kpi__value{font-size:28px;line-height:32px;font-weight:700;letter-spacing:-.3px;color:var(--ink);font-variant-numeric:tabular-nums}
+.ms-kpi__unit{font-size:15px;font-weight:600;margin-left:4px}
+.ms-kpi__delta{align-self:flex-start}
+.ms-kpi--brand{background:var(--sahel-900);border-color:var(--sahel-900)}
+.ms-kpi--brand .ms-kpi__label{color:var(--on-brand);opacity:.85}
+.ms-kpi--brand .ms-kpi__value{color:var(--on-brand)}
+/* Barre d'onglets */
+.ms-tabbar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--surface);border-top:1px solid var(--border);padding:var(--space-2) var(--space-2) var(--space-3)}
+.ms-tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-1);min-height:var(--tap-min);border:0;background:transparent;color:var(--ink-muted);font-family:"Onest",var(--font-text),system-ui,sans-serif;font-size:12px;line-height:16px;font-weight:500;cursor:pointer}
+.ms-tab svg{width:24px;height:24px}
+.ms-tab[aria-current="page"]{color:var(--sahel-900);font-weight:700}
+.ms-tab:focus-visible{outline:2px solid var(--focus);outline-offset:-2px;border-radius:var(--radius-md)}
+/* Bandeau d'alerte */
+.ms-alert{display:flex;gap:var(--space-3);align-items:flex-start;padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);font-size:15px;line-height:22px}
+.ms-alert svg{width:20px;height:20px;flex:none;margin-top:1px}
+.ms-alert strong{font-weight:700}
+.ms-alert--warning{background:var(--warning-bg);color:var(--warning-ink)}
+.ms-alert--warning svg{color:var(--dakar-500)}
+.ms-alert--info{background:var(--info-bg);color:var(--info-ink);box-shadow:inset 0 0 0 1px var(--border)}
+.ms-alert--success{background:var(--success-bg);color:var(--success-ink)}
+.ms-alert--danger{background:var(--danger-bg);color:var(--danger-ink)}
+html[data-theme="dark"] .ms-alert--warning svg,html[data-theme="dark"] .ms-badge--warning svg{color:var(--warning-ink)}

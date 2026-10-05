@@ -5,11 +5,10 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#FFFFFF",
-  "theme_color": "#1A1A1A",
+  "background_color": "#F3F8F3",
+  "theme_color": "#0F3D2E",
   "lang": "fr",
   "icons": [
-    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+    { "src": "/icons/massla-icone-app.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }
