@@ -83,6 +83,10 @@ describe('pages marketing générées', () => {
         PAGES_PUBLIQUES.forEach((nom) => expect(html).toContain(`href="/${nom}"`));
     });
 
+    test('le fichier de validation Google Search Console est présent (le supprimer fait perdre le statut de propriétaire)', () => {
+        expect(lire('google0aab26dec2f307df.html')).toBe('google-site-verification: google0aab26dec2f307df.html');
+    });
+
     test('le plan du site liste toutes les pages publiques', () => {
         const plan = lire('sitemap.xml');
         TOUTES.forEach((nom) => expect(plan).toContain(`<loc>https://massla.sn/${nom}</loc>`));
