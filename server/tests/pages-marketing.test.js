@@ -56,10 +56,21 @@ describe('pages marketing générées', () => {
     });
 
     test('tous les liens internes pointent vers une page ou un fichier qui existe', () => {
+        // Les bundles /js/dist/*.min.js sont GÉNÉRÉS par web/build.js : le dossier est ignoré par git, donc absent
+        // d'un checkout propre (CI). On vérifie qu'ils sont déclarés dans build.js et que leurs sources existent.
+        const bundles = {};
+        for (const [, bundle, liste] of lire('build.js').matchAll(/'([\w-]+\.min\.js)':\s*\[([^\]]*)\]/g)) {
+            bundles[bundle] = [...liste.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+        }
         const manquants = [];
         for (const nom of TOUTES) {
             for (const [, href] of lire(`${nom}.html`).matchAll(/(?:href|src)="(\/[^"#?]*)/g)) {
                 if (href.startsWith('//') || href.startsWith('/api/')) continue;
+                if (href.startsWith('/js/dist/')) {
+                    const sources = bundles[href.slice('/js/dist/'.length)];
+                    if (!sources || sources.length === 0 || sources.some((s) => !fs.existsSync(path.join(WEB, s)))) manquants.push(`${nom}.html → ${href}`);
+                    continue;
+                }
                 const cible = href === '/' ? 'index.html' : PAGES_PUBLIQUES.includes(href.slice(1)) || href === '/decouvrir' ? `${href.slice(1)}.html` : href.slice(1);
                 if (!fs.existsSync(path.join(WEB, cible))) manquants.push(`${nom}.html → ${href}`);
             }
