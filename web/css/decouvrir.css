@@ -183,6 +183,18 @@ h1 em { font-style: normal; color: var(--dakar-700); }
 .secteur-corps li::before { content: ""; flex: none; width: 20px; height: 20px; margin-top: 2px; background-color: var(--dakar-700); -webkit-mask: var(--i-coche) center / contain no-repeat; mask: var(--i-coche) center / contain no-repeat; }
 .secteur-corps .btn-lien { margin-top: auto; align-self: flex-start; }
 
+/* ---------- Aviculture : texte + captures de l'application ---------- */
+.duo { display: grid; gap: var(--space-8); align-items: center; }
+.liste-coches { margin: var(--space-5) 0 0; padding: 0; list-style: none; display: grid; gap: var(--space-3); max-width: var(--texte-max); }
+.liste-coches li { display: flex; gap: var(--space-3); color: var(--ink); }
+.liste-coches li::before { content: ""; flex: none; width: 20px; height: 20px; margin-top: 2px; background-color: var(--dakar-700); -webkit-mask: var(--i-coche) center / contain no-repeat; mask: var(--i-coche) center / contain no-repeat; }
+.duo-visuel { display: flex; gap: var(--space-4); overflow-x: auto; scroll-snap-type: x mandatory; padding: var(--space-2) 0 var(--space-4); }
+.telephone { flex: 0 0 min(260px, 72%); margin: 0; scroll-snap-align: center; }
+.telephone img { width: 100%; height: auto; border: 1px solid var(--border-strong); border-radius: var(--radius-xl); box-shadow: var(--shadow-md); background: var(--surface); }
+.telephone figcaption { margin-top: var(--space-3); font-size: 14px; line-height: 20px; color: var(--ink-muted); text-align: center; }
+@media (min-width: 600px) { .duo-visuel { justify-content: center; overflow: visible; } }
+@media (min-width: 1024px) { .duo { grid-template-columns: 1fr 1fr; gap: var(--space-10); } }
+
 /* ---------- Fonctionnalités ---------- */
 .fonction { display: flex; gap: var(--space-4); align-items: flex-start; }
 .fonction h3 { font-size: 18px; line-height: 24px; }
