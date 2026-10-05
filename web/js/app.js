@@ -67,6 +67,8 @@ async function rafraichirBadgeSync(queue) {
   if (!indicator || !count) return;
   const n = (queue || (await OfflineQueue.lire())).length;
   indicator.classList.toggle('pending', n > 0);
+  const libelle = document.getElementById('sync-label');
+  if (libelle) libelle.textContent = n > 0 ? `${n} en attente` : 'Synchronisé';
   indicator.title = n > 0 ? `${n} action(s) en attente d'envoi au serveur` : 'Toutes les actions sont synchronisées';
   count.classList.toggle('hidden', n === 0);
   count.textContent = n > 9 ? '9+' : String(n);
@@ -152,20 +154,25 @@ function esc(value) {
 }
 window.esc = esc;
 
+// Largeur du graphique = largeur disponible dans la zone principale (le SVG garde ainsi son échelle 1:1 et
+// ses textes restent lisibles sur téléphone), bornée entre 260 et 560.
+function largeurGraphique() {
+  const zone = document.getElementById('view');
+  return Math.min(560, Math.max(260, (zone ? zone.clientWidth : 600) - 80));
+}
+
 /**
  * Génère un mini-graphique SVG en courbe (sans dépendance externe) pour visualiser une évolution
  * dans le temps — ex : courbe de croissance (poids moyen) en Avicole/Piscicole.
  * points : [{ date: 'YYYY-MM-DD', value: number }, ...] triés du plus ancien au plus récent.
  */
-function lineChartSvg(points, { width = 560, height = 150, color = 'var(--dakar-700)', unit = '' } = {}) {
+function lineChartSvg(points, { width = largeurGraphique(), height = 160, color = 'var(--dakar-700)', unit = '' } = {}) {
   if (!points || points.length === 0) {
     return `<div class="empty">Pas assez de données pour tracer une courbe.</div>`;
   }
-  const padL = 44;
   const padR = 14;
   const padT = 14;
-  const padB = 28;
-  const innerW = width - padL - padR;
+  const padB = 30;
   const innerH = height - padT - padB;
 
   const values = points.map((p) => Number(p.value) || 0);
@@ -175,6 +182,9 @@ function lineChartSvg(points, { width = 560, height = 150, color = 'var(--dakar-
     min -= 1;
     max += 1;
   }
+  // marge gauche = largeur de l'étiquette la plus longue de l'axe vertical (texte de 13 px, ~7,4 px par caractère)
+  const padL = Math.max(48, Math.max(`${fmt(max)}${unit}`.length, `${fmt(min)}${unit}`.length) * 7.4 + 14);
+  const innerW = width - padL - padR;
 
   const x = (i) => padL + (points.length === 1 ? innerW / 2 : (i / (points.length - 1)) * innerW);
   const y = (v) => padT + innerH - ((v - min) / (max - min)) * innerH;
@@ -188,10 +198,10 @@ function lineChartSvg(points, { width = 560, height = 150, color = 'var(--dakar-
     <svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" aria-label="Courbe de croissance">
       <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + innerH}" stroke="currentColor" stroke-opacity="0.15" />
       <line x1="${padL}" y1="${padT + innerH}" x2="${padL + innerW}" y2="${padT + innerH}" stroke="currentColor" stroke-opacity="0.15" />
-      <text x="${padL - 8}" y="${padT + 4}" text-anchor="end" font-size="10" fill="currentColor" opacity="0.6">${fmt(max)}${unit}</text>
-      <text x="${padL - 8}" y="${padT + innerH}" text-anchor="end" font-size="10" fill="currentColor" opacity="0.6">${fmt(min)}${unit}</text>
-      <text x="${padL}" y="${height - 6}" font-size="10" fill="currentColor" opacity="0.6">${fmtDate(points[0].date)}</text>
-      <text x="${padL + innerW}" y="${height - 6}" text-anchor="end" font-size="10" fill="currentColor" opacity="0.6">${fmtDate(points[points.length - 1].date)}</text>
+      <text x="${padL - 8}" y="${padT + 4}" text-anchor="end" font-size="13" fill="currentColor" opacity="0.75">${fmt(max)}${unit}</text>
+      <text x="${padL - 8}" y="${padT + innerH}" text-anchor="end" font-size="13" fill="currentColor" opacity="0.75">${fmt(min)}${unit}</text>
+      <text x="${padL}" y="${height - 6}" font-size="13" fill="currentColor" opacity="0.75">${fmtDate(points[0].date)}</text>
+      <text x="${padL + innerW}" y="${height - 6}" text-anchor="end" font-size="13" fill="currentColor" opacity="0.75">${fmtDate(points[points.length - 1].date)}</text>
       <polyline points="${linePoints}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
       ${dots}
     </svg>
@@ -229,6 +239,7 @@ function ameliorerTableaux(racine) {
     if (!entetes.length) return;
     const lignes = [...tableau.querySelectorAll('tbody tr')].map((tr) => [...tr.children]).filter((c) => c.length === entetes.length && !c.some((td) => td.colSpan > 1));
     lignes.forEach((cellules) => cellules.forEach((td, i) => td.setAttribute('data-label', entetes[i].textContent.trim())));
+    if (lignes.length) tableau.classList.add('en-cartes'); // affichage en liste de cartes sur téléphone (voir style.css)
     entetes.forEach((th, i) => {
       if (lignes.length && lignes.every((cellules) => cellules[i].classList.contains('num'))) th.classList.add('num');
     });
@@ -439,6 +450,7 @@ async function selectTab(key) {
   document.querySelectorAll('#tabs button').forEach((b) => {
     b.classList.toggle('active', b.dataset.key === key);
   });
+  majBarreOnglets();
   closeSidebar();
   const view = document.getElementById('view');
   view.innerHTML = '<div class="empty">Chargement…</div>';
@@ -481,6 +493,43 @@ document.getElementById('btn-sidebar-collapse').addEventListener('click', () => 
 });
 applySidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1');
 
+// Barre d'onglets du téléphone : 3 raccourcis choisis parmi les onglets autorisés (dans cet ordre de
+// priorité) + « Menu » qui ouvre la liste complète. Le kit en prévoit 4, icône 24 px + libellé toujours visible.
+const LIBELLES_COURTS = { dashboard: 'Accueil', catalogue: 'Stock', 'mon-compte': 'Profil' };
+const ONGLETS_PRIORITAIRES = ['dashboard', 'production', 'commandes', 'logistique', 'finance', 'catalogue', 'intrants', 'mon-compte'];
+function construireBarreOnglets(tabs, mfaSetupRequis) {
+  const barre = document.getElementById('tabbar');
+  barre.innerHTML = '';
+  const cles = tabs.map((t) => t.key);
+  const choisis = ONGLETS_PRIORITAIRES.filter((k) => cles.includes(k));
+  cles.forEach((k) => { if (!choisis.includes(k)) choisis.push(k); });
+  const icone = (corps) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${corps}</svg>`;
+  choisis.slice(0, 3).forEach((k) => {
+    const t = tabs.find((x) => x.key === k);
+    const btn = document.createElement('button');
+    btn.dataset.key = k;
+    btn.innerHTML = `${icone(TAB_ICONS[k] || '')}<span>${LIBELLES_COURTS[k] || t.label.split(' ')[0]}</span>`;
+    btn.setAttribute('aria-label', t.label);
+    if (mfaSetupRequis && k !== 'mon-compte') btn.disabled = true;
+    else btn.addEventListener('click', () => selectTab(k));
+    barre.appendChild(btn);
+  });
+  const menu = document.createElement('button');
+  menu.dataset.menu = '1';
+  menu.innerHTML = `${icone('<path d="M3 6h18M3 12h18M3 18h18"/>')}<span>Menu</span>`;
+  menu.setAttribute('aria-label', 'Ouvrir le menu complet');
+  menu.addEventListener('click', openSidebar);
+  barre.appendChild(menu);
+  majBarreOnglets();
+}
+function majBarreOnglets() {
+  const boutons = [...document.querySelectorAll('#tabbar button[data-key]')];
+  const dansLaBarre = boutons.some((b) => b.dataset.key === currentTab);
+  boutons.forEach((b) => (b.dataset.key === currentTab ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current')));
+  const menu = document.querySelector('#tabbar button[data-menu]');
+  if (menu) (dansLaBarre ? menu.removeAttribute('aria-current') : menu.setAttribute('aria-current', 'page'));
+}
+
 function buildShell(user) {
   document.getElementById('topbar-brand').textContent = user.organisation_nom || 'Ferme Massla';
   document.title = user.organisation_nom ? `ERP ${user.organisation_nom}` : 'ERP Ferme Massla';
@@ -513,6 +562,7 @@ function buildShell(user) {
     }
     nav.appendChild(btn);
   });
+  construireBarreOnglets(tabs, mfaSetupRequis);
 
   selectTab(mfaSetupRequis ? 'mon-compte' : tabs[0]?.key || 'dashboard');
 }

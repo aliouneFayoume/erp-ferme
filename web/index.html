@@ -47,42 +47,50 @@
 
       <p class="sub" style="margin-top:16px;">Nouveau client ? <a href="/inscription.html">Créer votre ferme</a></p>
       <p class="sub" style="margin-top:4px;"><a href="/decouvrir">En savoir plus sur l'application</a></p>
-      <p class="sub" style="margin-top:16px; font-size:0.75rem; opacity:0.6;">FAYSSALAME — Cité Castors Marine III Villa 48, Dakar, Sénégal</p>
-      <p class="sub" style="margin-top:2px; font-size:0.75rem; opacity:0.6;">© 2026 FAYSSALAME — Tous droits réservés.</p>
+      <p class="sub" style="margin-top:16px; font-size:13px;">FAYSSALAME — Cité Castors Marine III Villa 48, Dakar, Sénégal</p>
+      <p class="sub" style="margin-top:2px; font-size:13px;">© 2026 FAYSSALAME — Tous droits réservés.</p>
     </div>
   </div>
 
   <div id="app-shell" class="hidden">
-    <header class="topbar">
-      <button class="icon-btn menu-toggle" id="btn-menu-toggle" aria-label="Menu">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-      </button>
-      <div class="topbar-brand" id="topbar-brand">Ferme Massla</div>
-      <div class="topbar-who">
-        <button class="secondary hidden" id="btn-retour-supervision">↩ Retour à la supervision</button>
-        <span id="sync-indicator" class="sync-indicator synced" title="Toutes les actions sont synchronisées">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.6-1.6A4.5 4.5 0 0 0 6.5 19h11Z"/>
-          </svg>
-          <span class="sync-count hidden" id="sync-count"></span>
-        </span>
-        <span id="who-name"></span>
-        <span id="who-role" class="role-pill"></span>
-        <button class="secondary" id="btn-logout">Déconnexion</button>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <img class="logo-full" src="/icons/massla-horizontal-blanc.svg" alt="Massla" />
+        <img class="logo-symbole" src="/icons/massla-symbole-petite-taille-blanc.svg" alt="Massla" />
       </div>
-    </header>
+      <nav id="tabs" aria-label="Menu principal"></nav>
+      <button class="sidebar-collapse-toggle" id="btn-sidebar-collapse" aria-label="Réduire le menu" title="Réduire le menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+        <span>Réduire</span>
+      </button>
+    </aside>
+    <div class="sidebar-overlay hidden" id="sidebar-overlay"></div>
 
-    <div class="layout">
-      <aside class="sidebar" id="sidebar">
-        <nav id="tabs"></nav>
-        <button class="sidebar-collapse-toggle" id="btn-sidebar-collapse" aria-label="Réduire le menu" title="Réduire le menu">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
-          <span>Réduire</span>
+    <div class="shell-main">
+      <header class="topbar">
+        <button class="icon-btn menu-toggle" id="btn-menu-toggle" aria-label="Menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
         </button>
-      </aside>
-      <div class="sidebar-overlay hidden" id="sidebar-overlay"></div>
+        <div class="topbar-brand" id="topbar-brand">Ferme Massla</div>
+        <div class="topbar-who">
+          <button class="secondary hidden" id="btn-retour-supervision">↩ Retour à la supervision</button>
+          <span id="sync-indicator" class="sync-indicator synced" title="Toutes les actions sont synchronisées" role="status">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.6-1.6A4.5 4.5 0 0 0 6.5 19h11Z"/>
+            </svg>
+            <span class="sync-label" id="sync-label">Synchronisé</span>
+            <span class="sync-count hidden" id="sync-count"></span>
+          </span>
+          <span id="who-name"></span>
+          <span id="who-role" class="role-pill"></span>
+          <button class="secondary" id="btn-logout">Déconnexion</button>
+        </div>
+      </header>
       <main id="view"></main>
     </div>
+
+    <!-- Barre d'onglets du téléphone (< 600 px) : remplie par buildShell (app.js) -->
+    <nav class="tabbar" id="tabbar" aria-label="Navigation principale"></nav>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

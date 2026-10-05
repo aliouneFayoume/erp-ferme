@@ -564,7 +564,7 @@ async function updateOfflineBanner(container) {
       ${q.length ? ` ${q.length} action(s) en attente de synchronisation.` : ''}
     </span>
     <span style="display:flex;gap:8px;align-items:center">
-      <label style="flex-direction:row;align-items:center;gap:6px;font-size:11px">
+      <label style="flex-direction:row;align-items:center;gap:6px;font-size:13px">
         <input type="checkbox" id="toggle-offline" style="width:auto" ${isOfflineMode() ? 'checked' : ''} /> Simuler hors-ligne
       </label>
       ${q.length ? `<button id="btn-sync-now">Synchroniser maintenant</button>` : ''}

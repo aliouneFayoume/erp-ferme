@@ -99,7 +99,7 @@ async function renderLivreur(container) {
     tournees.forEach((t) => {
       const numeroIcon = L.divIcon({
         className: '',
-        html: `<div style="background:var(--dakar-700);color:var(--on-brand);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;border:2px solid var(--surface);box-shadow:var(--shadow-sm)">${t.ordre}</div>`,
+        html: `<div style="background:var(--dakar-700);color:var(--on-brand);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border:2px solid var(--surface);box-shadow:var(--shadow-sm)">${t.ordre}</div>`,
         iconSize: [26, 26],
         iconAnchor: [13, 13],
       });
