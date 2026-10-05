@@ -62,6 +62,8 @@ const BUNDLES = {
   // mot-de-passe-oublie.html et reinitialiser-mot-de-passe.html (« Mot de passe oublié ? », voir server/src/routes/auth.js)
   'mot-de-passe-oublie.min.js': ['js/mot-de-passe-oublie.js'],
   'reinitialiser-mdp.min.js': ['js/reinitialiser-mdp.js'],
+  // confidentialite.html : réglage du choix de mesure d'audience (voir outils/generer-pages-marketing.js)
+  'confidentialite.min.js': ['js/confidentialite.js'],
   // approuver-avis.html (lien "Approuver cet avis" reçu par email, voir server/src/email.js)
   'approuver-avis.min.js': ['js/approuver-avis.js'],
 };

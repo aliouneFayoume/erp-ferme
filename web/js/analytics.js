@@ -111,5 +111,14 @@ window.MassiaAnalytics = (function () {
     afficherBandeau();
   });
 
-  return { track };
+  // Utilisés par la page « Politique de confidentialité » (js/confidentialite.js) pour afficher et modifier le choix.
+  function choix() {
+    return lireChoix() === 'refus' || navigator.doNotTrack === '1' ? 'refus' : 'ok';
+  }
+  function definirChoix(valeur) {
+    ecrireChoix(valeur === 'refus' ? 'refus' : 'ok');
+    if (valeur === 'refus') couperSuivi();
+  }
+
+  return { track, choix, definirChoix, doNotTrack: navigator.doNotTrack === '1' };
 })();

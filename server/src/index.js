@@ -123,6 +123,13 @@ async function main() {
         res.sendFile(path.join(__dirname, '..', '..', 'web', 'decouvrir.html'));
     });
 
+    // Pages de secteur et pages légales, elles aussi en URL propre (voir pagesPubliques.js).
+    for (const nom of require('./pagesPubliques').PAGES_PUBLIQUES) {
+        app.get(`/${nom}`, (req, res) => {
+            res.sendFile(path.join(__dirname, '..', '..', 'web', `${nom}.html`));
+        });
+    }
+
     app.use(express.static(path.join(__dirname, '..', '..', 'web')));
 
     // Doit être le DERNIER app.use() : Express reconnaît un middleware d'erreur à sa signature à 4

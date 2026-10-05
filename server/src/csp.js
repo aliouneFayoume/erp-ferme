@@ -22,7 +22,12 @@ const directivesBase = {
 // Pages publiques qui portent le suivi marketing (web/js/analytics.js : Google Analytics 4 + Meta
 // Pixel). Seules elles ouvrent la CSP à Google et Meta : l'application (connexion, écrans de gestion,
 // portail client) ne charge jamais de script tiers de suivi et garde la CSP stricte ci-dessus.
-const PAGES_MARKETING = new Set(['/decouvrir', '/decouvrir.html', '/inscription', '/inscription.html']);
+const { PAGES_AVEC_SUIVI } = require('./pagesPubliques');
+const PAGES_MARKETING = new Set([
+    '/decouvrir', '/decouvrir.html', '/inscription', '/inscription.html',
+    // pages de secteur et politique de confidentialité (voir pagesPubliques.js), avec et sans .html
+    ...PAGES_AVEC_SUIVI.flatMap((nom) => [`/${nom}`, `/${nom}.html`]),
+]);
 
 const directivesMarketing = {
     ...directivesBase,

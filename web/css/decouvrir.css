@@ -195,6 +195,23 @@ h1 em { font-style: normal; color: var(--dakar-700); }
 @media (min-width: 600px) { .duo-visuel { justify-content: center; overflow: visible; } }
 @media (min-width: 1024px) { .duo { grid-template-columns: 1fr 1fr; gap: var(--space-10); } }
 
+/* ---------- Pages de secteur et pages légales ---------- */
+.fil-ariane { margin: 0 0 var(--space-4); font-size: 14px; line-height: 20px; color: var(--ink-muted); }
+.fil-ariane a { color: var(--dakar-700); }
+a.puce-secteur { text-decoration: none; }
+a.puce-secteur:hover { text-decoration: underline; text-underline-offset: 3px; }
+.note-secteur { margin: var(--space-6) 0 0; max-width: var(--texte-max); color: var(--ink-muted); }
+.page-legale { background: var(--surface); padding-block: var(--space-10) var(--section-y); }
+.texte-legal { max-width: var(--texte-max); }
+.texte-legal h1 { margin-bottom: var(--space-2); }
+.texte-legal .maj { margin: 0 0 var(--space-6); color: var(--ink-muted); font-size: 15px; }
+.texte-legal h2 { margin: var(--space-8) 0 var(--space-3); font-size: 22px; line-height: 30px; }
+.texte-legal h3 { margin: var(--space-5) 0 var(--space-2); font-size: 18px; line-height: 24px; }
+.texte-legal p, .texte-legal li { color: var(--ink); }
+.texte-legal ul { padding-left: var(--space-5); display: grid; gap: var(--space-2); }
+.choix-audience { margin: var(--space-4) 0 0; padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--senegal-50); display: grid; gap: var(--space-3); justify-items: start; }
+.choix-audience p { margin: 0; font-weight: 600; }
+
 /* ---------- Fonctionnalités ---------- */
 .fonction { display: flex; gap: var(--space-4); align-items: flex-start; }
 .fonction h3 { font-size: 18px; line-height: 24px; }

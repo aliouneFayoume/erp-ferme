@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Logiciel de gestion maraîchère au Sénégal — Massla</title>
+  <meta name="description" content="Suivez vos cultures, les dates de récolte, vos récoltes en kilos, vos stocks de légumes et vos ventes depuis votre téléphone. Massla, le logiciel de gestion des exploitations maraîchères au Sénégal." />
+  <link rel="canonical" href="https://massla.sn/maraichage" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="fr_SN" />
+  <meta property="og:site_name" content="Massla" />
+  <meta property="og:title" content="Logiciel de gestion maraîchère au Sénégal — Massla" />
+  <meta property="og:description" content="Suivez vos cultures, les dates de récolte, vos récoltes en kilos, vos stocks de légumes et vos ventes depuis votre téléphone. Massla, le logiciel de gestion des exploitations maraîchères au Sénégal." />
+  <meta property="og:url" content="https://massla.sn/maraichage" />
+  <meta property="og:image" content="https://massla.sn/img/og-massla.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://massla.sn/img/og-massla.jpg" />
+  <link rel="icon" href="/icons/massla-favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icons/massla-icone-app.svg" />
+  <meta name="theme-color" content="#0F3D2E" />
+  <link rel="preload" href="/fonts/Onest-Variable.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/img/secteur-maraicher.webp" as="image" fetchpriority="high" />
+  <link rel="stylesheet" href="/css/massla-tokens.css" />
+  <link rel="stylesheet" href="/css/decouvrir.css" />
+  <script src="/js/dist/marketing.min.js"></script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Massla",
+      "item": "https://massla.sn/decouvrir"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Maraîchage",
+      "item": "https://massla.sn/maraichage"
+    }
+  ]
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Peut-on suivre plusieurs cultures en même temps ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui. Chaque culture est un lot avec sa propre date de démarrage et sa propre date de récolte prévue. Tous vos lots en cours sont visibles sur un seul écran."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Comment être prévenu qu'une récolte approche ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Le tableau de bord signale les récoltes prévues dans les 7 jours, et la carte de chaque culture indique si la récolte est en retard."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Comment est calculée la date de récolte ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "À partir de la date de démarrage et de la durée avant récolte que vous indiquez pour la culture (par exemple 90 jours)."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Peut-on saisir les relevés sans réseau dans les champs ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui. Le relevé est gardé sur le téléphone et envoyé automatiquement dès que la connexion revient. Chaque relevé n'est compté qu'une seule fois, même s'il est renvoyé."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Combien coûte Massla pour une exploitation maraîchère ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "À partir de 25 000 FCFA par mois avec le Socle Essentiel (tableau de bord, production, catalogue et stock, intrants, utilisateurs). Les modules Clients, Commandes, Finance ou Logistique s'ajoutent à la carte, ou le Pack tout compris est à 85 000 FCFA par mois. La mise en place, unique, est de 75 000 FCFA."
+      }
+    }
+  ]
+}
+  </script>
+</head>
+<body>
+
+<a class="aller-au-contenu" href="#contenu">Aller au contenu</a>
+
+<header class="entete">
+  <div class="wrap">
+    <a class="logo-entete" href="/decouvrir" aria-label="Massla — accueil"><img src="/icons/massla-horizontal-blanc.svg" alt="Massla" width="140" height="32" /></a>
+    <nav class="nav-principal" aria-label="Navigation principale">
+      <a href="/decouvrir#secteurs">Secteurs</a>
+      <a href="/decouvrir#fonctionnalites">Fonctionnalités</a>
+      <a href="/decouvrir#tarifs">Tarifs</a>
+      <a href="/decouvrir#faq">FAQ</a>
+      <a href="/">Se connecter</a>
+    </nav>
+    <div class="entete-actions">
+      <a class="btn btn-accent btn-petit entete-demo" href="#contact" data-open-contact data-track="clic_cta_topbar">Démo gratuite</a>
+      <details class="menu-mobile">
+        <summary aria-label="Menu"><span class="sr-only">Menu</span></summary>
+        <nav aria-label="Menu">
+          <a href="/decouvrir#secteurs">Secteurs</a>
+          <a href="/decouvrir#fonctionnalites">Fonctionnalités</a>
+          <a href="/decouvrir#tarifs">Tarifs</a>
+          <a href="/decouvrir#faq">FAQ</a>
+          <a href="/">Se connecter</a>
+          <a class="btn btn-accent" href="#contact" data-open-contact data-track="clic_cta_menu_mobile">Demander ma démo gratuite</a>
+        </nav>
+      </details>
+    </div>
+  </div>
+</header>
+
+<main id="contenu">
+
+  <section class="hero section-claire">
+    <div class="wrap">
+      <div class="hero-texte">
+        <nav class="fil-ariane" aria-label="Fil d'Ariane"><a href="/decouvrir">Massla</a> <span aria-hidden="true">›</span> <span>Maraîchage</span></nav>
+        <p class="surtitre">Maraîchage au Sénégal</p>
+        <h1>Le logiciel de gestion pour votre <em>exploitation maraîchère</em></h1>
+        <p class="chapeau">Du semis à la vente : Massla suit chaque culture, annonce les récoltes à venir et garde vos produits et vos ventes au même endroit.</p>
+        <div class="cta-row" id="hero-cta">
+          <a class="btn btn-principal" href="#contact" data-open-contact data-track="clic_cta_secteur_maraichage">Demander ma démo gratuite</a>
+          <a class="btn btn-contour" href="/decouvrir#tarifs">Voir les tarifs</a>
+        </div>
+      </div>
+      <figure class="hero-visuel" style="margin:0">
+        <img src="/img/secteur-maraicher.webp" width="720" height="411" fetchpriority="high" decoding="async" alt="Une maraîchère récolte des tomates dans son champ" />
+      </figure>
+    </div>
+  </section>
+
+  <section class="section-blanche">
+    <div class="wrap">
+      <p class="surtitre">Ce que fait Massla</p>
+      <h2>Tout le suivi de vos cultures</h2>
+      <div class="grille grille-3">
+        <div class="carte fonction"><span class="pastille"><span class="ico ic-modules" aria-hidden="true"></span></span><div><h3>Une culture, un lot</h3><p>Créez un lot par culture (tomate, chou, oignon…) avec sa date de démarrage et sa durée avant récolte.</p></div></div>
+        <div class="carte fonction"><span class="pastille"><span class="ico ic-tableau" aria-hidden="true"></span></span><div><h3>Les récoltes à venir</h3><p>Massla calcule la date de récolte prévue de chaque culture et vous prévient quand une récolte approche, ou quand elle est en retard.</p></div></div>
+        <div class="carte fonction"><span class="pastille"><span class="ico ic-livre" aria-hidden="true"></span></span><div><h3>Le relevé du jour</h3><p>Notez la récolte du jour en kilos et les intrants utilisés (engrais, traitements) au même endroit.</p></div></div>
+        <div class="carte fonction"><span class="pastille"><span class="ico ic-modules" aria-hidden="true"></span></span><div><h3>Un catalogue de produits frais</h3><p>Gardez vos produits, leurs prix selon le type de client (particulier, restaurant, grossiste) et leur stock disponible.</p></div></div>
+        <div class="carte fonction"><span class="pastille"><span class="ico ic-equipe" aria-hidden="true"></span></span><div><h3>Lots terminés ou perdus</h3><p>Clôturez une culture terminée, vendue ou perdue : son historique reste consultable.</p></div></div>
+        <div class="carte fonction"><span class="pastille"><span class="ico ic-portefeuille" aria-hidden="true"></span></span><div><h3>Ventes et paiements</h3><p>Commandes, factures et paiements par Wave et Orange Money, en un seul endroit.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-claire">
+    <div class="wrap">
+      <p class="surtitre">Au quotidien</p>
+      <h2>Une journée avec Massla</h2>
+      <div class="etapes">
+        <div class="etape"><div class="etape-num">01</div><h3>Vous démarrez la culture</h3><p>Vous indiquez la culture, la date de démarrage et le nombre de jours avant la récolte.</p></div>
+        <div class="etape"><div class="etape-num">02</div><h3>Massla suit la date de récolte</h3><p>Le tableau de bord signale les récoltes prévues dans les 7 jours, et celles qui sont en retard.</p></div>
+        <div class="etape"><div class="etape-num">03</div><h3>Vous récoltez et vous vendez</h3><p>La récolte est notée en kilos ; les ventes et les paiements se suivent dans la même application.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-blanche">
+    <div class="wrap">
+      <p class="surtitre">Questions fréquentes</p>
+      <h2>Maraîchage : ce que demandent les gérants</h2>
+      <div class="faq">
+        <details name="faq" open>
+          <summary>Peut-on suivre plusieurs cultures en même temps ?</summary>
+          <p>Oui. Chaque culture est un lot avec sa propre date de démarrage et sa propre date de récolte prévue. Tous vos lots en cours sont visibles sur un seul écran.</p>
+        </details>
+        <details name="faq">
+          <summary>Comment être prévenu qu'une récolte approche ?</summary>
+          <p>Le tableau de bord signale les récoltes prévues dans les 7 jours, et la carte de chaque culture indique si la récolte est en retard.</p>
+        </details>
+        <details name="faq">
+          <summary>Comment est calculée la date de récolte ?</summary>
+          <p>À partir de la date de démarrage et de la durée avant récolte que vous indiquez pour la culture (par exemple 90 jours).</p>
+        </details>
+        <details name="faq">
+          <summary>Peut-on saisir les relevés sans réseau dans les champs ?</summary>
+          <p>Oui. Le relevé est gardé sur le téléphone et envoyé automatiquement dès que la connexion revient. Chaque relevé n'est compté qu'une seule fois, même s'il est renvoyé.</p>
+        </details>
+        <details name="faq">
+          <summary>Combien coûte Massla pour une exploitation maraîchère ?</summary>
+          <p>À partir de 25 000 FCFA par mois avec le Socle Essentiel (tableau de bord, production, catalogue et stock, intrants, utilisateurs). Les modules Clients, Commandes, Finance ou Logistique s'ajoutent à la carte, ou le Pack tout compris est à 85 000 FCFA par mois. La mise en place, unique, est de 75 000 FCFA.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-claire">
+    <div class="wrap">
+      <p class="surtitre">Autres secteurs</p>
+      <h2>Massla couvre toute votre exploitation</h2>
+      <ul class="puces-secteurs" aria-label="Autres secteurs"><li><a class="puce-secteur" href="/aviculture">Aviculture</a></li><li><a class="puce-secteur" href="/pisciculture">Pisciculture</a></li><li><a class="puce-secteur" href="/elevage">Élevage</a></li></ul>
+    </div>
+  </section>
+
+  <section id="contact" class="section-sahel final">
+    <div class="wrap">
+      <h2>Voyez Massla sur votre propre téléphone</h2>
+      <p class="intro">Une démonstration gratuite de 15 minutes, sans engagement, avec un exemple adapté à votre maraîchage.</p>
+      <div class="cta-row">
+        <button type="button" class="btn btn-accent" data-open-contact data-track="clic_ouvrir_modal_contact_maraichage">Demander ma démo gratuite</button>
+        <a class="btn btn-contour-clair" href="https://wa.me/14165266293?text=Bonjour%2C%20je%20souhaite%20une%20d%C3%A9monstration%20de%20Massla%20pour%20ma%20ferme." target="_blank" rel="noopener" data-track="contact_whatsapp">Écrire sur WhatsApp</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="pied">
+  <div class="wrap">
+    <img src="/icons/massla-empile-blanc.svg" alt="Massla" width="150" height="166" loading="lazy" />
+    <nav aria-label="Pied de page">
+      <a href="/aviculture">Aviculture</a>
+      <a href="/pisciculture">Pisciculture</a>
+      <a href="/maraichage">Maraîchage</a>
+      <a href="/elevage">Élevage</a>
+      <a href="/decouvrir#tarifs">Tarifs</a>
+      <a href="/decouvrir#faq">FAQ</a>
+      <a href="/">Se connecter</a>
+      <a href="/mentions">Mentions légales</a>
+      <a href="/confidentialite">Confidentialité</a>
+    </nav>
+    <div>
+      <p class="legal">Massla est un produit de FAYSSALAME — Cité Castors Marine III, Villa 48, Dakar, Sénégal.</p>
+      <p class="legal">NINEA 012050225 · RCCM SN.DKR.2025.B.13520</p>
+      <p class="legal">© 2026 FAYSSALAME — Tous droits réservés.</p>
+    </div>
+  </div>
+</footer>
+
+<div class="barre-demo" id="barre-demo">
+  <a class="btn btn-accent" href="#contact" data-open-contact data-track="clic_cta_barre_fixe">Demander ma démo gratuite</a>
+</div>
+
+<div class="modal-overlay" id="modal-contact" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-contact-title">
+    <button type="button" class="modal-close" id="modal-contact-close" aria-label="Fermer">Fermer</button>
+    <h3 id="modal-contact-title">Demander ma démo gratuite</h3>
+    <p class="modal-lede">Laissez vos coordonnées, nous vous recontactons rapidement pour organiser votre démonstration gratuite.</p>
+    <form id="form-contact" novalidate>
+      <div class="form-field">
+        <label for="contact-whatsapp">Numéro WhatsApp</label>
+        <input type="tel" id="contact-whatsapp" name="whatsapp" required autocomplete="tel" inputmode="tel" placeholder="77 000 00 00" />
+        <small class="form-hint">Sénégal : 9 chiffres suffisent (ex. 77 000 00 00). Autre pays : ajoutez l'indicatif, par exemple +33.</small>
+      </div>
+      <div class="form-field">
+        <label for="contact-nom">Prénom et nom</label>
+        <input type="text" id="contact-nom" name="nom" required maxlength="100" autocomplete="name" />
+      </div>
+      <div class="form-field">
+        <label for="contact-email">Adresse e-mail</label>
+        <input type="email" id="contact-email" name="email" required autocomplete="email" />
+      </div>
+      <fieldset class="form-field choix-secteurs">
+        <legend>Votre secteur <span class="form-hint">(un ou plusieurs)</span></legend>
+        <div class="puces-choix">
+          <label class="puce-choix"><input type="checkbox" name="secteur" value="avicole" /><span>Aviculture</span></label>
+          <label class="puce-choix"><input type="checkbox" name="secteur" value="piscicole" /><span>Pisciculture</span></label>
+          <label class="puce-choix"><input type="checkbox" name="secteur" value="maraicher" /><span>Maraîchage</span></label>
+          <label class="puce-choix"><input type="checkbox" name="secteur" value="elevage" /><span>Élevage</span></label>
+        </div>
+      </fieldset>
+      <div class="form-field">
+        <label for="contact-ferme">Nom de la ferme <span class="form-hint">(facultatif)</span></label>
+        <input type="text" id="contact-ferme" name="nomFerme" maxlength="100" autocomplete="organization" />
+      </div>
+      <div class="form-field">
+        <label for="contact-ville">Ville <span class="form-hint">(facultatif)</span></label>
+        <select id="contact-ville" name="ville">
+          <option value="">Choisir une ville</option>
+          <option>Thiès</option><option>Mbour</option><option>Petite Côte</option><option>Kaolack</option><option>Saint-Louis</option>
+          <option>Rufisque</option><option>Bambilor</option><option>Sangalkam</option><option>Dakar</option><option>Autre</option>
+        </select>
+      </div>
+      <p class="form-error" id="contact-error" role="alert" hidden></p>
+      <button type="submit" class="btn btn-principal" id="contact-submit">Envoyer ma demande</button>
+    </form>
+    <div class="form-success" id="contact-success" role="status" hidden>
+      <p>Merci ! Votre demande a bien été envoyée.</p>
+      <p>Nous vous recontacterons très vite.</p>
+    </div>
+  </div>
+</div>
+
+<script src="/js/dist/contact-decouvrir.min.js"></script>
+</body>
+</html>
