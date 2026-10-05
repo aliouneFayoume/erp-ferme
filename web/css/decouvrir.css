@@ -144,7 +144,6 @@ h1 em { font-style: normal; color: var(--dakar-700); }
 .hero { padding-block: var(--space-8) calc(var(--section-y) / 2); }
 .hero .wrap { display: grid; gap: var(--space-8); align-items: center; }
 .hero-visuel img { width: 100%; border-radius: var(--radius-xl); box-shadow: var(--shadow-md); aspect-ratio: 1200 / 686; object-fit: cover; }
-.hero-legende { margin: var(--space-2) 0 0; font-size: 13px; line-height: 18px; color: var(--ink-muted); }
 .ligne-confiance { margin: var(--space-5) 0 0; font-size: 16px; color: var(--ink-muted); }
 .ligne-confiance strong { color: var(--ink); }
 .puces-secteurs { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-4) 0 0; padding: 0; list-style: none; }
@@ -183,7 +182,6 @@ h1 em { font-style: normal; color: var(--dakar-700); }
 .secteur-corps li { display: flex; gap: var(--space-3); }
 .secteur-corps li::before { content: ""; flex: none; width: 20px; height: 20px; margin-top: 2px; background-color: var(--dakar-700); -webkit-mask: var(--i-coche) center / contain no-repeat; mask: var(--i-coche) center / contain no-repeat; }
 .secteur-corps .btn-lien { margin-top: auto; align-self: flex-start; }
-.legende-images { margin: var(--space-4) 0 0; font-size: 13px; line-height: 18px; color: var(--ink-muted); }
 
 /* ---------- Fonctionnalités ---------- */
 .fonction { display: flex; gap: var(--space-4); align-items: flex-start; }
