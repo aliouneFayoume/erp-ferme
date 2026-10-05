@@ -1,7 +1,6 @@
 window.Views = window.Views || {};
 
 const ESPECE_LABEL = { BOVIN: 'Bovin', OVIN: 'Ovin', CAPRIN: 'Caprin' };
-const ESPECE_ACCENT = { BOVIN: 'var(--bovin)', OVIN: 'var(--ovin)', CAPRIN: 'var(--caprin)' };
 // Durée de gestation moyenne par espèce (jours) — estimation côté client pour pré-remplir la date de
 // mise-bas prévue à la saisie d'une saillie, éditable ensuite ; jamais une règle stockée en base.
 const GESTATION_JOURS = { BOVIN: 283, OVIN: 150, CAPRIN: 150 };
@@ -187,7 +186,7 @@ function renderAnimauxList(container, animaux) {
     .map(
       (a) => `
       <div class="lot-card">
-        <span class="tag-secteur" style="background:${ESPECE_ACCENT[a.espece] || '#888'}">${esc(ESPECE_LABEL[a.espece] || a.espece)}</span>
+        <span class="tag-secteur">${esc(ESPECE_LABEL[a.espece] || a.espece)}</span>
         <span class="badge ${ANIMAL_STATUT_BADGE[a.statut] || 'muted'}" style="float:right">${ANIMAL_STATUT_LABEL[a.statut] || esc(a.statut)}</span>
         <div class="code" style="margin-top:8px">${esc(a.identifiant)}${a.race ? ` — ${esc(a.race)}` : ''}</div>
         <div class="meta">${a.sexe === 'F' ? 'Femelle' : 'Mâle'} · ${esc(a.secteur_nom)} · ${ageLabel(a.date_naissance)}</div>
@@ -327,7 +326,7 @@ async function openAnimalPanel(container, animalId) {
       courbePoids.length >= 2
         ? `<div style="margin-top:14px">
             <div class="desc" style="margin-bottom:4px">Courbe de poids (kg)</div>
-            ${lineChartSvg(courbePoids, { color: ESPECE_ACCENT[animal.espece] || '#5B8C3A', unit: 'kg' })}
+            ${lineChartSvg(courbePoids, { unit: 'kg' })}
           </div>`
         : ''
     }

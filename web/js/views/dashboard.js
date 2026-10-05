@@ -23,13 +23,13 @@ window.Views.dashboard = {
       }
 
       <div class="grid-stats">
-        ${statCard("Chiffre d'affaires du jour", `${fmt(stats.chiffreAffairesJour)} FCFA`, null, 'var(--finance)')}
-        ${statCard('Commandes B2C du jour', stats.commandesB2C, null, 'var(--clients)')}
-        ${statCard('Stock total disponible', fmt(stats.stockTotal), 'tous secteurs, toutes unités confondues', 'var(--avicole)')}
-        ${statCard('Encours B2B total', `${fmt(stats.encoursB2B)} FCFA`, 'crédit accordé aux pros', 'var(--stock)')}
-        ${statCard('Caisses chauffeur ouvertes', stats.caissesOuvertes, null, 'var(--livraison)')}
-        ${statCard('Lots de production actifs', stats.lotsActifs, null, 'var(--maraicher)')}
-        ${statCard('Récoltes proches (≤7j)', stats.recoltesProches, 'secteurs à suivi de récolte', stats.recoltesProches > 0 ? 'var(--warn)' : 'var(--maraicher)')}
+        ${statCard("Chiffre d'affaires du jour", `${fmt(stats.chiffreAffairesJour)} FCFA`)}
+        ${statCard('Commandes B2C du jour', stats.commandesB2C)}
+        ${statCard('Stock total disponible', fmt(stats.stockTotal), 'tous secteurs, toutes unités confondues')}
+        ${statCard('Encours B2B total', `${fmt(stats.encoursB2B)} FCFA`, 'crédit accordé aux pros')}
+        ${statCard('Caisses chauffeur ouvertes', stats.caissesOuvertes)}
+        ${statCard('Lots de production actifs', stats.lotsActifs)}
+        ${statCard('Récoltes proches (≤7j)', stats.recoltesProches, 'secteurs à suivi de récolte', stats.recoltesProches > 0)}
       </div>
 
       ${
@@ -37,7 +37,7 @@ window.Views.dashboard = {
           ? `<div class="panel">
               <h2>Chiffre d'affaires — 14 derniers jours</h2>
               <p class="desc">Évolution des commandes facturées (hors annulées).</p>
-              ${lineChartSvg(stats.chiffreAffairesParJour, { color: 'var(--finance)', unit: ' FCFA' })}
+              ${lineChartSvg(stats.chiffreAffairesParJour, { unit: ' FCFA' })}
             </div>`
           : ''
       }
@@ -53,9 +53,9 @@ window.Views.dashboard = {
   },
 };
 
-function statCard(label, value, sub, accent) {
+function statCard(label, value, sub, attention) {
   return `
-    <div class="stat-card" style="border-top-color:${accent}">
+    <div class="stat-card${attention ? ' attention' : ''}">
       <div class="label">${label}</div>
       <div class="value">${value}</div>
       ${sub ? `<div class="sub">${sub}</div>` : ''}

@@ -18,7 +18,7 @@ window.Views.audit = {
                   <td>${esc(l.table_name)}</td>
                   <td><span class="badge info">${esc(l.action)}</span></td>
                   <td>${esc(l.utilisateur_nom) || '-'}</td>
-                  <td style="font-family:ui-monospace,monospace;font-size:11px">${l.details ? esc(JSON.stringify(l.details)) : ''}</td>
+                  <td style="font-size:11px">${l.details ? esc(JSON.stringify(l.details)) : ''}</td>
                 </tr>`
               )
               .join('')}

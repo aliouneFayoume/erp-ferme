@@ -496,7 +496,7 @@ async function ouvrirLienPaiement(btn) {
   const avertissementTest =
     lien.mode === 'live'
       ? ''
-      : '<p class="desc" style="color: var(--danger, #b3261e);"><strong>Mode test PayDunya :</strong> ce lien ne déclenche aucun vrai paiement. Passez le compte PayDunya en mode réel dans Réglages de la ferme.</p>';
+      : '<p class="desc" style="color: var(--danger);"><strong>Mode test PayDunya :</strong> ce lien ne déclenche aucun vrai paiement. Passez le compte PayDunya en mode réel dans Réglages de la ferme.</p>';
   const overlay = el(`
     <div class="modal-overlay">
       <div class="modal-box">

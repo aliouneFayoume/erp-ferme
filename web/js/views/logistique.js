@@ -89,7 +89,7 @@ async function renderLivreur(container) {
 
     const depotIcon = L.divIcon({
       className: '',
-      html: `<div style="background:#1A1A1A;color:#FFFFFF;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4)">🏠</div>`,
+      html: `<div style="background:var(--sahel-900);color:var(--on-brand);border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid var(--surface);box-shadow:var(--shadow-sm)">🏠</div>`,
       iconSize: [28, 28],
       iconAnchor: [14, 14],
     });
@@ -99,7 +99,7 @@ async function renderLivreur(container) {
     tournees.forEach((t) => {
       const numeroIcon = L.divIcon({
         className: '',
-        html: `<div style="background:var(--livraison);color:white;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4)">${t.ordre}</div>`,
+        html: `<div style="background:var(--dakar-700);color:var(--on-brand);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;border:2px solid var(--surface);box-shadow:var(--shadow-sm)">${t.ordre}</div>`,
         iconSize: [26, 26],
         iconAnchor: [13, 13],
       });
@@ -112,10 +112,10 @@ async function renderLivreur(container) {
     // Tracé routier réel (OpenRouteService) quand disponible — sinon repli en ligne droite
     // pointillée entre les arrêts, pour toujours afficher quelque chose.
     if (traceReelle && traceReelle.length > 1) {
-      L.polyline(traceReelle, { color: '#4A7FA5', weight: 4, opacity: 0.75 }).addTo(map);
+      L.polyline(traceReelle, { color: jetonCss('--dakar-500'), weight: 4, opacity: 0.9 }).addTo(map);
       map.fitBounds(traceReelle, { padding: [24, 24] });
     } else if (pointsOrdre.length > 1) {
-      L.polyline(pointsOrdre, { color: '#4A7FA5', weight: 3, opacity: 0.6, dashArray: '6 6' }).addTo(map);
+      L.polyline(pointsOrdre, { color: jetonCss('--senegal-50'), weight: 3, opacity: 0.9, dashArray: '6 6' }).addTo(map);
       map.fitBounds(pointsOrdre, { padding: [24, 24] });
     }
   }

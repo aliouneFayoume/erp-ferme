@@ -157,7 +157,7 @@ window.esc = esc;
  * dans le temps — ex : courbe de croissance (poids moyen) en Avicole/Piscicole.
  * points : [{ date: 'YYYY-MM-DD', value: number }, ...] triés du plus ancien au plus récent.
  */
-function lineChartSvg(points, { width = 560, height = 150, color = '#5B8C3A', unit = '' } = {}) {
+function lineChartSvg(points, { width = 560, height = 150, color = 'var(--dakar-700)', unit = '' } = {}) {
   if (!points || points.length === 0) {
     return `<div class="empty">Pas assez de données pour tracer une courbe.</div>`;
   }
@@ -198,6 +198,12 @@ function lineChartSvg(points, { width = 560, height = 150, color = '#5B8C3A', un
   `;
 }
 window.lineChartSvg = lineChartSvg;
+
+// Valeur résolue d'un jeton CSS (pour les API qui n'acceptent pas var(), ex. les options de Leaflet).
+function jetonCss(nom) {
+  return getComputedStyle(document.documentElement).getPropertyValue(nom).trim();
+}
+window.jetonCss = jetonCss;
 
 // Petite modale maison (remplace prompt()/confirm() natifs, peu fiables et intrusifs).
 // Usage : Modal.open('Titre', [{ name, label, type, value }]) -> Promise<values|null>
@@ -328,7 +334,7 @@ function numberStepperHTML(label, name, { value = 0, min, step = 1, entier = fal
         <input type="number" name="${name}" value="${value}" ${min !== undefined ? `min="${min}"` : ''} step="${entier ? 1 : 'any'}" data-step="${step}" inputmode="${entier ? 'numeric' : 'decimal'}" />
         <button type="button" class="stepper-btn" data-action="inc" aria-label="Augmenter">+</button>
       </div>
-      ${hint ? `<small style="display:block;color:#666;font-size:0.8em;margin-top:2px;font-weight:400">${hint}</small>` : ''}
+      ${hint ? `<small style="display:block;color:var(--ink-muted);font-size:0.8em;margin-top:2px;font-weight:400">${hint}</small>` : ''}
     </label>
   `;
 }

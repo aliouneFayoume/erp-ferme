@@ -6,7 +6,6 @@ function isOfflineMode() {
   return localStorage.getItem(OFFLINE_MODE_KEY) === '1';
 }
 
-const SECTEUR_ACCENT = { Avicole: 'var(--avicole)', Piscicole: 'var(--piscicole)', 'Maraîcher': 'var(--maraicher)' };
 const SECTEUR_UNITE = { Avicole: 'sujets', Piscicole: 'alevins/poissons', 'Maraîcher': 'plants' };
 
 function quantiteLabel(secteurNom) {
@@ -179,7 +178,7 @@ function renderLotsList(container, lots) {
         const optionFin = l.secteur_nom === 'Avicole' ? `<option value="ABATTAGE">Envoyé à l'abattage</option>` : `<option value="TERMINE">Terminé (récolté/vendu)</option>`;
         return `
         <div class="lot-card">
-          <span class="tag-secteur" style="background:${SECTEUR_ACCENT[l.secteur_nom] || '#888'}">${esc(l.secteur_nom)}</span>
+          <span class="tag-secteur">${esc(l.secteur_nom)}</span>
           <div class="code" style="margin-top:8px">${esc(l.code_lot)}${l.culture ? ` — ${esc(l.culture)}` : ''}</div>
           <div class="meta">Démarré le ${fmtDate(l.date_demarrage)} · ${esc(l.statut)}</div>
           <div class="kpi"><span>${l.secteur_nom === 'Maraîcher' ? 'Nombre de plants' : 'Effectif actuel'}</span><b>${fmt(l.quantite_initiale)}</b></div>
@@ -215,7 +214,7 @@ function renderLotsList(container, lots) {
         .map(
           (l) => `
         <div class="lot-card">
-          <span class="tag-secteur" style="background:${SECTEUR_ACCENT[l.secteur_nom] || '#888'}">${esc(l.secteur_nom)}</span>
+          <span class="tag-secteur">${esc(l.secteur_nom)}</span>
           <span class="badge ${LOT_STATUT_BADGE[l.statut] || 'muted'}" style="float:right">${LOT_STATUT_LABEL[l.statut] || esc(l.statut)}</span>
           <div class="code" style="margin-top:8px">${esc(l.code_lot)}${l.culture ? ` — ${esc(l.culture)}` : ''}</div>
           <div class="meta">Démarré le ${fmtDate(l.date_demarrage)}</div>
@@ -417,7 +416,7 @@ async function openRelevePanel(container, lot) {
       lot.secteur_nom !== 'Maraîcher' && courbePoints.length >= 2
         ? `<div style="margin-top:14px">
             <div class="desc" style="margin-bottom:4px">Courbe de croissance (poids moyen, g)</div>
-            ${lineChartSvg(courbePoints, { color: SECTEUR_ACCENT[lot.secteur_nom] || '#5B8C3A', unit: 'g' })}
+            ${lineChartSvg(courbePoints, { unit: 'g' })}
           </div>`
         : ''
     }
@@ -426,7 +425,7 @@ async function openRelevePanel(container, lot) {
       lot.secteur_nom === 'Piscicole' && courbeTaille.length >= 2
         ? `<div style="margin-top:14px">
             <div class="desc" style="margin-bottom:4px">Courbe de croissance (taille moyenne, cm)</div>
-            ${lineChartSvg(courbeTaille, { color: '#3B7D7D', unit: 'cm' })}
+            ${lineChartSvg(courbeTaille, { color: 'var(--sahel-900)', unit: 'cm' })}
           </div>`
         : ''
     }

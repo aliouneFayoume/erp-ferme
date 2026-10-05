@@ -80,7 +80,7 @@ window.MassiaAnalytics = (function () {
     const bandeau = document.createElement('div');
     bandeau.setAttribute('role', 'region');
     bandeau.setAttribute('aria-label', 'Mesure d\'audience');
-    bandeau.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;max-width:520px;z-index:9999;display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 14px;background:#1b1f24;color:#f2f4f5;border-radius:10px;font:14px/1.4 system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.25)';
+    bandeau.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;max-width:520px;z-index:9999;display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 14px;background:var(--sahel-900,#0F3D2E);color:var(--on-brand,#F3F8F3);border-radius:12px;font:14px/1.4 var(--font-text,system-ui,sans-serif);box-shadow:var(--shadow-md,0 8px 24px rgba(15,61,46,.12))';
     const texte = document.createElement('span');
     texte.style.cssText = 'flex:1 1 220px';
     texte.textContent = 'Ce site mesure sa fréquentation (Google Analytics, Meta) pour améliorer ses pages. Vous pouvez refuser.';
@@ -88,7 +88,7 @@ window.MassiaAnalytics = (function () {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = libelle;
-      b.style.cssText = `padding:7px 14px;border-radius:8px;font:inherit;cursor:pointer;border:1px solid #6b7580;${principal ? 'background:#f2f4f5;color:#1b1f24;border-color:#f2f4f5' : 'background:transparent;color:#f2f4f5'}`;
+      b.style.cssText = `padding:7px 14px;border-radius:8px;font:inherit;cursor:pointer;border:1px solid var(--on-brand,#F3F8F3);${principal ? 'background:var(--dakar-500,#32C24D);color:var(--on-accent,#0F3D2E);border-color:var(--dakar-500,#32C24D);font-weight:700' : 'background:transparent;color:var(--on-brand,#F3F8F3)'}`;
       b.addEventListener('click', () => {
         ecrireChoix(valeur);
         if (valeur === 'refus') couperSuivi();
