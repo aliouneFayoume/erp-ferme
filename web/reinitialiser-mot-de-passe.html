@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nouveau mot de passe — Massla</title>
+  <link rel="icon" href="/icons/massla-favicon.svg" type="image/svg+xml" />
+  <meta name="theme-color" content="#0F3D2E" />
+  <meta name="robots" content="noindex" />
+  <link rel="preload" href="/fonts/Onest-Variable.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/css/massla-tokens.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <div id="login-screen">
+    <div class="login-box">
+      <img class="login-logo" src="/icons/massla-empile-blanc.svg" alt="Massla" />
+      <h1>Choisir un nouveau mot de passe</h1>
+      <p class="sub" id="reinit-intro">Votre nouveau mot de passe remplace l'ancien et vous déconnecte des autres appareils.</p>
+
+      <form id="form-reinit" novalidate>
+        <label>Nouveau mot de passe
+          <input type="password" id="reinit-mdp" name="newPassword" required autocomplete="new-password" aria-describedby="reinit-aide reinit-erreur" />
+          <small id="reinit-aide">10 caractères minimum, avec une majuscule, une minuscule, un chiffre et un caractère spécial.</small>
+        </label>
+        <label>Confirmer le mot de passe
+          <input type="password" id="reinit-confirmation" name="confirmation" required autocomplete="new-password" aria-describedby="reinit-erreur" />
+        </label>
+        <div id="reinit-erreur" class="login-error hidden" role="alert"></div>
+        <button type="submit" id="reinit-envoi">Enregistrer le mot de passe</button>
+      </form>
+
+      <div id="reinit-ok" class="hidden" role="status">
+        <p class="login-succes-titre">Mot de passe modifié</p>
+        <p class="login-aide">Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.</p>
+        <p class="login-lien"><a href="/">Se connecter</a></p>
+      </div>
+
+      <p class="login-lien hidden" id="reinit-lien-demande"><a href="/mot-de-passe-oublie.html">Demander un nouveau lien</a></p>
+    </div>
+  </div>
+
+  <script src="/js/dist/reinitialiser-mdp.min.js"></script>
+</body>
+</html>

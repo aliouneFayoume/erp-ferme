@@ -63,6 +63,28 @@ const limiteurCompteSensible = rateLimit({
     message: { erreur: 'Trop de tentatives. Réessayez plus tard.' },
 });
 
+// « Mot de passe oublié ? » : demander un lien déclenche un envoi réel (coût, surface d'énumération et de harcèlement
+// d'une boîte mail) — plus strict encore que le renvoi de vérification.
+const limiteurMotDePasseOublie = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erreur: 'Trop de demandes. Réessayez plus tard.' },
+});
+
+// Valider un lien : le jeton fait 256 bits (inutilisable par force brute), mais la route reste publique.
+const limiteurReinitialisation = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erreur: 'Trop de tentatives. Réessayez plus tard.' },
+});
+
+const DUREE_LIEN_REINITIALISATION_MS = 60 * 60 * 1000;
+const DELAI_ENTRE_DEMANDES_MS = 2 * 60 * 1000;
+
 function hashToken(token) {
     return crypto.createHash('sha256').update(String(token || '')).digest('hex');
 }
@@ -371,6 +393,101 @@ module.exports = function authRoutes(pool) {
         } catch (err) {
             console.error(err);
             res.json(messageGenerique);
+        }
+    });
+
+    /**
+     * « Mot de passe oublié ? » — comptes de l'application de gestion (utilisateurs). Répond TOUJOURS le même message,
+     * que l'adresse existe ou non (aucune énumération de comptes). Un seul lien actif par compte : une nouvelle demande
+     * remplace le précédent, et au plus une demande toutes les 2 minutes par compte (anti-harcèlement de la boîte mail).
+     */
+    router.post('/mot-de-passe-oublie', limiteurMotDePasseOublie, async (req, res) => {
+        const messageGenerique = {
+            message: "Si un compte existe pour cette adresse, un e-mail contenant un lien de réinitialisation vient d'être envoyé. Le lien est valable 1 heure.",
+        };
+        const email = String(req.body.email || '').trim();
+        if (!email) return res.status(400).json({ erreur: 'Adresse e-mail requise.' });
+
+        try {
+            const result = await queryPreTenant(
+                pool,
+                `SELECT u.id, u.tenant_id, u.nom_complet, u.email, u.reset_expire_le, o.deleted_at AS organisation_supprimee_le
+                 FROM utilisateurs u LEFT JOIN organisations o ON u.tenant_id = o.id
+                 WHERE LOWER(u.email) = LOWER($1) AND u.actif = TRUE AND u.deleted_at IS NULL`,
+                [email]
+            );
+            const row = result.rows[0];
+            if (row && !row.organisation_supprimee_le) {
+                const emisLe = row.reset_expire_le ? new Date(row.reset_expire_le).getTime() - DUREE_LIEN_REINITIALISATION_MS : 0;
+                if (Date.now() - emisLe >= DELAI_ENTRE_DEMANDES_MS) {
+                    const token = crypto.randomBytes(32).toString('hex');
+                    await queryAvecTenant(
+                        pool,
+                        row.tenant_id,
+                        `UPDATE utilisateurs SET reset_token_hash = $1, reset_expire_le = now() + interval '1 hour' WHERE id = $2`,
+                        [hashToken(token), row.id]
+                    );
+                    try {
+                        await emailService.envoyerEmailReinitialisation(row.email, row.nom_complet, token);
+                    } catch (err) {
+                        console.error("Échec de l'envoi de l'e-mail de réinitialisation :", err);
+                    }
+                }
+            }
+            res.json(messageGenerique);
+        } catch (err) {
+            console.error(err);
+            res.json(messageGenerique);
+        }
+    });
+
+    /**
+     * Étape 2 : consomme le lien reçu par e-mail. Le jeton est à usage unique ; le changement invalide toutes les sessions
+     * ouvertes (token_version + 1) et NE CONTOURNE PAS le MFA : à la connexion suivante le second facteur reste exigé.
+     * Cliquer le lien prouve aussi que la boîte mail est bien celle du compte, donc l'adresse devient « vérifiée ».
+     */
+    router.post('/reinitialiser-mot-de-passe', limiteurReinitialisation, async (req, res) => {
+        const token = String(req.body.token || '');
+        const { newPassword } = req.body;
+        if (!token || !newPassword) {
+            return res.status(400).json({ erreur: 'Lien et nouveau mot de passe requis.' });
+        }
+        if (!motDePasseValide(newPassword)) {
+            return res.status(400).json({ erreur: `Le mot de passe doit contenir ${motDePasseErreurs(newPassword).join(', ')}.` });
+        }
+
+        try {
+            // Expiration comparée en JS (pg-mem ne compare pas TIMESTAMP à now()) — même contournement que /verifier-email.
+            const result = await queryPreTenant(
+                pool,
+                `SELECT id, tenant_id, nom_complet, email, actif, reset_expire_le FROM utilisateurs
+                 WHERE reset_token_hash = $1 AND deleted_at IS NULL`,
+                [hashToken(token)]
+            );
+            const row = result.rows[0];
+            if (!row || !row.actif || !row.reset_expire_le || new Date(row.reset_expire_le) <= new Date()) {
+                return res.status(400).json({ erreur: 'Lien invalide ou expiré. Refaites une demande de réinitialisation.' });
+            }
+
+            await attachTenantConnection(req, res, pool, row.tenant_id);
+            const hash = await bcrypt.hash(newPassword, 10);
+            await req.db.query(
+                `UPDATE utilisateurs
+                 SET mot_de_passe_hash = $1, token_version = token_version + 1, email_verifie = TRUE,
+                     reset_token_hash = NULL, reset_expire_le = NULL
+                 WHERE id = $2`,
+                [hash, row.id]
+            );
+            await logAudit(req.db, { req, table: 'utilisateurs', rowId: row.id, action: 'UPDATE', userId: row.id, tenantId: row.tenant_id, details: { motDePasseReinitialise: true } });
+            try {
+                await emailService.envoyerEmailMotDePasseModifie(row.email, row.nom_complet);
+            } catch (err) {
+                console.error("Échec de l'envoi de la confirmation de changement de mot de passe :", err);
+            }
+            res.json({ message: 'Mot de passe mis à jour. Vous pouvez maintenant vous connecter.' });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la réinitialisation du mot de passe.' });
         }
     });
 

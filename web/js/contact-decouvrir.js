@@ -84,10 +84,20 @@
       champWhatsapp?.focus();
       return;
     }
+    const secteurs = data.getAll('secteur');
+    if (secteurs.length === 0) {
+      errEl.textContent = 'Choisissez au moins un secteur.';
+      errEl.hidden = false;
+      form.querySelector('input[name="secteur"]')?.focus();
+      return;
+    }
     const body = {
       nom: data.get('nom'),
       email: data.get('email'),
       whatsapp,
+      secteurs,
+      nomFerme: data.get('nomFerme') || '',
+      ville: data.get('ville') || '',
     };
 
     submitBtn.disabled = true;

@@ -14,7 +14,7 @@ function genererSecretTotp() {
 }
 
 async function genererQrCodeTotp(email, secret, organisationNom) {
-    const otpauthUrl = authenticator.keyuri(email, `ERP ${organisationNom || 'Ferme'}`, secret);
+    const otpauthUrl = authenticator.keyuri(email, organisationNom ? `Massla · ${organisationNom}` : 'Massla', secret);
     const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
     return { otpauthUrl, qrCodeDataUrl };
 }

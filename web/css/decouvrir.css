@@ -297,6 +297,19 @@ h1 em { font-style: normal; color: var(--dakar-700); }
 }
 .form-field textarea { padding: var(--space-3) var(--space-4); min-height: 112px; }
 .form-field input:focus, .form-field select:focus, .form-field textarea:focus { outline: 2px solid var(--focus); outline-offset: 2px; border-color: var(--focus); }
+.choix-secteurs { border: 0; padding: 0; margin: 0 0 var(--space-4); min-width: 0; }
+.choix-secteurs legend { padding: 0; margin-bottom: var(--space-2); font-size: 15px; line-height: 20px; font-weight: 600; color: var(--ink); }
+.form-field label .form-hint, .choix-secteurs legend .form-hint { font-weight: 400; }
+.puces-choix { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.puce-choix { position: relative; display: inline-flex; }
+.puce-choix input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.puce-choix span {
+  display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--tap-min); padding: 0 var(--space-4);
+  border: 1.5px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font-size: 16px; font-weight: 600;
+}
+.puce-choix input:checked + span { background: var(--btn-principal-fond); border-color: var(--btn-principal-fond); color: var(--btn-principal-texte); }
+.puce-choix input:checked + span::before { content: ""; width: 16px; height: 16px; background-color: currentColor; -webkit-mask: var(--i-coche) center / contain no-repeat; mask: var(--i-coche) center / contain no-repeat; }
+.puce-choix input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
 .form-hint { font-size: 13px; line-height: 18px; color: var(--ink-muted); }
 .form-error { margin: 0 0 var(--space-4); color: var(--danger); font-size: 15px; line-height: 22px; font-weight: 600; }
 .form-success { padding: var(--space-4) 0; }

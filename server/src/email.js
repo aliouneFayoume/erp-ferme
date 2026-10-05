@@ -9,7 +9,7 @@ const DELAI_MAX_MS = 10000;
 function lireConfig() {
     return {
         apiKey: process.env.RESEND_API_KEY,
-        // ex: "ERP Ferme Massla <no-reply@massla.sn>" — nécessite un domaine vérifié côté Resend.
+        // ex: "Massla <no-reply@massla.sn>" — nécessite un domaine vérifié côté Resend.
         from: process.env.RESEND_FROM_EMAIL,
         baseUrl: process.env.APP_BASE_URL || 'http://localhost:4000',
     };
@@ -43,7 +43,7 @@ async function envoyerEmailVerification(email, nomComplet, token) {
         body: JSON.stringify({
             from,
             to: [email],
-            subject: 'Vérifiez votre adresse email — ERP Ferme',
+            subject: 'Vérifiez votre adresse e-mail — Massla',
             html: `<p>Bonjour ${echapperHtml(nomComplet)},</p><p>Cliquez sur ce lien pour activer votre compte : <a href="${lien}">${lien}</a></p><p>Ce lien expire dans 24h.</p>`,
         }),
     });
@@ -107,12 +107,64 @@ async function envoyerEmailRappelSaas(emails, { organisationNom, montant, dateEc
     return data;
 }
 
+// Envoi simple via Resend pour les messages transactionnels courts (mêmes garde-fous que les autres fonctions de ce fichier).
+async function envoyerViaResend({ to, subject, html }) {
+    const { apiKey, from } = lireConfig();
+    if (!apiKey || !from) {
+        throw new Error("Intégration email non configurée (RESEND_API_KEY / RESEND_FROM_EMAIL manquants).");
+    }
+    const res = await fetch(RESEND_API, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(DELAI_MAX_MS),
+        body: JSON.stringify({ from, to: [to], subject, html }),
+    });
+    let data = null;
+    try {
+        data = await res.json();
+    } catch (e) {
+        data = null;
+    }
+    if (!res.ok) {
+        throw new Error(`Échec de l'envoi de l'e-mail : ${data?.message || `Erreur HTTP ${res.status}`}`);
+    }
+    return data;
+}
+
+// « Mot de passe oublié ? » (routes/auth.js) : lien à usage unique, valable 1 heure. Le jeton en clair n'existe que
+// dans ce lien ; seul son hash est stocké.
+async function envoyerEmailReinitialisation(email, nomComplet, token) {
+    const { baseUrl } = lireConfig();
+    const lien = `${baseUrl}/reinitialiser-mot-de-passe.html?token=${encodeURIComponent(token)}`;
+    return envoyerViaResend({
+        to: email,
+        subject: 'Réinitialisez votre mot de passe — Massla',
+        html: `<p>Bonjour ${echapperHtml(nomComplet)},</p>
+               <p>Vous avez demandé à réinitialiser votre mot de passe Massla. Cliquez sur ce lien pour en choisir un nouveau :</p>
+               <p><a href="${lien}">${lien}</a></p>
+               <p>Ce lien est valable 1 heure et ne peut servir qu'une seule fois.</p>
+               <p>Vous n'êtes pas à l'origine de cette demande ? Ignorez simplement ce message : votre mot de passe reste inchangé.</p>`,
+    });
+}
+
+// Confirmation après un changement réussi : prévient le propriétaire du compte si ce n'était pas lui.
+async function envoyerEmailMotDePasseModifie(email, nomComplet) {
+    return envoyerViaResend({
+        to: email,
+        subject: 'Votre mot de passe Massla a été modifié',
+        html: `<p>Bonjour ${echapperHtml(nomComplet)},</p>
+               <p>Le mot de passe de votre compte Massla vient d'être modifié. Vous avez été déconnecté des autres appareils.</p>
+               <p>Ce n'était pas vous ? Écrivez-nous tout de suite à <a href="mailto:admin@massla.sn">admin@massla.sn</a>.</p>`,
+    });
+}
+
 const PREFERENCES_CONTACT = { whatsapp: 'WhatsApp', telephone: 'Appel téléphonique', email: 'Email' };
+const SECTEURS_CONTACT = { avicole: 'Aviculture', piscicole: 'Pisciculture', maraicher: 'Maraîchage', elevage: 'Élevage' };
 
 // Formulaire public massla.sn/decouvrir (routes/contact.js) : simple notification à l'équipe, pas
 // de compte ni de tenant à ce stade (visiteur pas encore client). reply_to pointe vers l'adresse du
 // visiteur pour que répondre depuis la boîte de réception aille directement à lui, sans copier-coller.
-async function envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp, preference = '' }) {
+async function envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp, preference = '', secteurs = [], nomFerme = '', ville = '' }) {
     const { apiKey, from } = lireConfig();
     if (!apiKey || !from) {
         throw new Error("Intégration email non configurée (RESEND_API_KEY / RESEND_FROM_EMAIL manquants).");
@@ -132,6 +184,9 @@ async function envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp,
                      <li><strong>Nom :</strong> ${echapperHtml(nom)}</li>
                      <li><strong>Email :</strong> ${echapperHtml(emailVisiteur)}</li>
                      <li><strong>WhatsApp :</strong> ${echapperHtml(whatsapp)} — <a href="https://wa.me/${encodeURIComponent(String(whatsapp).replace(/\D/g, ''))}">ouvrir la discussion WhatsApp</a></li>
+                     ${secteurs.length ? `<li><strong>Secteur(s) :</strong> ${secteurs.map((s) => echapperHtml(SECTEURS_CONTACT[s] || s)).join(', ')}</li>` : ''}
+                     ${nomFerme ? `<li><strong>Ferme :</strong> ${echapperHtml(nomFerme)}</li>` : ''}
+                     ${ville ? `<li><strong>Ville :</strong> ${echapperHtml(ville)}</li>` : ''}
                      ${preference ? `<li><strong>Préfère être recontacté par :</strong> ${echapperHtml(PREFERENCES_CONTACT[preference] || preference)}</li>` : ''}
                    </ul>`,
         }),
@@ -196,4 +251,4 @@ async function envoyerNotificationAvis({ nom, nomFerme, note, commentaire, token
     return data;
 }
 
-module.exports = { envoyerEmailVerification, envoyerEmailRappelSaas, envoyerNotificationContact, envoyerNotificationAvis, estConfigure };
+module.exports = { envoyerEmailVerification, envoyerEmailReinitialisation, envoyerEmailMotDePasseModifie, envoyerEmailRappelSaas, envoyerNotificationContact, envoyerNotificationAvis, estConfigure };

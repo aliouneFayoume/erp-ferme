@@ -144,7 +144,7 @@ async function main() {
 
     app.listen(PORT, () => {
         console.log('=========================================');
-        console.log(`ERP Ferme Massla démarré sur http://localhost:${PORT}`);
+        console.log(`Massla démarré sur http://localhost:${PORT}`);
         console.log('=========================================');
     });
 }

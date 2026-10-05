@@ -48,6 +48,9 @@ describe('contact — formulaire public massla.sn/decouvrir', () => {
             email: 'clovis@test.sn',
             whatsapp: '+22670000000',
             preference: 'whatsapp',
+            secteurs: [],
+            nomFerme: '',
+            ville: '',
         });
     });
 
@@ -61,7 +64,32 @@ describe('contact — formulaire public massla.sn/decouvrir', () => {
             email: 'clovis@test.sn',
             whatsapp: '+22670000000',
             preference: '',
+            secteurs: [],
+            nomFerme: '',
+            ville: '',
         });
+    });
+
+    test("transmet le secteur, le nom de la ferme et la ville, sans doublon et dans l'ordre du formulaire", async () => {
+        const res = await request(app)
+            .post('/api/contact')
+            .send(payloadValide({ secteurs: ['elevage', 'avicole', 'avicole'], nomFerme: '  Ferme Ndiaye  ', ville: 'Thiès' }));
+
+        expect(res.status).toBe(201);
+        expect(email.envoyerNotificationContact).toHaveBeenCalledWith(
+            expect.objectContaining({ secteurs: ['avicole', 'elevage'], nomFerme: 'Ferme Ndiaye', ville: 'Thiès' })
+        );
+    });
+
+    test('refuse un secteur inconnu, une ville hors liste ou un nom de ferme trop long', async () => {
+        const secteur = await request(app).post('/api/contact').send(payloadValide({ secteurs: ['avicole', 'minier'] }));
+        const ville = await request(app).post('/api/contact').send(payloadValide({ ville: 'Gotham' }));
+        const ferme = await request(app).post('/api/contact').send(payloadValide({ nomFerme: 'x'.repeat(101) }));
+
+        expect(secteur.status).toBe(400);
+        expect(ville.status).toBe(400);
+        expect(ferme.status).toBe(400);
+        expect(email.envoyerNotificationContact).not.toHaveBeenCalled();
     });
 
     test('un numéro sénégalais à 9 chiffres sans indicatif est complété en +221', async () => {

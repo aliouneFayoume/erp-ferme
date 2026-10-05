@@ -4,6 +4,9 @@ const email = require('../email');
 const { normaliserTelephone, emailFarfelue } = require('../validation');
 
 const PREFERENCES_VALIDES = ['whatsapp', 'telephone', 'email'];
+// Mêmes valeurs que le formulaire de web/decouvrir.html (puces de secteur et liste de villes).
+const SECTEURS_VALIDES = ['avicole', 'piscicole', 'maraicher', 'elevage'];
+const VILLES_VALIDES = ['Thiès', 'Mbour', 'Petite Côte', 'Kaolack', 'Saint-Louis', 'Rufisque', 'Bambilor', 'Sangalkam', 'Dakar', 'Autre'];
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Public, pas de compte à ce stade — le seul garde-fou contre le spam est le rate-limit, plus
@@ -30,6 +33,11 @@ module.exports = function contactRoutes(pool) {
         const emailVisiteur = String(req.body.email || '').trim();
         const whatsapp = normaliserTelephone(String(req.body.whatsapp || ''));
         const preference = String(req.body.preference || '').trim();
+        // Secteur, ferme et ville aident à préparer la démonstration. Facultatifs côté serveur (une ancienne page en cache
+        // ne les envoie pas — le formulaire actuel impose au moins un secteur) ; présents mais invalides = refusés.
+        const secteursRecus = Array.isArray(req.body.secteurs) ? req.body.secteurs.map((s) => String(s).trim()) : [];
+        const nomFerme = String(req.body.nomFerme || '').trim();
+        const ville = String(req.body.ville || '').trim();
 
         if (!nom || nom.length > 100) {
             return res.status(400).json({ erreur: 'Nom et prénom requis.' });
@@ -46,12 +54,23 @@ module.exports = function contactRoutes(pool) {
             return res.status(400).json({ erreur: 'Préférence de contact invalide.' });
         }
 
+        if (secteursRecus.some((s) => !SECTEURS_VALIDES.includes(s))) {
+            return res.status(400).json({ erreur: 'Secteur invalide.' });
+        }
+        const secteurs = SECTEURS_VALIDES.filter((s) => secteursRecus.includes(s)); // sans doublon, dans l'ordre du formulaire
+        if (nomFerme.length > 100) {
+            return res.status(400).json({ erreur: 'Nom de ferme trop long (100 caractères maximum).' });
+        }
+        if (ville && !VILLES_VALIDES.includes(ville)) {
+            return res.status(400).json({ erreur: 'Ville invalide.' });
+        }
+
         if (!email.estConfigure()) {
             return res.status(503).json({ erreur: 'Service de contact indisponible pour le moment. Écrivez-nous directement sur WhatsApp.' });
         }
 
         try {
-            await email.envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp, preference });
+            await email.envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp, preference, secteurs, nomFerme, ville });
             res.status(201).json({ message: 'Demande envoyée. Nous vous recontactons rapidement.' });
         } catch (err) {
             console.error(err);

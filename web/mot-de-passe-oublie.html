@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mot de passe oublié — Massla</title>
+  <link rel="icon" href="/icons/massla-favicon.svg" type="image/svg+xml" />
+  <meta name="theme-color" content="#0F3D2E" />
+  <meta name="robots" content="noindex" />
+  <link rel="preload" href="/fonts/Onest-Variable.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/css/massla-tokens.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <div id="login-screen">
+    <div class="login-box">
+      <img class="login-logo" src="/icons/massla-empile-blanc.svg" alt="Massla" />
+      <h1>Mot de passe oublié ?</h1>
+      <p class="sub">Indiquez l'adresse e-mail de votre compte. Nous vous envoyons un lien pour choisir un nouveau mot de passe.</p>
+
+      <form id="form-oubli" novalidate>
+        <label>Adresse e-mail
+          <input type="email" id="oubli-email" name="email" required autocomplete="email" placeholder="prenom@ferme.sn" aria-describedby="oubli-erreur" />
+        </label>
+        <div id="oubli-erreur" class="login-error hidden" role="alert"></div>
+        <button type="submit" id="oubli-envoi">Envoyer le lien</button>
+      </form>
+
+      <div id="oubli-ok" class="hidden" role="status">
+        <p class="login-succes-titre">Vérifiez votre boîte mail</p>
+        <p class="login-aide" id="oubli-message"></p>
+        <p class="login-aide">Rien reçu au bout de quelques minutes ? Regardez dans vos courriers indésirables, ou vérifiez l'adresse saisie.</p>
+      </div>
+
+      <p class="login-lien"><a href="/">Retour à la connexion</a></p>
+    </div>
+  </div>
+
+  <script src="/js/dist/mot-de-passe-oublie.min.js"></script>
+</body>
+</html>

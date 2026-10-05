@@ -59,6 +59,9 @@ const BUNDLES = {
   'portail.min.js': ['js/branding.js', 'js/portail.js'],
   // verifier-email.html (lien reçu par email, voir server/src/email.js)
   'verifier-email.min.js': ['js/verifier-email.js'],
+  // mot-de-passe-oublie.html et reinitialiser-mot-de-passe.html (« Mot de passe oublié ? », voir server/src/routes/auth.js)
+  'mot-de-passe-oublie.min.js': ['js/mot-de-passe-oublie.js'],
+  'reinitialiser-mdp.min.js': ['js/reinitialiser-mdp.js'],
   // approuver-avis.html (lien "Approuver cet avis" reçu par email, voir server/src/email.js)
   'approuver-avis.min.js': ['js/approuver-avis.js'],
 };

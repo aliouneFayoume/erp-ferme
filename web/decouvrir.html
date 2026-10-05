@@ -477,6 +477,27 @@
         <label for="contact-email">Adresse e-mail</label>
         <input type="email" id="contact-email" name="email" required autocomplete="email" />
       </div>
+      <fieldset class="form-field choix-secteurs">
+        <legend>Votre secteur <span class="form-hint">(un ou plusieurs)</span></legend>
+        <div class="puces-choix">
+          <label class="puce-choix"><input type="checkbox" name="secteur" value="avicole" /><span>Aviculture</span></label>
+          <label class="puce-choix"><input type="checkbox" name="secteur" value="piscicole" /><span>Pisciculture</span></label>
+          <label class="puce-choix"><input type="checkbox" name="secteur" value="maraicher" /><span>Maraîchage</span></label>
+          <label class="puce-choix"><input type="checkbox" name="secteur" value="elevage" /><span>Élevage</span></label>
+        </div>
+      </fieldset>
+      <div class="form-field">
+        <label for="contact-ferme">Nom de la ferme <span class="form-hint">(facultatif)</span></label>
+        <input type="text" id="contact-ferme" name="nomFerme" maxlength="100" autocomplete="organization" />
+      </div>
+      <div class="form-field">
+        <label for="contact-ville">Ville <span class="form-hint">(facultatif)</span></label>
+        <select id="contact-ville" name="ville">
+          <option value="">Choisir une ville</option>
+          <option>Thiès</option><option>Mbour</option><option>Petite Côte</option><option>Kaolack</option><option>Saint-Louis</option>
+          <option>Rufisque</option><option>Bambilor</option><option>Sangalkam</option><option>Dakar</option><option>Autre</option>
+        </select>
+      </div>
       <p class="form-error" id="contact-error" role="alert" hidden></p>
       <button type="submit" class="btn btn-principal" id="contact-submit">Envoyer ma demande</button>
     </form>

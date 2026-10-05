@@ -93,6 +93,9 @@ CREATE TABLE utilisateurs (
     email_verifie BOOLEAN NOT NULL DEFAULT FALSE,
     email_verification_token_hash VARCHAR(64),
     email_verification_expire_le TIMESTAMP,
+    -- Réinitialisation de mot de passe en libre-service (migration-31) : SHA-256 du jeton + échéance (1 h).
+    reset_token_hash VARCHAR(64),
+    reset_expire_le TIMESTAMP,
     mfa_actif BOOLEAN NOT NULL DEFAULT FALSE,
     mfa_methode VARCHAR(10) CHECK (mfa_methode IS NULL OR mfa_methode IN ('TOTP', 'WHATSAPP')),
     -- Chiffré au repos via credentials.js (chiffrer/dechiffrer), même AES-256-GCM que les

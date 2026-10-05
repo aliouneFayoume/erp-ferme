@@ -90,7 +90,7 @@ describe("email de notification de contact — lien d'ouverture WhatsApp", () =>
 
     test('affiche le numéro normalisé et un lien wa.me cliquable, sans le +', async () => {
         process.env.RESEND_API_KEY = 'faux-jeton';
-        process.env.RESEND_FROM_EMAIL = 'ERP Ferme Massla <no-reply@massla.sn>';
+        process.env.RESEND_FROM_EMAIL = 'Massla <no-reply@massla.sn>';
         global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ id: 'email-test' }) });
 
         await envoyerNotificationContact({ nom: 'Moussa Ba', email: 'moussa@test.sn', whatsapp: '+221762206418' });

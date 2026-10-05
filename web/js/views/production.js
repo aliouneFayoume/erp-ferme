@@ -200,8 +200,8 @@ function renderLotsList(container, lots) {
               ? `<button class="secondary btn-deplacer-lot" style="margin-top:6px;width:100%" data-lot-id="${l.id}">Déplacer des poissons</button>`
               : ''
           }
-          <div style="margin-top:8px;display:flex;gap:6px">
-            <select class="select-cloture" data-lot-id="${l.id}" style="flex:1">
+          <div class="cloture-ligne">
+            <select class="select-cloture" data-lot-id="${l.id}">
               ${optionFin}
               <option value="PERDU">Perdu (échec/mortalité totale)</option>
             </select>
@@ -437,18 +437,18 @@ async function openRelevePanel(container, lot) {
     ${
       lot.statut && lot.statut !== 'EN_COURS'
         ? `<p class="desc" style="margin-top:16px">Ce lot est clôturé (${esc(LOT_STATUT_LABEL[lot.statut] || lot.statut)}) : aucun nouveau relevé ne peut être ajouté.</p>`
-        : `<form id="form-releve" class="form-grid" autocomplete="off" style="margin-top:16px">
+        : `<form id="form-releve" class="form-grid form-grid-releve" autocomplete="off" style="margin-top:16px">
       <label>Date<input type="date" name="date_releve" required value="${new Date().toISOString().slice(0, 10)}" /></label>
       ${
         lot.secteur_nom === 'Maraîcher'
           ? ''
-          : `${numberStepperHTML('Mortalité', 'mortalite', { step: 1, min: 0, entier: true, hint: "Déduite automatiquement de l'effectif du bassin." })}
+          : `${numberStepperHTML('Mortalité', 'mortalite', { step: 1, min: 0, entier: true, hint: `Déduite automatiquement de l'effectif ${lot.secteur_nom === 'Avicole' ? 'du lot' : 'du bassin'}.` })}
       ${numberStepperHTML('Conso. aliment (kg)', 'conso_aliment_kg', { step: 0.5, min: 0 })}
       ${numberStepperHTML('Poids moyen (g)', 'poids_moyen_g', { step: 10, min: 0 })}`
       }
       ${champsSecteur}
       <label>Notes<input type="text" name="notes" /></label>
-      <button type="submit">Enregistrer le relevé</button>
+      <button type="submit">Enregistrer</button>
     </form>`
     }
 

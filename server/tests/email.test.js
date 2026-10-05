@@ -20,7 +20,7 @@ describe('email — envoyerEmailVerification', () => {
 
     test('envoie un email avec le lien de vérification et le nom du destinataire', async () => {
         process.env.RESEND_API_KEY = 'faux-jeton';
-        process.env.RESEND_FROM_EMAIL = 'ERP Ferme Massla <no-reply@massla.sn>';
+        process.env.RESEND_FROM_EMAIL = 'Massla <no-reply@massla.sn>';
         process.env.APP_BASE_URL = 'https://massla.sn';
         global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ id: 'email-test' }) });
 
@@ -38,7 +38,7 @@ describe('email — envoyerEmailVerification', () => {
     // l'email envoyé depuis l'adresse de confiance no-reply@massla.sn (phishing interne).
     test('échappe le HTML dans le nom du destinataire', async () => {
         process.env.RESEND_API_KEY = 'faux-jeton';
-        process.env.RESEND_FROM_EMAIL = 'ERP Ferme Massla <no-reply@massla.sn>';
+        process.env.RESEND_FROM_EMAIL = 'Massla <no-reply@massla.sn>';
         global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ id: 'email-test' }) });
 
         await envoyerEmailVerification('user@test.sn', '<img src=x onerror=alert(1)>', 'token');
@@ -50,7 +50,7 @@ describe('email — envoyerEmailVerification', () => {
 
     test("propage un message d'erreur clair quand Resend refuse l'envoi", async () => {
         process.env.RESEND_API_KEY = 'faux-jeton';
-        process.env.RESEND_FROM_EMAIL = 'ERP Ferme Massla <no-reply@massla.sn>';
+        process.env.RESEND_FROM_EMAIL = 'Massla <no-reply@massla.sn>';
         global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ message: 'Clé API invalide' }) });
 
         await expect(envoyerEmailVerification('user@test.sn', 'Test', 'token')).rejects.toThrow('Clé API invalide');
