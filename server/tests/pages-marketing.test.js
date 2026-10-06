@@ -42,6 +42,21 @@ describe('pages marketing générées', () => {
         expect(html.match(/<details name="faq"/g)).toHaveLength(faq.mainEntity.length);
     });
 
+    // Jamais de faux témoignage : la section d'avis est alimentée UNIQUEMENT par GET /api/avis (avis réels approuvés
+    // par la modération) et reste cachée, titre compris, tant qu'il n'y en a aucun.
+    test.each(PAGES_SECTEUR)('%s : section d\'avis réels, cachée par défaut, sans témoignage écrit en dur', (nom) => {
+        const html = lire(`${nom}.html`);
+        expect(html).toMatch(/<section[^>]*id="avis"[^>]*data-avis-section hidden>/);
+        expect(html).toContain('<div class="avis-grid" id="avis-grid" hidden></div>');
+        expect(html).not.toContain('class="avis-card"');
+        // pas de balisage Review/AggregateRating : Google interdit les avis auto-déclarés sur sa propre organisation
+        expect(html).not.toMatch(/"@type":\s*"(Review|AggregateRating)"/);
+    });
+
+    test('le script révèle la section entière quand un avis réel existe', () => {
+        expect(lire('js/avis-decouvrir.js')).toMatch(/closest\('\[data-avis-section\]'\)/);
+    });
+
     test.each(PAGES_LEGALES)('%s : aucun bouton de démo qui pointerait vers un formulaire absent', (nom) => {
         const html = lire(`${nom}.html`);
         expect(html).not.toContain('data-open-contact');

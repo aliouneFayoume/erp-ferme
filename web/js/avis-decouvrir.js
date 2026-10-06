@@ -37,6 +37,9 @@
         if (!Array.isArray(avisList) || avisList.length === 0) return;
         avisList.forEach((avis) => grid.appendChild(creerCarteAvis(avis)));
         grid.hidden = false;
+        // Pages de secteur : la section entière (titre compris) reste cachée tant qu'il n'y a aucun avis réel.
+        const section = grid.closest('[data-avis-section]');
+        if (section) section.hidden = false;
       })
       .catch(() => {});
   }
