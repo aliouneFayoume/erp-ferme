@@ -53,11 +53,17 @@ describe('pages marketing générées', () => {
         expect(html).not.toMatch(/"@type":\s*"(Review|AggregateRating)"/);
     });
 
-    // La file hors ligne (offline-queue.js) ne sert qu'aux relevés de production (production.js) et aux livraisons :
-    // les fiches d'animaux (elevage.js) ne s'en servent pas. La page Élevage ne doit pas promettre le contraire.
-    test('la page Élevage ne promet pas la saisie hors connexion des fiches animales', () => {
-        expect(fs.readFileSync(path.join(WEB, 'js', 'views', 'elevage.js'), 'utf8')).not.toContain('OfflineQueue');
-        expect(lire('elevage.html')).not.toContain("envoyé automatiquement dès que la connexion revient");
+    // Seuls les relevés d'animaux (pesée, vaccination, traitement, observation) passent par la file hors ligne
+    // (offline-queue.js) : nouvel animal, saillie, mise-bas et changement de statut demandent une connexion. La page
+    // Élevage dit exactement cela, ni plus ni moins.
+    test("la page Élevage décrit le hors-ligne tel qu'il est : relevés oui, nouvel animal / saillie / mise-bas non", () => {
+        const vue = fs.readFileSync(path.join(WEB, 'js', 'views', 'elevage.js'), 'utf8');
+        expect((vue.match(/OfflineQueue\.ajouter/g) || []).length).toBe(1); // une seule écriture est mise en file : le relevé
+        expect(vue).toContain('/releves`'); // et c'est bien la route des relevés d'un animal
+        const html = lire('elevage.html');
+        expect(html).toContain('Peut-on saisir sans réseau dans les enclos');
+        expect(html).toContain('pesées, vaccinations, traitements et observations');
+        expect(html).toContain('demande en revanche une connexion');
     });
 
     // Aucune table ne relie un animal à une ligne de commande : la vente (module Commandes, produit « tête » rattaché à

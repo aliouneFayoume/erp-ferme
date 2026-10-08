@@ -150,6 +150,73 @@ describe('elevage — animaux et reproduction', () => {
         expect(Number(liste.body[0].poids_kg)).toBe(120);
     });
 
+    describe('relevés — envoi rejoué sans doublon (client_id, saisie hors ligne)', () => {
+        const poster = (animalId, corps) =>
+            request(app).post(`/api/elevage/animaux/${animalId}/releves`).set('Authorization', `Bearer ${token}`).send(corps);
+        const lister = async (animalId) =>
+            (await request(app).get(`/api/elevage/animaux/${animalId}/releves`).set('Authorization', `Bearer ${token}`)).body;
+        const releve = (surcharges = {}) => ({ date_releve: '2026-10-07', type_evenement: 'PESEE', poids_kg: 85, ...surcharges });
+
+        test('le même relevé renvoyé (même client_id) n\'est enregistré qu\'une fois', async () => {
+            const animal = await creerAnimal(app, token, secteurId);
+            const corps = releve({ client_id: 'a3f1c2d4-1111-4222-8333-444455556666' });
+
+            const premier = await poster(animal.id, corps);
+            const rejeu = await poster(animal.id, corps);
+
+            expect(premier.status).toBe(201);
+            expect(premier.body.doublon).toBeUndefined();
+            expect(rejeu.status).toBe(200);
+            expect(rejeu.body.doublon).toBe(true);
+            expect(rejeu.body.id).toBe(premier.body.id);
+            expect(await lister(animal.id)).toHaveLength(1);
+        });
+
+        test('deux relevés volontaires identiques avec des identifiants différents sont tous les deux enregistrés', async () => {
+            const animal = await creerAnimal(app, token, secteurId);
+
+            await poster(animal.id, releve({ client_id: 'aaaaaaaa-0000-4000-8000-000000000001' }));
+            await poster(animal.id, releve({ client_id: 'aaaaaaaa-0000-4000-8000-000000000002' }));
+
+            expect(await lister(animal.id)).toHaveLength(2);
+        });
+
+        test('le même client_id sur deux animaux différents ne se bloque pas', async () => {
+            const a = await creerAnimal(app, token, secteurId);
+            const b = await creerAnimal(app, token, secteurId);
+            const corps = releve({ client_id: 'bbbbbbbb-0000-4000-8000-000000000001' });
+
+            expect((await poster(a.id, corps)).status).toBe(201);
+            expect((await poster(b.id, corps)).status).toBe(201);
+        });
+
+        test('sans client_id (ancienne version) ou avec un client_id mal formé : enregistré comme avant, jamais refusé', async () => {
+            const animal = await creerAnimal(app, token, secteurId);
+
+            expect((await poster(animal.id, releve())).status).toBe(201);
+            expect((await poster(animal.id, releve())).status).toBe(201);
+            expect((await poster(animal.id, releve({ client_id: 'court' }))).status).toBe(201);
+            expect((await poster(animal.id, releve({ client_id: 12345678 }))).status).toBe(201);
+            expect(await lister(animal.id)).toHaveLength(4);
+        });
+
+        test('un relevé rejoué ne repasse pas par la validation d\'un animal étranger au secteur', async () => {
+            const bovins = await creerAnimal(app, token, secteurId);
+            const autreSecteur = await pool.query(
+                `INSERT INTO secteurs (tenant_id, nom, parent_secteur_id, suivi_individuel)
+                 VALUES ($1, 'Ovins', (SELECT parent_secteur_id FROM secteurs WHERE id = $2), TRUE) RETURNING id`,
+                [tenantId, secteurId]
+            );
+            const tokenOvins = await creerUtilisateurEtToken(pool, { role: 'chef_prod', tenant_id: tenantId, secteur_id: autreSecteur.rows[0].id });
+            const refus = await request(app)
+                .post(`/api/elevage/animaux/${bovins.id}/releves`)
+                .set('Authorization', `Bearer ${tokenOvins}`)
+                .send(releve({ client_id: 'cccccccc-0000-4000-8000-000000000001' }));
+            expect(refus.status).toBe(403);
+            expect(await lister(bovins.id)).toHaveLength(0);
+        });
+    });
+
     test('suppression : admin seul, chef_prod refusé', async () => {
         const animal = await creerAnimal(app, token, secteurId);
 

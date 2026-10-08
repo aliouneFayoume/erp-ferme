@@ -18,6 +18,14 @@ async function verifierAccesAnimal(db, animalId, user) {
     return true;
 }
 
+// Identifiant unique d'un relevé, créé UNE seule fois par le navigateur et conservé jusqu'au succès (y compris dans la
+// file hors ligne). Même règle que routes/production.js : un identifiant absent ou mal formé n'est jamais une erreur
+// (le relevé est simplement enregistré sans protection anti-doublon), une donnée de terrain ne doit pas se perdre pour ça.
+const CLIENT_ID_REGEX = /^[A-Za-z0-9-]{8,64}$/;
+function normaliserClientId(valeur) {
+    return typeof valeur === 'string' && CLIENT_ID_REGEX.test(valeur) ? valeur : null;
+}
+
 module.exports = function elevageRoutes(pool) {
     const router = express.Router();
 
@@ -213,6 +221,7 @@ module.exports = function elevageRoutes(pool) {
 
     router.post('/animaux/:id/releves', requireAuth(pool, { module: 'elevage' }), checkRole(['chef_prod']), async (req, res) => {
         const { date_releve, type_evenement, poids_kg, produit_utilise, notes } = req.body;
+        const clientId = normaliserClientId(req.body.client_id);
         const TYPES_VALIDES = ['PESEE', 'VACCINATION', 'TRAITEMENT', 'OBSERVATION'];
         if (!date_releve || !TYPES_VALIDES.includes(type_evenement)) {
             return res.status(400).json({ erreur: 'Date et type de relevé (valide) sont requis.' });
@@ -224,11 +233,24 @@ module.exports = function elevageRoutes(pool) {
             return res.status(403).json({ erreur: 'Cet animal ne relève pas de votre secteur.' });
         }
         try {
+            // Relevé déjà reçu (même animal + même identifiant du navigateur) : envoi rejoué par la file hors ligne ou
+            // formulaire renvoyé après une réponse perdue. On renvoie le relevé existant sans en créer un second.
+            if (clientId) {
+                const dejaRecu = await req.db.query(`SELECT * FROM releves_animal WHERE animal_id = $1 AND client_id = $2`, [req.params.id, clientId]);
+                if (dejaRecu.rows.length > 0) return res.status(200).json({ ...dejaRecu.rows[0], doublon: true });
+            }
             const result = await req.db.query(
-                `INSERT INTO releves_animal (animal_id, utilisateur_id, date_releve, type_evenement, poids_kg, produit_utilise, notes)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-                [req.params.id, req.user.id, date_releve, type_evenement, type_evenement === 'PESEE' ? poids_kg : null, produit_utilise || null, notes || null]
+                `INSERT INTO releves_animal (animal_id, utilisateur_id, date_releve, type_evenement, poids_kg, produit_utilise, notes, client_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                 ON CONFLICT (animal_id, client_id) DO NOTHING
+                 RETURNING *`,
+                [req.params.id, req.user.id, date_releve, type_evenement, type_evenement === 'PESEE' ? poids_kg : null, produit_utilise || null, notes || null, clientId]
             );
+            if (result.rows.length === 0) {
+                // Deux envois simultanés du même relevé : l'autre a gagné, celui-ci est un doublon.
+                const existant = await req.db.query(`SELECT * FROM releves_animal WHERE animal_id = $1 AND client_id = $2`, [req.params.id, clientId]);
+                return res.status(200).json({ ...(existant.rows[0] || {}), doublon: true });
+            }
             await logAudit(req.db, { req, table: 'releves_animal', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.status(201).json(result.rows[0]);
         } catch (err) {

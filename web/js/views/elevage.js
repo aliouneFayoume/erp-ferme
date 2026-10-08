@@ -8,6 +8,25 @@ const ANIMAL_STATUT_BADGE = { VIVANT: 'ok', VENDU: 'info', ABATTU: 'muted', MORT
 const ANIMAL_STATUT_LABEL = { VIVANT: 'Vivant', VENDU: 'Vendu', ABATTU: 'Abattu', MORT: 'Mort' };
 const RELEVE_TYPE_LABEL = { PESEE: 'Pesée', VACCINATION: 'Vaccination', TRAITEMENT: 'Traitement', OBSERVATION: 'Observation' };
 
+// Identifiant unique de CE relevé (voir routes/elevage.js, migration-33) : créé une seule fois par formulaire et conservé
+// tant qu'il n'est pas envoyé avec succès, y compris dans la file hors ligne. Si l'enregistrement réussit mais que la
+// réponse se perd, le renvoi est reconnu par le serveur et ne crée pas une seconde pesée. Repli sur un identifiant
+// aléatoire hors contexte sécurisé (http) pour ne jamais bloquer la saisie.
+function nouvelIdReleveAnimal() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+  const hex = () => Math.floor(Math.random() * 0x100000000).toString(16).padStart(8, '0');
+  return `${hex()}-${hex()}-${hex()}-${Date.now().toString(16)}`;
+}
+
+// Hors ligne, seuls les relevés d'animaux (pesée, vaccination, traitement, observation) sont gardés sur l'appareil et
+// envoyés au retour du réseau. Tout le reste (nouvel animal, saillie, mise-bas, statut) demande une connexion : on le dit
+// clairement plutôt que d'afficher un « Pas de connexion réseau » sans explication.
+function messageErreurElevage(err) {
+  return err && err.reseau
+    ? "Pas de connexion réseau. Enregistrer un animal, une saillie, une mise-bas ou un changement de statut demande une connexion : réessayez dès que le réseau revient. Les pesées, vaccinations, traitements et observations, eux, se gardent sur le téléphone."
+    : err.message;
+}
+
 function ageLabel(dateNaissance) {
   if (!dateNaissance) return 'âge inconnu';
   const naissance = new Date(dateNaissance);
@@ -43,6 +62,7 @@ window.Views.elevage = {
     ]);
 
     container.innerHTML = `
+      ${offlineBanner()}
       <div class="panel">
         <h2>Nouvel animal</h2>
         <p class="desc" style="margin-bottom:0">Enregistrer un animal acheté ou né sur la ferme</p>
@@ -156,7 +176,7 @@ window.Views.elevage = {
         showToast('Animal ajouté.', 'success');
         window.Views.elevage.render(container);
       } catch (err) {
-        showToast(err.message, 'error');
+        showToast(messageErreurElevage(err), 'error');
       }
     });
 
@@ -173,6 +193,8 @@ window.Views.elevage = {
         renderAnimauxList(container, filtres);
       });
     });
+
+    await updateOfflineBanner(container, () => window.Views.elevage.render(container));
   },
 };
 
@@ -253,7 +275,7 @@ async function ouvrirMiseBas(container, reproductionId) {
     showToast(`${petits.length} petit(s) enregistré(s).`, 'success');
     window.Views.elevage.render(container);
   } catch (err) {
-    showToast(err.message, 'error');
+    showToast(messageErreurElevage(err), 'error');
   }
 }
 
@@ -283,7 +305,7 @@ async function ouvrirSaillie(container, mere) {
     showToast('Saillie enregistrée.', 'success');
     window.Views.elevage.render(container);
   } catch (err) {
-    showToast(err.message, 'error');
+    showToast(messageErreurElevage(err), 'error');
   }
 }
 
@@ -374,6 +396,7 @@ async function openAnimalPanel(container, animalId) {
 
     <table style="margin-top:18px">
       <thead><tr><th>Date</th><th>Type</th><th>Détail</th></tr></thead>
+      <tbody id="releves-attente"></tbody>
       <tbody>
         ${
           releves.length
@@ -393,6 +416,7 @@ async function openAnimalPanel(container, animalId) {
   `;
 
   panel.querySelector('#close-animal').addEventListener('click', () => panel.classList.add('hidden'));
+  afficherRelevesEnAttente(panel, animal.id);
 
   const selectType = panel.querySelector('#select-type-releve');
   if (selectType) {
@@ -406,21 +430,53 @@ async function openAnimalPanel(container, animalId) {
 
   const formReleve = panel.querySelector('#form-releve');
   if (formReleve) {
+    let idReleve = nouvelIdReleveAnimal();
+
     formReleve.addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      try {
-        await Api.post(`/elevage/animaux/${animal.id}/releves`, {
-          date_releve: fd.get('date_releve'),
-          type_evenement: fd.get('type_evenement'),
-          poids_kg: fd.get('poids_kg') ? Number(fd.get('poids_kg')) : null,
-          produit_utilise: fd.get('produit_utilise') || null,
-          notes: fd.get('notes') || null,
+      const releve = {
+        client_id: idReleve,
+        date_releve: fd.get('date_releve'),
+        type_evenement: fd.get('type_evenement'),
+        poids_kg: fd.get('poids_kg') ? Number(fd.get('poids_kg')) : null,
+        produit_utilise: fd.get('produit_utilise') || null,
+        notes: fd.get('notes') || null,
+      };
+      const chemin = `/elevage/animaux/${animal.id}/releves`;
+
+      // Le relevé garde SON identifiant dans la file ; le suivant en recevra un autre.
+      const garderHorsLigne = async () => {
+        await OfflineQueue.ajouter({
+          method: 'POST',
+          path: chemin,
+          body: releve,
+          label: `Relevé ${animal.identifiant} — ${RELEVE_TYPE_LABEL[releve.type_evenement]} du ${fmtDate(releve.date_releve)}`,
         });
+        showToast('Hors ligne : relevé gardé sur cet appareil. Il sera envoyé dès le retour du réseau.', 'warn');
+        idReleve = nouvelIdReleveAnimal();
+        e.target.reset();
+        if (selectType) selectType.dispatchEvent(new Event('change')); // remet les champs Poids / Produit dans l'état du type par défaut
+        await afficherRelevesEnAttente(panel, animal.id);
+        await updateOfflineBanner(container, () => window.Views.elevage.render(container));
+      };
+
+      if (isOfflineMode() || !navigator.onLine) {
+        await garderHorsLigne();
+        return;
+      }
+      try {
+        await Api.post(chemin, releve);
         showToast('Relevé enregistré.', 'success');
         openAnimalPanel(container, animal.id);
       } catch (err) {
-        showToast(err.message, 'error');
+        // Réseau coupé en route (navigator.onLine n'est pas fiable sur mobile) : même chose, on garde le relevé. Si la
+        // requête était en fait arrivée, le renvoi sera reconnu par son identifiant et ne créera pas de doublon.
+        if (err.reseau) {
+          await garderHorsLigne();
+          return;
+        }
+        showToast(messageErreurElevage(err), 'error');
       }
     });
   }
@@ -441,8 +497,34 @@ async function openAnimalPanel(container, animalId) {
         showToast('Statut mis à jour.', 'success');
         openAnimalPanel(container, animal.id);
       } catch (err) {
-        showToast(err.message, 'error');
+        showToast(messageErreurElevage(err), 'error');
       }
     });
   }
+}
+
+// Relevés saisis sans réseau pour CET animal et pas encore envoyés : visibles tout de suite dans son historique, avec
+// la mention « En attente d'envoi », pour que l'éleveur voie que sa saisie est bien gardée.
+async function afficherRelevesEnAttente(panel, animalId) {
+  const tbody = panel.querySelector('#releves-attente');
+  if (!tbody) return;
+  let file = [];
+  try {
+    file = await OfflineQueue.lire();
+  } catch (err) {
+    return; // stockage local indisponible : rien à afficher, le relevé reste envoyé normalement quand il y a du réseau
+  }
+  const chemin = `/elevage/animaux/${animalId}/releves`;
+  tbody.innerHTML = file
+    .filter((item) => item.method === 'POST' && item.path === chemin && item.body)
+    .map((item) => {
+      const r = item.body;
+      const detail = [r.poids_kg ? `${fmt(r.poids_kg)} kg` : '', r.produit_utilise ? esc(r.produit_utilise) : '', r.notes ? esc(r.notes) : ''].filter(Boolean).join(' · ');
+      return `<tr>
+        <td>${fmtDate(r.date_releve)}</td>
+        <td>${RELEVE_TYPE_LABEL[r.type_evenement] || esc(r.type_evenement)} <span class="badge info">En attente d'envoi</span></td>
+        <td>${detail || '-'}</td>
+      </tr>`;
+    })
+    .join('');
 }

@@ -561,7 +561,9 @@ function offlineBanner() {
   return `<div class="offline-banner" id="offline-banner"></div>`;
 }
 
-async function updateOfflineBanner(container) {
+// `rafraichir` (facultatif) : ce qu'il faut réafficher après une synchronisation réussie — l'écran Production par défaut,
+// ou celui qui prête le bandeau (ex. Élevage).
+async function updateOfflineBanner(container, rafraichir) {
   const banner = container.querySelector('#offline-banner');
   if (!banner) return;
   const q = await OfflineQueue.lire();
@@ -582,7 +584,7 @@ async function updateOfflineBanner(container) {
   `;
   banner.querySelector('#toggle-offline').addEventListener('change', async (e) => {
     localStorage.setItem(OFFLINE_MODE_KEY, e.target.checked ? '1' : '0');
-    await updateOfflineBanner(container);
+    await updateOfflineBanner(container, rafraichir);
   });
   const syncBtn = banner.querySelector('#btn-sync-now');
   if (syncBtn) {
@@ -590,10 +592,11 @@ async function updateOfflineBanner(container) {
       const { reussies } = await OfflineQueue.synchroniser();
       if (reussies > 0) {
         showToast(`${reussies} action(s) hors ligne envoyée(s).`, 'success');
-        await window.Views.production.render(container); // les effectifs changent avec les relevés envoyés
+        // les effectifs changent avec les relevés envoyés
+        await (rafraichir ? rafraichir() : window.Views.production.render(container));
         return;
       }
-      await updateOfflineBanner(container);
+      await updateOfflineBanner(container, rafraichir);
     });
   }
 }

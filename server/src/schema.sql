@@ -303,8 +303,9 @@ ALTER TABLE reproductions ADD CONSTRAINT fk_reproductions_pere FOREIGN KEY (pere
 
 -- Historique d'événements par animal (pesée/vaccination/traitement/observation) — table séparée de
 -- `releves_journaliers` : celle-ci est câblée sur POST /production/sync (offline PWA par lot), y
--- mélanger le suivi par animal serait fragile. Pas de champ est_synchronise : pas de mode hors-ligne
--- pour l'élevage dans cette version.
+-- mélanger le suivi par animal serait fragile. Les relevés d'animaux se saisissent hors ligne (file d'attente du
+-- navigateur, voir web/js/views/elevage.js) : client_id, créé UNE fois par le navigateur, évite le doublon quand un envoi
+-- est rejoué (migration-33).
 CREATE TABLE releves_animal (
     id SERIAL PRIMARY KEY,
     animal_id INT REFERENCES animaux(id) ON DELETE CASCADE,
@@ -314,8 +315,10 @@ CREATE TABLE releves_animal (
     poids_kg NUMERIC, -- pertinent seulement pour PESEE
     produit_utilise VARCHAR(150), -- nom du vaccin/traitement
     notes TEXT,
+    client_id VARCHAR(64),
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE UNIQUE INDEX uq_releves_animal_client ON releves_animal (animal_id, client_id);
 
 -- --------------------------------------------------------
 -- 4. CATALOGUE & INVENTAIRE

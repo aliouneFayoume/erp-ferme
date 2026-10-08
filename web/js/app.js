@@ -84,7 +84,7 @@ async function tenterSyncHorsLigne() {
   const { reussies, sessionExpiree } = await OfflineQueue.synchroniser();
   if (reussies > 0) {
     showToast(`${reussies} action(s) hors ligne envoyée(s) au serveur.`, 'success');
-    if (currentTab === 'logistique' || currentTab === 'production') selectTab(currentTab);
+    if (currentTab === 'logistique' || currentTab === 'production' || currentTab === 'elevage') selectTab(currentTab);
   }
   if (sessionExpiree) {
     if (!sessionExpireeToastShown) {

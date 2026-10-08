@@ -403,6 +403,9 @@ td.num, th.num { text-align: right; font-family: var(--font-num); font-variant-n
   font-size: 15px; line-height: 22px; padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md); margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px;
 }
+/* Téléphone : le texte garde toute la largeur, les commandes (bascule, synchroniser) passent dessous. */
+.offline-banner { flex-wrap: wrap; }
+.offline-banner > span:first-child { flex: 1 1 240px; }
 
 .empty { color: var(--muted-2); font-size: 15px; padding: 20px 0; text-align: center; }
 
