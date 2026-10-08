@@ -20,7 +20,7 @@ const SECTEURS = [
     nom: 'Aviculture',
     titre: 'Logiciel de gestion de ferme avicole au Sénégal — Massla',
     description:
-      "Suivez vos lots de volailles, la mortalité, l'aliment, la ponte et vos ventes d'œufs depuis votre téléphone, même sans internet. Massla, le logiciel de gestion des fermes avicoles au Sénégal.",
+      "Suivez vos lots de volailles, la mortalité, l'aliment et la ponte depuis votre téléphone, même sans internet, et vos ventes d'œufs dans la même application. Massla, le logiciel de gestion des fermes avicoles au Sénégal.",
     h1: 'Le logiciel de gestion pour votre <em>ferme avicole</em>',
     intro:
       "Poulets de chair ou pondeuses : Massla suit chaque lot de sa mise en place à la vente, depuis le téléphone du gérant ou de ses employés, même quand le réseau coupe.",

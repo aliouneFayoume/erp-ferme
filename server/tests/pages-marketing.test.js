@@ -66,6 +66,24 @@ describe('pages marketing générées', () => {
         expect(html).toContain('demande en revanche une connexion');
     });
 
+    // Hors ligne, seuls les relevés de production, les pesées et soins des animaux et la logistique passent par la file
+    // d'attente ; commandes, paiements, stock et comptabilité demandent une connexion. La page d'accueil dit cela et ne
+    // promet pas « toutes les données ». Le texte des données structurées (Google) doit rester identique à la page visible.
+    test("la page d'accueil décrit le hors-ligne du terrain, sans promettre « toutes les données »", () => {
+        const html = lire('decouvrir.html');
+        expect(html).not.toMatch(/toutes les données|fonctionne hors ligne|fonctionnement hors ligne|Fonctionne sans internet/);
+        expect(html).toContain("Le terrain n'attend pas le réseau");
+        // la page d'accueil range ses données structurées dans un @graph (Organization, SoftwareApplication, FAQPage)
+        const noeuds = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].flatMap((b) => {
+            const j = JSON.parse(b[1]);
+            return j['@graph'] || [j];
+        });
+        const faq = noeuds.find((n) => n['@type'] === 'FAQPage');
+        const reponse = faq.mainEntity.find((q) => q.name.includes('sans connexion internet')).acceptedAnswer.text;
+        expect(reponse).toContain('demandent une connexion');
+        expect(html).toContain(`<p>${reponse}</p>`);
+    });
+
     // Aucune table ne relie un animal à une ligne de commande : la vente (module Commandes, produit « tête » rattaché à
     // une espèce) et le statut de la fiche sont deux gestes distincts. La page ne doit pas promettre un lien automatique.
     test('la page Élevage ne promet pas de vente ni d\'encaissement automatiques des animaux', () => {
