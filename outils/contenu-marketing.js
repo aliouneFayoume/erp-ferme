@@ -128,7 +128,7 @@ const SECTEURS = [
       { icone: 'tableau', titre: 'La reproduction', texte: "Enregistrez une saillie : la date de mise-bas prévue est calculée (283 jours pour les bovins, 150 pour les ovins et les caprins) et vous suivez les gestations en cours. Vous pouvez corriger la date." },
       { icone: 'livre', titre: 'Pesées et soins', texte: "Pesées, vaccinations, traitements, observations : chaque événement est daté et rangé dans l'historique de l'animal, avec sa courbe de poids." },
       { icone: 'modules', titre: 'Le troupeau en un coup d\'œil', texte: "Retrouvez tous vos animaux, un par un, avec leur statut et leur historique." },
-      { icone: 'portefeuille', titre: 'Ventes et paiements', texte: "Vendez vos animaux et suivez les paiements par Wave et Orange Money, dans la même application." },
+      { icone: 'portefeuille', titre: 'Ventes et sorties', texte: "Un animal est vendu, abattu ou mort : vous changez son statut et sa fiche garde la date de sortie. La facturation et les paiements mobiles passent par les modules Clients, Commandes et Finance." },
     ],
     note: "Le suivi d'élevage est un module à 15 000 FCFA par mois, inclus dans le Pack tout compris.",
     etapes: [
@@ -141,7 +141,10 @@ const SECTEURS = [
       { q: 'Comment Massla calcule-t-il la date de mise-bas ?', a: "À partir de la date de saillie, avec une durée de gestation moyenne : 283 jours pour les bovins, 150 jours pour les ovins et les caprins. Vous pouvez corriger la date ensuite." },
       { q: "Peut-on suivre l'historique de santé d'un animal ?", a: "Oui. Les vaccinations, les traitements, les pesées et les observations sont enregistrés avec leur date dans la fiche de chaque animal." },
       { q: 'Faut-il un abonnement séparé pour l\'élevage ?', a: "Le suivi d'élevage est un module à 15 000 FCFA par mois, en plus du Socle Essentiel (25 000 FCFA par mois). Il est inclus dans le Pack tout compris à 85 000 FCFA par mois." },
-      HORS_LIGNE('dans les enclos'),
+      {
+        q: 'Que se passe-t-il sans réseau dans les enclos ?',
+        a: "Les fiches déjà consultées restent lisibles sans réseau. L'enregistrement d'une pesée, d'un soin ou d'une saillie demande en revanche une connexion : la saisie hors connexion est aujourd'hui réservée aux relevés de production (poulailler, bassins, cultures).",
+      },
     ],
   },
 ];

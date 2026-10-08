@@ -53,6 +53,20 @@ describe('pages marketing générées', () => {
         expect(html).not.toMatch(/"@type":\s*"(Review|AggregateRating)"/);
     });
 
+    // La file hors ligne (offline-queue.js) ne sert qu'aux relevés de production (production.js) et aux livraisons :
+    // les fiches d'animaux (elevage.js) ne s'en servent pas. La page Élevage ne doit pas promettre le contraire.
+    test('la page Élevage ne promet pas la saisie hors connexion des fiches animales', () => {
+        expect(fs.readFileSync(path.join(WEB, 'js', 'views', 'elevage.js'), 'utf8')).not.toContain('OfflineQueue');
+        expect(lire('elevage.html')).not.toContain("envoyé automatiquement dès que la connexion revient");
+    });
+
+    // Aucune table ni route ne relie un animal à une commande ou une facture : vendre un animal change seulement son
+    // statut. La page Élevage ne doit pas laisser croire à une vente ou un encaissement automatiques.
+    test('la page Élevage ne promet pas de vente ni d\'encaissement automatiques des animaux', () => {
+        expect(lire('elevage.html')).not.toContain('Vendez vos animaux');
+        expect(lire('elevage.html')).toContain('Ventes et sorties');
+    });
+
     test('le script révèle la section entière quand un avis réel existe', () => {
         expect(lire('js/avis-decouvrir.js')).toMatch(/closest\('\[data-avis-section\]'\)/);
     });
