@@ -128,7 +128,7 @@ const SECTEURS = [
       { icone: 'tableau', titre: 'La reproduction', texte: "Enregistrez une saillie : la date de mise-bas prévue est calculée (283 jours pour les bovins, 150 pour les ovins et les caprins) et vous suivez les gestations en cours. Vous pouvez corriger la date." },
       { icone: 'livre', titre: 'Pesées et soins', texte: "Pesées, vaccinations, traitements, observations : chaque événement est daté et rangé dans l'historique de l'animal, avec sa courbe de poids." },
       { icone: 'modules', titre: 'Le troupeau en un coup d\'œil', texte: "Retrouvez tous vos animaux, un par un, avec leur statut et leur historique." },
-      { icone: 'portefeuille', titre: 'Ventes et sorties', texte: "Un animal est vendu, abattu ou mort : vous changez son statut et sa fiche garde la date de sortie. La facturation et les paiements mobiles passent par les modules Clients, Commandes et Finance." },
+      { icone: 'portefeuille', titre: 'Ventes et sorties', texte: "La vente se fait dans les modules Clients, Commandes et Finance, avec un produit « tête » rattaché à Bovins, Ovins ou Caprins : facture, paiement mobile et chiffre d'affaires par espèce. Sur la fiche de l'animal, vous passez ensuite le statut à « Vendu » (ou Abattu, Mort) : la fiche garde la date de sortie. Les deux gestes restent distincts." },
     ],
     note: "Le suivi d'élevage est un module à 15 000 FCFA par mois, inclus dans le Pack tout compris.",
     etapes: [

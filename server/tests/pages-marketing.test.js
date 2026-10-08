@@ -60,8 +60,8 @@ describe('pages marketing générées', () => {
         expect(lire('elevage.html')).not.toContain("envoyé automatiquement dès que la connexion revient");
     });
 
-    // Aucune table ni route ne relie un animal à une commande ou une facture : vendre un animal change seulement son
-    // statut. La page Élevage ne doit pas laisser croire à une vente ou un encaissement automatiques.
+    // Aucune table ne relie un animal à une ligne de commande : la vente (module Commandes, produit « tête » rattaché à
+    // une espèce) et le statut de la fiche sont deux gestes distincts. La page ne doit pas promettre un lien automatique.
     test('la page Élevage ne promet pas de vente ni d\'encaissement automatiques des animaux', () => {
         expect(lire('elevage.html')).not.toContain('Vendez vos animaux');
         expect(lire('elevage.html')).toContain('Ventes et sorties');
