@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Essai gratuit 30 jours — Massla</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/icons/massla-favicon.svg" type="image/svg+xml" />
+  <meta name="theme-color" content="#0F3D2E" />
+  <script src="/js/dist/marketing.min.js"></script>
+  <link rel="preload" href="/fonts/Onest-Variable.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/css/massla-tokens.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <div id="login-screen">
+    <div class="login-box" style="max-width: 440px;">
+      <img class="login-logo" src="/icons/massla-empile-blanc.svg" alt="Massla" />
+
+      <div id="essai-indisponible" class="hidden">
+        <h1>Essai gratuit</h1>
+        <p class="sub">L'essai gratuit n'est pas encore ouvert. Demandez votre démonstration : nous vous répondons sur WhatsApp.</p>
+        <p class="sub"><a href="/decouvrir#contact">Demander ma démo</a></p>
+      </div>
+
+      <div id="essai-etape-numero" class="hidden">
+        <h1>Essayez Massla gratuitement</h1>
+        <p class="sub">30 jours, sans carte bancaire, sans engagement. Votre numéro WhatsApp et le nom de votre ferme suffisent.</p>
+        <form id="essai-form-numero">
+          <label>Nom de votre ferme
+            <input type="text" name="nomFerme" required maxlength="100" autocomplete="organization" />
+          </label>
+          <label>Numéro WhatsApp
+            <input type="tel" name="telephone" required inputmode="tel" autocomplete="tel" placeholder="+221 77 000 00 00" />
+          </label>
+          <div id="essai-erreur-numero" class="login-error hidden"></div>
+          <button type="submit">Recevoir mon code sur WhatsApp</button>
+        </form>
+        <p class="sub" style="margin-top:16px;">Vous avez déjà un essai ? Entrez le même numéro, nous vous envoyons un code de connexion. <a href="/">Connexion par e-mail</a></p>
+      </div>
+
+      <div id="essai-etape-code" class="hidden">
+        <h1>Entrez votre code</h1>
+        <p id="essai-message-code" class="sub"></p>
+        <form id="essai-form-code">
+          <label>Code à 6 chiffres
+            <input type="text" name="code" required inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" />
+          </label>
+          <div id="essai-erreur-code" class="login-error hidden"></div>
+          <button type="submit">Ouvrir mon essai</button>
+        </form>
+        <p class="sub" style="margin-top:16px;"><a href="#" id="essai-renvoyer">Renvoyer un code</a> · <a href="#" id="essai-changer">Changer de numéro</a></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/dist/essai.min.js"></script>
+</body>
+</html>

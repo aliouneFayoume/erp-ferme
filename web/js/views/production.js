@@ -220,18 +220,36 @@ function renderLotsList(container, lots) {
         <div class="lot-card">
           <span class="tag-secteur">${esc(l.secteur_nom)}</span>
           <span class="badge ${LOT_STATUT_BADGE[l.statut] || 'muted'}" style="float:right">${LOT_STATUT_LABEL[l.statut] || esc(l.statut)}</span>
-          <div class="code" style="margin-top:8px">${esc(l.code_lot)}${l.culture ? ` — ${esc(l.culture)}` : ''}</div>
+          <div class="code" style="margin-top:8px">${esc(l.code_lot)}${l.culture ? ` — ${esc(l.culture)}` : ''}${l.est_demo ? ' <span class="badge info">Démo</span>' : ''}</div>
           <div class="meta">Démarré le ${fmtDate(l.date_demarrage)}</div>
           <div class="kpi"><span>${l.secteur_nom === 'Maraîcher' ? 'Nombre de plants' : 'Effectif final'}</span><b>${fmt(l.quantite_initiale)}</b></div>
           ${l.espece ? `<div class="kpi"><span>Espèce</span><b>${esc(l.espece)}</b></div>` : ''}
           <button class="secondary" style="margin-top:10px;width:100%" data-lot='${lotDataAttr(l)}'>
             Voir l'historique
           </button>
+          ${l.est_demo ? '<button class="secondary btn-supprimer-demo" style="margin-top:6px;width:100%">Supprimer cette démo</button>' : ''}
         </div>
       `
         )
         .join('')
     : '<div class="empty">Aucun lot clôturé.</div>';
+
+  // Ferme démo d'un essai (lot marqué « Démo ») : suppression en un clic, après confirmation. Ne touche à aucune donnée réelle.
+  container.querySelectorAll('button.btn-supprimer-demo').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const values = await Modal.open('Supprimer la ferme démo ?', [
+        { name: 'confirmer', label: 'Tapez "OUI" pour confirmer (vos propres lots ne sont pas touchés)', type: 'text', value: '' },
+      ]);
+      if (!values || values.confirmer.trim().toUpperCase() !== 'OUI') return;
+      try {
+        await Api.del('/essai/demo');
+        showToast('Démo supprimée.', 'success');
+        window.Views.production.render(container);
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  });
 
   container.querySelectorAll('button[data-lot]').forEach((btn) => {
     btn.addEventListener('click', () => openRelevePanel(container, JSON.parse(btn.dataset.lot)));

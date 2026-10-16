@@ -41,11 +41,12 @@ function estConfigure() {
  *   IGNORÉ tant que `WHATSAPP_TEMPLATE_NOM` pointe encore vers le modèle de secours "hello_world"
  *   (qui n'a aucune variable) : lui envoyer des `components` ferait échouer l'appel côté Graph API
  *   ("nombre de paramètres ne correspond pas au modèle"). Ignoré si `composants` est déjà fourni.
+ * `modele` (optionnel) : { nom, langue } du modèle Meta à utiliser pour CET envoi, à la place de WHATSAPP_TEMPLATE_NOM.
  * `config` (optionnel) permet à l'appelant de fournir les identifiants d'UNE organisation précise
  * (déjà déchiffrés via whatsappConfig.js) au lieu des identifiants globaux de Massla — c'est
  * l'appelant qui décide lesquels utiliser, ce module ne fait aucune hypothèse sur le tenant.
  */
-async function envoyerMessageWhatsapp(telephone, { composants: composantsFournis, montant, config: configFournie } = {}) {
+async function envoyerMessageWhatsapp(telephone, { composants: composantsFournis, montant, config: configFournie, modele } = {}) {
     const config = configFournie || lireConfigGlobale();
     if (!config.accessToken || !config.phoneNumberId) {
         throw new Error("Intégration WhatsApp non configurée (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID manquants).");
@@ -54,7 +55,11 @@ async function envoyerMessageWhatsapp(telephone, { composants: composantsFournis
     if (!numero) {
         throw new Error('Numéro de téléphone invalide.');
     }
-    const modeleAvecVariables = config.templateNom !== 'hello_world';
+    // `modele` ({ nom, langue }) : modèle propre à CET envoi (ex. le code de connexion de l'essai autonome, modèle
+    // « Authentication » distinct du modèle de relance de facture) au lieu de celui de la config.
+    const templateNom = (modele && modele.nom) || config.templateNom;
+    const templateLangue = (modele && modele.langue) || config.templateLangue;
+    const modeleAvecVariables = templateNom !== 'hello_world';
     const composants = composantsFournis
         || (modeleAvecVariables && montant != null
             ? [{ type: 'body', parameters: [{ type: 'text', text: String(montant) }] }]
@@ -72,8 +77,8 @@ async function envoyerMessageWhatsapp(telephone, { composants: composantsFournis
             to: numero,
             type: 'template',
             template: {
-                name: config.templateNom,
-                language: { code: config.templateLangue },
+                name: templateNom,
+                language: { code: templateLangue },
                 ...(composants ? { components: composants } : {}),
             },
         }),

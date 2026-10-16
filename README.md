@@ -56,6 +56,15 @@ WHATSAPP_PHONE_NUMBER_ID=...
 WHATSAPP_TEMPLATE_NOM=hello_world
 WHATSAPP_TEMPLATE_LANGUE=en_US
 
+# Essai gratuit autonome (inscription par téléphone + connexion par code WhatsApp, voir
+# server/src/routes/essai.js). FERMÉ tant que ESSAI_AUTONOME_ACTIF n'est pas « true » (les routes
+# répondent 503 et aucun lien n'apparaît). Pour l'ouvrir : 1) coller migration-35 dans Supabase,
+# 2) faire approuver par Meta un modèle de catégorie « Authentication » (code + bouton « Copier le code »),
+# 3) renseigner son nom ci-dessous, 4) passer ESSAI_AUTONOME_ACTIF à true et redémarrer.
+ESSAI_AUTONOME_ACTIF=false
+WHATSAPP_TEMPLATE_AUTH_NOM=
+WHATSAPP_TEMPLATE_AUTH_LANGUE=fr
+
 # Vérification d'adresse email à l'inscription/création d'utilisateur (obligatoire — sans ces
 # clés, la création de tout nouveau compte échoue proprement en 503 plutôt que de créer un compte
 # invérifiable). Nécessite un domaine vérifié côté Resend (DNS SPF/DKIM sur massla.sn).

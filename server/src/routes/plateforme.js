@@ -738,9 +738,10 @@ module.exports = function plateformeRoutes(pool) {
                  WHERE u.tenant_id = $1 AND r.nom = 'admin' AND u.actif = TRUE AND u.deleted_at IS NULL`,
                 [facture.tenant_id]
             );
-            const emails = adminsRes.rows.map((r) => r.email);
+            // Un compte d'essai autonome (migration-35) s'identifie par son téléphone et n'a pas d'e-mail : il est ignoré ici.
+            const emails = adminsRes.rows.map((r) => r.email).filter(Boolean);
             if (emails.length === 0) {
-                return res.status(400).json({ erreur: "Aucun administrateur actif trouvé pour cette ferme." });
+                return res.status(400).json({ erreur: "Aucun administrateur avec une adresse e-mail pour cette ferme (essai gratuit : utilisez le rappel WhatsApp)." });
             }
 
             // Lien de paiement en ligne joint au rappel, quand c'est possible : le rappel part de toute façon

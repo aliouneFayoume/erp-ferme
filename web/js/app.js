@@ -759,6 +759,15 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   }
 });
 
+// Essai gratuit autonome (téléphone + code WhatsApp) : le lien n'apparaît que si le serveur annonce l'essai ouvert
+// (ESSAI_AUTONOME_ACTIF + modèle WhatsApp approuvé) — tant qu'il ne l'est pas, la page de connexion reste inchangée.
+fetch('/api/essai/disponible')
+  .then((r) => r.json())
+  .then((d) => {
+    if (d && d.disponible) document.getElementById('login-essai').classList.remove('hidden');
+  })
+  .catch(() => {});
+
 document.getElementById('lien-renvoyer-verification').addEventListener('click', async (e) => {
   e.preventDefault();
   const email = document.querySelector('#login-form input[name="email"]').value;

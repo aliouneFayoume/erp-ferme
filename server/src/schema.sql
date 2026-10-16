@@ -72,7 +72,7 @@ CREATE TABLE utilisateurs (
     id SERIAL PRIMARY KEY,
     tenant_id INT REFERENCES organisations(id),
     nom_complet VARCHAR(100) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL, -- reste global pour ce prototype (voir plan : résolution de tenant à la connexion non traitée ici)
+    email VARCHAR(100) UNIQUE, -- global ; facultatif depuis migration-35 (un compte d'essai s'identifie par son téléphone) — voir la contrainte utilisateurs_identifiant_chk plus bas
     mot_de_passe_hash VARCHAR(255) NOT NULL,
     role_id INT REFERENCES roles(id),
     secteur_id INT, -- pour un chef de prod : secteur unique auquel il a accès
@@ -108,8 +108,17 @@ CREATE TABLE utilisateurs (
     mfa_code_hash VARCHAR(64),
     mfa_code_expire_le TIMESTAMP,
     mfa_code_tentatives INT NOT NULL DEFAULT 0,
+    -- Essai autonome (migration-35) : connexion par code WhatsApp à 6 chiffres, sans e-mail ni mot de passe.
+    -- Colonnes distinctes de mfa_code_* : ce n'est pas un second facteur mais le seul facteur de ces comptes.
+    telephone VARCHAR(20) UNIQUE, -- numéro WhatsApp au format E.164 (normaliserTelephone), unique à l'échelle de la plateforme
+    telephone_verifie BOOLEAN NOT NULL DEFAULT FALSE,
+    login_code_hash VARCHAR(64),
+    login_code_expire_le TIMESTAMP,
+    login_code_tentatives INT NOT NULL DEFAULT 0,
+    login_code_envoye_le TIMESTAMP,
     deleted_at TIMESTAMP,
-    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT utilisateurs_identifiant_chk CHECK (email IS NOT NULL OR telephone IS NOT NULL)
 );
 
 -- Chaque organisation est son propre agrégateur de paiement PayDunya (ses propres identifiants,
@@ -209,6 +218,7 @@ CREATE TABLE lots_production (
     culture VARCHAR(100), -- Maraîcher : type de culture (tomate, chou, ...) — planification des cultures
     duree_maturite_jours INT, -- Maraîcher : durée avant récolte prévue, en jours depuis date_demarrage
     espece VARCHAR(100), -- Piscicole : espèce actuellement dans ce bassin (voir migration-28) ; change quand des poissons y sont déplacés
+    est_demo BOOLEAN NOT NULL DEFAULT FALSE, -- lot de la « Ferme démo » d'un essai (migration-35) : créé TERMINÉ, supprimable en un clic
     cree_par INT REFERENCES utilisateurs(id),
     deleted_at TIMESTAMP,
     UNIQUE (tenant_id, code_lot)

@@ -24,7 +24,7 @@ const directivesBase = {
 // portail client) ne charge jamais de script tiers de suivi et garde la CSP stricte ci-dessus.
 const { PAGES_AVEC_SUIVI } = require('./pagesPubliques');
 const PAGES_MARKETING = new Set([
-    '/decouvrir', '/decouvrir.html', '/inscription', '/inscription.html',
+    '/decouvrir', '/decouvrir.html', '/inscription', '/inscription.html', '/essai', '/essai.html',
     // pages de secteur et politique de confidentialité (voir pagesPubliques.js), avec et sans .html
     ...PAGES_AVEC_SUIVI.flatMap((nom) => [`/${nom}`, `/${nom}.html`]),
 ]);
