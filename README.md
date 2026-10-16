@@ -65,6 +65,13 @@ ESSAI_AUTONOME_ACTIF=false
 WHATSAPP_TEMPLATE_AUTH_NOM=
 WHATSAPP_TEMPLATE_AUTH_LANGUE=fr
 
+# Rappel J-3 de fin d'essai par WhatsApp (server/src/rappelFinEssai.js) : un message par ferme, 3 jours avant la fin.
+# FERMÉ tant que RAPPEL_FIN_ESSAI_ACTIF n'est pas « true » ET qu'un modèle Meta (catégorie Utilitaire, un paramètre :
+# le nombre de jours) n'est pas approuvé et renseigné. Nécessite migration-37.
+RAPPEL_FIN_ESSAI_ACTIF=false
+WHATSAPP_TEMPLATE_J3_NOM=
+WHATSAPP_TEMPLATE_J3_LANGUE=fr
+
 # Vérification d'adresse email à l'inscription/création d'utilisateur (obligatoire — sans ces
 # clés, la création de tout nouveau compte échoue proprement en 503 plutôt que de créer un compte
 # invérifiable). Nécessite un domaine vérifié côté Resend (DNS SPF/DKIM sur massla.sn).

@@ -148,6 +148,8 @@ async function main() {
     // (pg-mem, sans DATABASE_URL) il n'y a ni vrai client ni identifiants WhatsApp à utiliser.
     if (process.env.DATABASE_URL) {
         require('./relancesAuto').demarrerPlanificateur(pool);
+        // Rappel J-3 de fin d'essai gratuit (fermé tant que RAPPEL_FIN_ESSAI_ACTIF et le modèle Meta ne sont pas renseignés).
+        require('./rappelFinEssai').demarrerPlanificateur(pool);
     }
 
     app.listen(PORT, () => {

@@ -517,9 +517,14 @@ function afficherBandeauOffre(offre, user) {
     if (!vue || !vue.parentNode) return;
     vue.parentNode.insertBefore(bandeau, vue);
   }
+  // J-3 (dossier Easystart) : à trois jours de la fin, le bandeau dit clairement ce qui va changer et ce qu'on garde en passant en Pro.
+  const jours = offre.joursRestants;
+  const pluriel = jours > 1 ? 's' : '';
   const texte =
     offre.plan === 'ESSAI'
-      ? `Essai gratuit : ${offre.joursRestants} jour${offre.joursRestants > 1 ? 's' : ''} restant${offre.joursRestants > 1 ? 's' : ''}.`
+      ? jours <= 3
+        ? `Votre essai se termine dans ${jours} jour${pluriel} — passez en Pro pour garder vos lots illimités. Vos données restent consultables dans tous les cas.`
+        : `Essai gratuit : ${jours} jour${pluriel} restant${pluriel}.`
       : 'Essai terminé : vos données restent consultables. Passez en Pro pour continuer à saisir.';
   const message = `Bonjour, je souhaite passer en Pro pour ma ferme. (${(user && user.nom) || (user && user.nom_complet) || 'compte Massla'})`;
   bandeau.className = `offline-banner bandeau-offre${offre.plan === 'EXPIRE' ? ' expire' : ''}`;

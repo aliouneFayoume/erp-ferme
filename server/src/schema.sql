@@ -817,6 +817,9 @@ CREATE TABLE organisation_abonnement_saas (
     essai_fin_le TIMESTAMP,
     source_inscription VARCHAR(10) CHECK (source_inscription IS NULL OR source_inscription IN ('essai', 'demo')),
     converti_pro_le TIMESTAMP,
+    -- Rappel J-3 de fin d'essai par WhatsApp (migration-37, rappelFinEssai.js) : un seul par ferme, plafonné en cas d'échec.
+    rappel_fin_essai_envoye_le TIMESTAMP,
+    rappel_fin_essai_tentatives INT NOT NULL DEFAULT 0,
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
