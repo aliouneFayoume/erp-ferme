@@ -230,6 +230,8 @@ describe('sécurité — MFA', () => {
     });
 
     test('connexion avec WhatsApp actif envoie un code et le vérifie', async () => {
+        // Le code MFA part avec le modèle Meta « Authentication » (jamais le modèle de relance de facture) : il doit être configuré.
+        process.env.WHATSAPP_TEMPLATE_AUTH_NOM = 'code_connexion_massla';
         const u = await creerUtilisateurComplet(pool, { tenant_id: tenantId, mfaActif: true, mfaMethode: 'WHATSAPP' });
         await pool.query(`UPDATE utilisateurs SET mfa_whatsapp_numero = '+221771234567' WHERE id = $1`, [u.id]);
 
@@ -240,6 +242,7 @@ describe('sécurité — MFA', () => {
         expect(envoyerMessageWhatsapp).toHaveBeenCalled();
 
         const dernierAppel = envoyerMessageWhatsapp.mock.calls[envoyerMessageWhatsapp.mock.calls.length - 1];
+        expect(dernierAppel[1].modele).toEqual({ nom: 'code_connexion_massla', langue: 'fr' });
         const codeEnvoye = dernierAppel[1].composants[0].parameters[0].text;
 
         const mauvais = await request(app).post('/api/auth/mfa/verifier').send({ challengeToken: login.body.challengeToken, code: '000000' });

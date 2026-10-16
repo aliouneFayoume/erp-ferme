@@ -57,21 +57,23 @@ function codeCorrespond(codeSaisi, hashAttendu) {
 }
 
 /**
- * Envoie le code par WhatsApp avec le modèle « Authentication ». Un modèle de ce type porte le code à deux endroits : dans le
- * corps du message ET dans le bouton « Copier le code » — Meta exige les deux paramètres.
+ * Composants d'un message « Authentication » : un modèle de ce type porte le code à deux endroits — dans le corps du message
+ * ET dans le bouton « Copier le code » — et Meta exige les deux paramètres. Partagé avec le code MFA par WhatsApp (mfa.js).
  */
+function composantsCodeAuthentification(code) {
+    return [
+        { type: 'body', parameters: [{ type: 'text', text: code }] },
+        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] },
+    ];
+}
+
+/** Envoie le code de connexion de l'essai par WhatsApp avec le modèle « Authentication ». */
 async function envoyerCodeConnexion(telephone, code) {
     if (modeSimulation()) {
         console.log(`[essai autonome — simulation] code de connexion pour ${telephone} : ${code}`);
         return;
     }
-    await envoyerMessageWhatsapp(telephone, {
-        modele: modeleAuthentification(),
-        composants: [
-            { type: 'body', parameters: [{ type: 'text', text: code }] },
-            { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] },
-        ],
-    });
+    await envoyerMessageWhatsapp(telephone, { modele: modeleAuthentification(), composants: composantsCodeAuthentification(code) });
 }
 
 module.exports = {
@@ -81,6 +83,7 @@ module.exports = {
     essaiAutonomeActif,
     essaiAutonomeDisponible,
     modeleAuthentification,
+    composantsCodeAuthentification,
     genererCodeConnexion,
     codeCorrespond,
     envoyerCodeConnexion,

@@ -6,6 +6,7 @@ const { authenticator } = require('otplib');
 const QRCode = require('qrcode');
 const { chiffrer, dechiffrer } = require('./credentials');
 const { envoyerMessageWhatsapp } = require('./whatsapp');
+const { modeleAuthentification, composantsCodeAuthentification } = require('./essaiAutonome');
 
 // --- TOTP --------------------------------------------------------------------
 
@@ -54,14 +55,17 @@ function hashCode(code) {
  * plateforme, pas une communication au nom de la ferme du destinataire — contrairement aux
  * relances de facturation (finance.js), qui elles utilisent la config par tenant si présente.
  *
- * ATTENTION (limite connue, non bloquante) : nécessite un template Meta de catégorie
- * "Authentication" approuvé pour le numéro WhatsApp Business de production — distinct du template
- * "hello_world"/relance déjà utilisé. Le numéro de production est par ailleurs actuellement bloqué
- * (voir suivi séparé), donc cet envoi échouera réellement tant que ce n'est pas résolu ; TOTP reste
- * pleinement fonctionnel indépendamment.
+ * Utilise le modèle Meta « Authentication » (WHATSAPP_TEMPLATE_AUTH_NOM, le même que le code de connexion de l'essai
+ * autonome, voir essaiAutonome.js) — JAMAIS le modèle de relance de facture de la config globale : il enverrait le code à la
+ * place d'un montant. Sans ce modèle configuré, l'envoi échoue net (l'appelant journalise l'erreur) plutôt que d'envoyer un
+ * message faux ; TOTP reste pleinement fonctionnel indépendamment.
  */
 async function envoyerCodeWhatsapp(numero, code) {
-    await envoyerMessageWhatsapp(numero, { composants: [{ type: 'body', parameters: [{ type: 'text', text: code }] }] });
+    const modele = modeleAuthentification();
+    if (!modele.nom) {
+        throw new Error("Modèle WhatsApp « Authentication » non configuré (WHATSAPP_TEMPLATE_AUTH_NOM) : code MFA non envoyé.");
+    }
+    await envoyerMessageWhatsapp(numero, { modele, composants: composantsCodeAuthentification(code) });
 }
 
 module.exports = {
