@@ -3,7 +3,7 @@
 // (jamais de « ce numéro n'a pas de compte ») : seule la saisie du bon code ouvre une session.
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { signToken, requireAuth, checkRole, queryPreTenant, queryAvecTenant, attachTenantConnection } = require('../auth');
+const { signToken, requireAuth, checkRole, queryPreTenant, queryPreTenantPlateforme, queryAvecTenant, attachTenantConnection } = require('../auth');
 const { logAudit } = require('../audit');
 const { normaliserTelephone } = require('../validation');
 const { creerFermeEssai } = require('../creerFermeEssai');
@@ -11,6 +11,8 @@ const {
     MAX_TENTATIVES_CODE,
     DELAI_RENVOI_SECONDES,
     essaiAutonomeDisponible,
+    plafondsCodes,
+    debutJourUtc,
     genererCodeConnexion,
     codeCorrespond,
     envoyerCodeConnexion,
@@ -36,6 +38,10 @@ const MESSAGE_CODE_ENVOYE = (telephone) =>
     `Si ce numéro peut recevoir WhatsApp, un code à 6 chiffres vient de lui être envoyé (${telephone}). Il est valable 10 minutes. ` +
     `Pas reçu ? Vous pouvez en redemander un au bout d'une minute.`;
 const MESSAGE_CODE_INVALIDE = 'Code incorrect ou expiré. Redemandez un code.';
+const MESSAGE_SATURE = "Beaucoup de demandes aujourd'hui : l'essai gratuit est momentanément saturé. Réessayez demain, ou écrivez-nous sur WhatsApp : nous ouvrons votre essai avec vous.";
+// Chaque code envoyé est tracé dans le journal d'audit : c'est ce qui permet de compter les envois du jour (plafonds), sans table de plus.
+// Rangé sur `utilisateurs` avec une action qui n'est ni LOGIN ni une saisie : invisible dans l'activité plateforme.
+const ACTION_CODE_ENVOYE = 'CODE_ENVOYE';
 const NOM_FERME_REGEX = /^[^<>\u0000-\u001F]{2,100}$/;
 
 function exigerDisponible(req, res, next) {
@@ -47,6 +53,32 @@ function exigerDisponible(req, res, next) {
 
 module.exports = function essaiRoutes(pool) {
     const router = express.Router();
+
+    /** Nombre de codes envoyés aujourd'hui (UTC) : sur toute la plateforme, ou pour un seul compte. Lecture cross-tenant, hors contexte ferme. */
+    async function nombreCodesAujourdhui(utilisateurId = null) {
+        const params = [debutJourUtc(), ACTION_CODE_ENVOYE];
+        let sql = `SELECT COUNT(*) AS n FROM audit_logs WHERE table_name = 'utilisateurs' AND action = $2 AND cree_le >= $1`;
+        if (utilisateurId !== null) {
+            params.push(utilisateurId);
+            sql += ` AND utilisateur_id = $3`;
+        }
+        const r = await queryPreTenantPlateforme(pool, sql, params);
+        return Number(r.rows[0].n);
+    }
+
+    /** Plafond de budget : refuse nettement (503) toute inscription ou demande de code une fois le plafond du jour atteint. */
+    async function exigerCapacite(req, res, next) {
+        try {
+            if ((await nombreCodesAujourdhui()) >= plafondsCodes().global) {
+                console.error(`Essai autonome : plafond quotidien de codes atteint (${plafondsCodes().global}) — demandes refusées jusqu'à demain (UTC).`);
+                return res.status(503).json({ erreur: MESSAGE_SATURE, code: 'ESSAI_SATURE' });
+            }
+            next();
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: "Erreur lors de la vérification de la capacité de l'essai." });
+        }
+    }
 
     /** Compte (essai) rattaché à ce numéro, ferme non supprimée — lecture avant tout contexte tenant (policy pré-tenant). */
     async function trouverParTelephone(telephone) {
@@ -65,12 +97,22 @@ module.exports = function essaiRoutes(pool) {
     async function envoyerNouveauCode(utilisateur, telephone) {
         const dernier = utilisateur.login_code_envoye_le ? new Date(utilisateur.login_code_envoye_le).getTime() : 0;
         if (Date.now() - dernier < DELAI_RENVOI_SECONDES * 1000) return; // trop tôt : on ne renvoie pas, sans le dire
+        // Plafond par numéro : même réponse que d'habitude (rien n'est révélé), simplement aucun message de plus aujourd'hui.
+        if ((await nombreCodesAujourdhui(utilisateur.id)) >= plafondsCodes().parNumero) {
+            console.warn(`Essai autonome : plafond quotidien de codes atteint pour le compte ${utilisateur.id}.`);
+            return;
+        }
         const { code, hash, expireLe } = genererCodeConnexion();
         await queryAvecTenant(
             pool,
             utilisateur.tenant_id,
             `UPDATE utilisateurs SET login_code_hash = $1, login_code_expire_le = $2, login_code_tentatives = 0, login_code_envoye_le = now() WHERE id = $3`,
             [hash, expireLe, utilisateur.id]
+        );
+        // Tracé AVANT l'envoi : un envoi qui échoue peut tout de même avoir coûté, et le plafond doit borner les tentatives.
+        await logAudit(
+            { query: (sql, params) => queryAvecTenant(pool, utilisateur.tenant_id, sql, params) },
+            { table: 'utilisateurs', rowId: utilisateur.id, action: ACTION_CODE_ENVOYE, userId: utilisateur.id, tenantId: utilisateur.tenant_id }
         );
         try {
             await envoyerCodeConnexion(telephone, code);
@@ -86,7 +128,7 @@ module.exports = function essaiRoutes(pool) {
     });
 
     /** Ouvre un essai (ou, si le numéro a déjà un compte, envoie simplement un code de connexion). */
-    router.post('/inscription', limiteurInscription, exigerDisponible, async (req, res) => {
+    router.post('/inscription', limiteurInscription, exigerDisponible, exigerCapacite, async (req, res) => {
         const nomFerme = typeof req.body.nomFerme === 'string' ? req.body.nomFerme.trim() : '';
         const telephone = normaliserTelephone(req.body.telephone);
         const source = req.body.source === 'demo' ? 'demo' : 'essai';
@@ -117,7 +159,7 @@ module.exports = function essaiRoutes(pool) {
     });
 
     /** Demande d'un code de connexion pour un compte existant. */
-    router.post('/code', limiteurCode, exigerDisponible, async (req, res) => {
+    router.post('/code', limiteurCode, exigerDisponible, exigerCapacite, async (req, res) => {
         const telephone = normaliserTelephone(req.body.telephone);
         if (!telephone) {
             return res.status(400).json({ erreur: 'Numéro WhatsApp invalide. Exemple : +221 77 000 00 00.' });

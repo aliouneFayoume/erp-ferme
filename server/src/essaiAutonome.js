@@ -10,6 +10,28 @@ const MAX_TENTATIVES_CODE = 5;
 // numéro ciblé ne doit pas pouvoir être inondé de messages.
 const DELAI_RENVOI_SECONDES = 60;
 
+// Plafonds quotidiens de codes WhatsApp (coût et harcèlement) : chaque code envoyé est un message facturé par Meta, et la page
+// d'essai est publique. Les limites par adresse IP (routes/essai.js) ne suffisent pas contre quelqu'un qui change d'adresse.
+//   - global : au-delà, plus aucune inscription ni demande de code jusqu'au lendemain (UTC) — c'est un plafond de BUDGET ;
+//   - par numéro : borne le nombre de messages reçus par une même personne dans la journée (harcèlement).
+// Réglables par ESSAI_PLAFOND_CODES_JOUR / ESSAI_PLAFOND_CODES_NUMERO_JOUR sans redéployer.
+const PLAFOND_CODES_JOUR_DEFAUT = 300;
+const PLAFOND_CODES_NUMERO_JOUR_DEFAUT = 8;
+function entierPositif(valeur, defaut) {
+    const n = Number(valeur);
+    return Number.isInteger(n) && n > 0 ? n : defaut;
+}
+function plafondsCodes() {
+    return {
+        global: entierPositif(process.env.ESSAI_PLAFOND_CODES_JOUR, PLAFOND_CODES_JOUR_DEFAUT),
+        parNumero: entierPositif(process.env.ESSAI_PLAFOND_CODES_NUMERO_JOUR, PLAFOND_CODES_NUMERO_JOUR_DEFAUT),
+    };
+}
+/** Début de la journée en cours, en UTC (Sénégal = UTC+0) : les compteurs repartent à zéro chaque jour. */
+function debutJourUtc(maintenant = new Date()) {
+    return new Date(Date.UTC(maintenant.getUTCFullYear(), maintenant.getUTCMonth(), maintenant.getUTCDate()));
+}
+
 /**
  * Interrupteur de mise en service (fail-closed, même philosophie que MFA_WHATSAPP_ACTIF dans mfa.js) : tant que
  * ESSAI_AUTONOME_ACTIF n'est pas 'true', les routes /api/essai/* répondent 503 et aucune page ne propose l'essai.
@@ -80,6 +102,8 @@ module.exports = {
     DUREE_CODE_MINUTES,
     MAX_TENTATIVES_CODE,
     DELAI_RENVOI_SECONDES,
+    plafondsCodes,
+    debutJourUtc,
     essaiAutonomeActif,
     essaiAutonomeDisponible,
     modeleAuthentification,

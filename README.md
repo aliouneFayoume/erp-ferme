@@ -64,6 +64,10 @@ WHATSAPP_TEMPLATE_LANGUE=en_US
 ESSAI_AUTONOME_ACTIF=false
 WHATSAPP_TEMPLATE_AUTH_NOM=
 WHATSAPP_TEMPLATE_AUTH_LANGUE=fr
+# Plafonds quotidiens de codes WhatsApp (coût Meta et harcèlement), facultatifs : 300 par jour sur toute la plateforme et
+# 8 par numéro par jour. Au plafond global, inscriptions et demandes de code sont refusées (503) jusqu'au lendemain (UTC).
+ESSAI_PLAFOND_CODES_JOUR=300
+ESSAI_PLAFOND_CODES_NUMERO_JOUR=8
 
 # Rappel J-3 de fin d'essai par WhatsApp (server/src/rappelFinEssai.js) : un message par ferme, 3 jours avant la fin.
 # FERMÉ tant que RAPPEL_FIN_ESSAI_ACTIF n'est pas « true » ET qu'un modèle Meta (catégorie Utilitaire, un paramètre :
