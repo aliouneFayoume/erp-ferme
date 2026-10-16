@@ -129,14 +129,21 @@ describe('pages marketing générées', () => {
             }
         });
 
-        test("pas de promesse sur ce qui n'existe pas : quittances, relances avant échéance, bilan chiffré du lot", () => {
+        test("pas de promesse sur ce qui n'existe pas : quittances, relances avant échéance, export PDF", () => {
             const html = accueil();
             expect(html).not.toMatch(/quittance/i);
             expect(html).not.toMatch(/avant échéance/i);
             expect(html).not.toMatch(/alerte avant la rupture/i);
-            // le coût, les ventes et la marge du lot ne sont pas encore calculés : annoncés « bientôt », jamais comme acquis
-            expect(html).toMatch(/Coût, ventes et marge du lot : <span class="etiquette-bientot">bientôt<\/span>/);
             expect(html).toContain('Export PDF / historique complet <span class="etiquette-bientot">bientôt</span>');
+        });
+
+        test("le bilan du lot (marge) existe depuis la migration 36 : annoncé comme acquis, avec ce qu'il demande à l'utilisateur", () => {
+            const html = accueil();
+            // plus de « bientôt » sur le coût, les ventes et la marge du lot
+            expect(html).not.toMatch(/Coût, ventes et marge du lot : <span class="etiquette-bientot">/);
+            expect(html).toContain('soit la marge du lot');
+            // honnête sur le fonctionnement : le prix de l'aliment et les frais se saisissent, le lot se choisit sur chaque vente
+            expect(html).toContain("Vous indiquez le prix de l'aliment et vos frais, et vous choisissez le lot sur chaque vente.");
         });
 
         test("la section Résultats reste un emplacement sans chiffre ni témoignage inventé", () => {
