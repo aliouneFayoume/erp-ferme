@@ -17,7 +17,7 @@
     },
     essai: {
       titre: 'Essayer gratuitement',
-      lede: 'Laissez vos coordonnées : nous ouvrons votre essai gratuit avec vous sur WhatsApp. Sans carte bancaire, sans engagement.',
+      lede: 'Laissez vos coordonnées : nous ouvrons avec vous, sur WhatsApp, votre essai gratuit de 30 jours. Sans carte bancaire, sans engagement.',
       envoi: 'Demander mon essai',
     },
   };

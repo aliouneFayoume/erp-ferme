@@ -89,7 +89,10 @@ describe('pages marketing générées', () => {
 
     // Offre Gratuit / Pro tout inclus (dossier Easystart). Rien d'inventé : seules les fonctions qui existent sont
     // annoncées, les autres sont marquées « bientôt ». L'ancienne grille ne doit plus apparaître nulle part.
-    describe("nouvelle offre : Gratuit / Pro tout inclus", () => {
+    // Décision du propriétaire (2026-10-15) : l'offre gratuite est un ESSAI de 30 jours (puis consultation seule jusqu'au
+    // passage en Pro) ; Pro = les fonctions de la grille, sans « tout inclus » (la version complète reste réservée à la
+    // ferme Massla) ; élevage, paie, logistique, comptabilité : sur demande.
+    describe("offre : essai gratuit 30 jours / Pro", () => {
         const accueil = () => lire('decouvrir.html');
         const noeuds = () =>
             [...accueil().matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].flatMap((b) => {
@@ -100,16 +103,20 @@ describe('pages marketing générées', () => {
         test('titre, sous-titre et deux portes d\'entrée : essai gratuit et démo', () => {
             const html = accueil();
             expect(html).toContain('Sachez exactement ce que chaque lot de poulets <em>vous rapporte.</em>');
-            expect(html).toContain('Essayez gratuitement, sans carte bancaire.');
+            expect(html).toContain('Essayez gratuitement 30 jours, sans carte bancaire.');
             expect(html).toMatch(/data-source="essai"[^>]*>Essayer gratuitement<\/a>/);
             expect(html).toMatch(/data-source="demo"[^>]*>Demander ma démo<\/a>/);
         });
 
-        test('grille : Gratuit à 0, Pro tout inclus à 10 000 FCFA par mois, mise en place offerte, sans carte bancaire', () => {
+        test('grille : essai gratuit 30 jours à 0, Pro à 10 000 FCFA par mois, mise en place offerte, sans carte bancaire', () => {
             const html = accueil();
-            expect(html).toContain('<h3>Gratuit</h3>');
-            expect(html).toContain('<h3>Pro tout inclus</h3>');
+            expect(html).toContain('<h3>Essai gratuit</h3>');
+            expect(html).toContain('pendant 30 jours');
+            expect(html).toContain('<h3>Pro</h3>');
             expect(html).toContain('10&nbsp;000<span class="devise">FCFA</span>');
+            // la version complète est réservée à la ferme Massla : le reste se fait sur demande, jamais promis dans l'offre
+            expect(html).toContain('Élevage, paie, logistique, comptabilité : disponibles sur demande.');
+            expect(html).toContain('vos lots restent consultables');
             expect(html).toContain('Offre de lancement : installation + formation offertes.');
             expect(html).toContain('Sans carte bancaire. Sans engagement.');
             const offres = noeuds().find((n) => n['@type'] === 'SoftwareApplication').offers;
@@ -118,7 +125,7 @@ describe('pages marketing générées', () => {
 
         test("l'ancienne grille et son vocabulaire ont disparu de TOUTES les pages publiques", () => {
             for (const nom of TOUTES) {
-                expect(lire(`${nom}.html`)).not.toMatch(/Socle Essentiel|Pack tout compris|à la carte|modules additionnels|(25|75|85)(\s|&nbsp;)000(\s|&nbsp;)FCFA/);
+                expect(lire(`${nom}.html`)).not.toMatch(/Socle Essentiel|Pack tout compris|à la carte|modules additionnels|tout inclus|(25|75|85)(\s|&nbsp;)000(\s|&nbsp;)FCFA/i);
             }
         });
 
