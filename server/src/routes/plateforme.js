@@ -1,7 +1,7 @@
 const express = require('express');
 const { requireAuth, requireSuperviseurPlateforme, signToken } = require('../auth');
 const { logAudit } = require('../audit');
-const { SOCLE_ESSENTIEL, MODULES_SAAS, PACK_TOUT_COMPRIS, FRAIS_CONFIGURATION_DEFAUT, MODULES_OFFRE, DUREE_ESSAI_JOURS } = require('../modulesSaas');
+const { SOCLE_ESSENTIEL, MODULES_SAAS, PACK_TOUT_COMPRIS, FRAIS_CONFIGURATION_DEFAUT, MODULES_OFFRE, DUREE_ESSAI_JOURS, planEffectif, joursRestantsEssai } = require('../modulesSaas');
 const { creerNouvelleFerme } = require('../creerFerme');
 const { envoyerMessageWhatsapp } = require('../whatsapp');
 const { envoyerEmailRappelSaas } = require('../email');
@@ -155,7 +155,7 @@ module.exports = function plateformeRoutes(pool) {
 
             const [orgsRes, abosRes, recentRes, connexionsRes] = await Promise.all([
                 req.db.query(`SELECT id, nom, cree_le FROM organisations WHERE deleted_at IS NULL AND est_plateforme = FALSE`),
-                req.db.query(`SELECT tenant_id, actif, montant_mensuel FROM organisation_abonnement_saas`),
+                req.db.query(`SELECT tenant_id, actif, montant_mensuel, plan, essai_debut_le, essai_fin_le, source_inscription, converti_pro_le FROM organisation_abonnement_saas`),
                 req.db.query(
                     `SELECT tenant_id, table_name, action, utilisateur_id, cree_le FROM audit_logs
                      WHERE tenant_id IS NOT NULL AND impersonation = FALSE AND cree_le >= $1
@@ -196,11 +196,30 @@ module.exports = function plateformeRoutes(pool) {
                 else statut = 'inactive';
 
                 const abo = aboParOrg.get(o.id);
+                // Suivi de l'essai gratuit (Easystart) : inscription (essai_debut_le), porte d'entrée (source), ACTIVATION = au moins
+                // un jour de saisie sur 30 jours (la démo ne compte pas : elle n'est jamais journalisée comme saisie), et conversion
+                // en Pro (converti_pro_le). null pour une ferme sur mesure.
+                const joursSaisie30 = new Set(saisies.map((e) => new Date(e.cree_le).toISOString().slice(0, 10))).size;
+                const essai = abo && abo.plan
+                    ? {
+                          plan: abo.plan,
+                          offre_effective: planEffectif(abo, maintenant),
+                          source: abo.source_inscription || null,
+                          inscrit_le: abo.essai_debut_le || null,
+                          fin_essai_le: abo.essai_fin_le || null,
+                          jours_restants: joursRestantsEssai(abo, maintenant),
+                          jours_saisie_30j: joursSaisie30,
+                          active: joursSaisie30 >= 1,
+                          converti_pro_le: abo.converti_pro_le || null,
+                      }
+                    : null;
                 return {
                     id: o.id,
                     nom: o.nom,
                     cree_le: o.cree_le,
                     abonnement: abo ? { actif: abo.actif, montant_mensuel: abo.montant_mensuel } : null,
+                    essai,
+                    connectee: !!derniere,
                     statut,
                     derniere_connexion: derniere,
                     connexions_7j: connexions7.length,
@@ -217,7 +236,18 @@ module.exports = function plateformeRoutes(pool) {
             });
             fermes.sort((a, b) => ORDRE_STATUT[a.statut] - ORDRE_STATUT[b.statut] || new Date(b.cree_le) - new Date(a.cree_le));
 
-            res.json({ genere_le: maintenant.toISOString(), fermes });
+            // Entonnoir de l'essai, par porte d'entrée : inscrits → connectés → activés (≥ 1 jour de saisie) → passés en Pro.
+            const entonnoir = {};
+            for (const f of fermes.filter((x) => x.essai)) {
+                const cle = f.essai.source || 'inconnue';
+                const e = (entonnoir[cle] = entonnoir[cle] || { inscrits: 0, connectes: 0, actives: 0, convertis: 0 });
+                e.inscrits += 1;
+                if (f.connectee) e.connectes += 1;
+                if (f.essai.active) e.actives += 1;
+                if (f.essai.converti_pro_le) e.convertis += 1;
+            }
+
+            res.json({ genere_le: maintenant.toISOString(), fermes, entonnoir });
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: "Erreur lors du calcul de l'activité des fermes." });

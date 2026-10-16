@@ -55,6 +55,7 @@ window.Views.plateforme = {
       <div class="panel">
         <h2>Activité des fermes</h2>
         <p class="desc">Qui utilise réellement l'application ? Les fermes à relancer sont en tête : jamais connectées, inactives depuis plus de 7 jours, ou connectées sans rien saisir. Seuls des compteurs sont affichés, jamais le contenu des saisies ; vos propres connexions de support ne comptent pas.</p>
+        ${renderEntonnoirEssai(activite.entonnoir)}
         <div style="overflow-x: auto;">
           <table>
             <thead><tr><th>Ferme</th><th>Statut</th><th>Dernière connexion</th><th>7 derniers jours</th><th>Saisies (30 j)</th><th>Principales saisies (7 j)</th></tr></thead>
@@ -212,6 +213,32 @@ function activiteIlYa(dateStr) {
   return `il y a ${jours} j`;
 }
 
+const SOURCES_ESSAI = { essai: '« Essayer gratuitement »', demo: '« Demander ma démo »', inconnue: 'une porte inconnue' };
+
+// Entonnoir de l'essai gratuit par porte d'entrée : inscrits → connectés → activés (au moins un jour de saisie, démo exclue) → passés en Pro.
+function renderEntonnoirEssai(entonnoir) {
+  const lignes = Object.entries(entonnoir || {});
+  if (lignes.length === 0) return '';
+  return `<div class="pill-row" style="margin-bottom:12px">${lignes
+    .map(
+      ([source, e]) =>
+        `<span class="pill">Essais via ${SOURCES_ESSAI[source] || esc(source)} : <b>${e.inscrits}</b> inscrit(s) · <b>${e.connectes}</b> connecté(s) · <b>${e.actives}</b> activé(s) · <b>${e.convertis}</b> en Pro</span>`
+    )
+    .join('')}</div>`;
+}
+
+function renderBadgeEssai(essai) {
+  if (!essai) return '';
+  const etat =
+    essai.plan === 'PRO'
+      ? '<span class="badge ok">Pro</span>'
+      : essai.offre_effective === 'EXPIRE'
+      ? '<span class="badge danger">Essai terminé</span>'
+      : `<span class="badge info">Essai · ${essai.jours_restants} j restant(s)</span>`;
+  const active = essai.active ? '<span class="badge ok">activé</span>' : '<span class="badge warn">pas encore de saisie</span>';
+  return `<div style="margin-top:4px">${etat} ${active}</div>`;
+}
+
 function renderLignesActivite(fermes) {
   if (fermes.length === 0) return '<tr><td colspan="6" class="empty">Aucune ferme cliente pour le moment.</td></tr>';
   return fermes
@@ -222,11 +249,12 @@ function renderLignesActivite(fermes) {
           ? `<span class="badge ok">${Number(f.abonnement.montant_mensuel) === 0 ? 'Gratuit (partenaire)' : `Tarif : ${fmt(f.abonnement.montant_mensuel)} FCFA/mois`}</span>`
           : '<span class="badge danger">Abonnement suspendu</span>'
         : '<span class="badge muted">Sans abonnement</span>';
+      const essai = renderBadgeEssai(f.essai);
       const principales = f.principales_saisies_7j.length
         ? f.principales_saisies_7j.map((t) => `${esc(ACTIVITE_TABLES[t.table] || t.table)} ${t.n}`).join(' · ')
         : '<span class="desc">—</span>';
       return `<tr>
-        <td>${esc(f.nom)}<div class="desc" style="margin:2px 0 4px">Créée ${esc(activiteIlYa(f.cree_le))}</div>${abo}</td>
+        <td>${esc(f.nom)}<div class="desc" style="margin:2px 0 4px">Créée ${esc(activiteIlYa(f.cree_le))}</div>${abo}${essai}</td>
         <td><span class="badge ${st.badge}">${st.label}</span></td>
         <td>${f.derniere_connexion ? `${esc(activiteIlYa(f.derniere_connexion))}<div class="desc" style="margin:2px 0 0">${esc(fmtDate(f.derniere_connexion))}</div>` : '<span class="desc">—</span>'}</td>
         <td>${f.connexions_7j} connexion(s) · ${f.saisies_7j} saisie(s)<div class="desc" style="margin:2px 0 0">${f.jours_actifs_7j} jour(s) actif(s) · ${f.utilisateurs_connectes_7j} utilisateur(s)</div></td>
