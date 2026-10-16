@@ -66,6 +66,34 @@ describe('bilan par lot — ce que chaque lot rapporte', () => {
         expect(res.body.marge_par_sujet).toBe(-625);
         expect(res.body.complet).toBe(true);
         expect(res.body.manques).toEqual([]);
+
+        // Rien n'est encore payé : la facture est créée avec la commande, 200 000 restent dus
+        expect(res.body.ventes).toMatchObject({ encaisse: 0, reste_a_encaisser: 200000 });
+        expect(res.body.tresorerie).toBe(-225000);
+
+        // Paiement partiel de 120 000 FCFA (60 %) : l'encaissé suit, la marge (ventes facturées) ne bouge pas
+        await pool.query(`UPDATE factures SET montant_restant = 80000, statut = 'PAYEE_PARTIEL' WHERE commande_id = $1`, [commande.body.id]);
+        const apres = (await bilan(token, lot.id)).body;
+        expect(apres.ventes).toMatchObject({ total: 200000, encaisse: 120000, reste_a_encaisser: 80000 });
+        expect(apres.marge).toBe(-25000);
+        expect(apres.tresorerie).toBe(-105000);
+    });
+
+    test("une commande qui mêle deux lots répartit l'encaissé au prorata de la facture, ligne par ligne", async () => {
+        const token = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantId });
+        const lotA = await creerLot({ code: 'A-1' });
+        const lotB = await creerLot({ code: 'B-1' });
+        const client = await creerClient(pool, { tenant_id: tenantId });
+        const produit = await creerProduitAvecStock(pool, { tenant_id: tenantId, secteur_id: secteurId, unite_mesure: 'TETE', prix_unitaire_b2c: 1000, quantite_disponible: 100 });
+        const commande = await request(app)
+            .post('/api/commandes')
+            .set('Authorization', `Bearer ${token}`)
+            .send({ client_id: client.id, lignes: [{ produit_id: produit.id, quantite: 30, lot_id: lotA.id }, { produit_id: produit.id, quantite: 10, lot_id: lotB.id }] });
+        expect(commande.status).toBe(201); // total 40 000
+        await pool.query(`UPDATE factures SET montant_restant = 10000 WHERE commande_id = $1`, [commande.body.id]); // 75 % payé
+
+        expect((await bilan(token, lotA.id)).body.ventes).toMatchObject({ total: 30000, encaisse: 22500 });
+        expect((await bilan(token, lotB.id)).body.ventes).toMatchObject({ total: 10000, encaisse: 7500 });
     });
 
     test("un bilan incomplet le dit : prix d'aliment, poussins et ventes manquants ne sont pas comptés comme zéro en silence", async () => {
@@ -156,6 +184,9 @@ describe('bilan par lot — ce que chaque lot rapporte', () => {
         expect(res.body.marge).toBeGreaterThan(0);
         expect(res.body.marge_pct).toBeGreaterThan(0);
         expect(res.body.marge_pct).toBeLessThan(25); // une marge d'élevage réaliste, pas flatteuse
+        // les ventes de la démo n'ont pas de facture (pour ne pas encombrer Finance) : réputées payées
+        expect(res.body.ventes.encaisse).toBe(res.body.ventes.total);
+        expect(res.body.ventes.reste_a_encaisser).toBe(0);
 
         // La démo se supprime d'un coup : lot, ventes, client et produit « démo », sans toucher au reste.
         const essaiApp = buildApp(pool, ['essai', 'production']);

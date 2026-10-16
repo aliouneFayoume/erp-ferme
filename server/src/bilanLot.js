@@ -1,5 +1,6 @@
 // Bilan par lot (Easystart phase 4, migration-36) : ce que chaque lot rapporte.
 //   marge = ventes rattachées au lot − (aliment + autres coûts)
+//   encaissé = la part de ces ventes déjà payée (d'après le reste à payer de la facture de chaque commande)
 // - ventes : lignes de commande dont lot_id est ce lot (commandes non annulées, non supprimées) ;
 // - aliment : kg consommés (somme des relevés journaliers) × prix moyen du kg saisi sur le lot ;
 // - autres coûts : saisis par lot (couts_lot) — poussins, vaccins/vétérinaire, main-d'œuvre, transport, autre.
@@ -26,15 +27,28 @@ async function calculerBilanLot(db, lot) {
     const totalAutres = couts.rows.reduce((s, c) => s + nombre(c.montant), 0);
 
     const ventesRes = await db.query(
-        `SELECT lc.sous_total, lc.quantite, p.unite_mesure
+        `SELECT lc.sous_total, lc.quantite, p.unite_mesure, c.est_demo, c.montant_total, f.montant_restant
          FROM lignes_commande lc
          JOIN commandes c ON c.id = lc.commande_id
          JOIN produits p ON p.id = lc.produit_id
+         LEFT JOIN factures f ON f.commande_id = c.id
          WHERE lc.lot_id = $1 AND c.tenant_id = $2 AND c.deleted_at IS NULL AND c.statut <> 'ANNULEE'`,
         [lot.id, lot.tenant_id]
     );
     const ventesTotal = ventesRes.rows.reduce((s, l) => s + nombre(l.sous_total), 0);
     const sujetsVendus = ventesRes.rows.filter((l) => l.unite_mesure === 'TETE').reduce((s, l) => s + nombre(l.quantite), 0);
+
+    // Encaissé : une commande peut mêler plusieurs lots, on répartit donc ce qui est déjà payé au prorata de la facture
+    // (1 − reste à payer / total de la commande) appliqué à chaque ligne du lot. Une commande sans facture n'a rien d'encaissé
+    // connu (toute vraie commande en a une, créée avec elle) ; seule exception, les ventes de la ferme démo, réputées payées :
+    // elles n'ont volontairement pas de facture, pour ne pas encombrer l'écran Finance.
+    const encaisse = ventesRes.rows.reduce((s, l) => {
+        const total = nombre(l.montant_total);
+        let taux = 0;
+        if (l.est_demo) taux = 1;
+        else if (l.montant_restant !== null && l.montant_restant !== undefined) taux = total > 0 ? Math.min(1, Math.max(0, 1 - nombre(l.montant_restant) / total)) : 1;
+        return s + nombre(l.sous_total) * taux;
+    }, 0);
 
     const manques = [];
     if (prixKg === null) manques.push('prix_aliment');
@@ -47,9 +61,11 @@ async function calculerBilanLot(db, lot) {
         lot: { id: lot.id, code_lot: lot.code_lot, statut: lot.statut, date_demarrage: lot.date_demarrage, effectif_actuel: nombre(lot.quantite_initiale), est_demo: !!lot.est_demo },
         aliment: { kg: alimentKg, prix_kg: prixKg, cout: coutAliment },
         couts: { lignes: couts.rows, par_categorie: parCategorie, total_autres: totalAutres },
-        ventes: { total: ventesTotal, nb_lignes: ventesRes.rows.length, sujets_vendus: sujetsVendus },
+        ventes: { total: ventesTotal, nb_lignes: ventesRes.rows.length, sujets_vendus: sujetsVendus, encaisse, reste_a_encaisser: ventesTotal - encaisse },
         total_couts: totalCouts,
         marge,
+        // Ce qu'il reste réellement en poche à ce jour : encaissé − coûts (la marge, elle, compte les ventes même impayées).
+        tresorerie: encaisse - totalCouts,
         marge_pct: ventesTotal > 0 ? (marge / ventesTotal) * 100 : null,
         marge_par_sujet: sujetsVendus > 0 ? marge / sujetsVendus : null,
         manques,

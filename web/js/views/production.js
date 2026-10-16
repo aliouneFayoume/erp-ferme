@@ -686,6 +686,11 @@ async function chargerBilanLot(panel, lot) {
             </tr>
           </tbody>
         </table>
+        ${
+          b.ventes.nb_lignes
+            ? `<p class="desc" style="margin:10px 0 0">Encaissé à ce jour : <b>${fmt(b.ventes.encaisse)} FCFA</b>${b.ventes.reste_a_encaisser > 0.5 ? ` · reste à encaisser : <b>${fmt(b.ventes.reste_a_encaisser)} FCFA</b>` : ' (tout est payé)'} · en poche après coûts : <b style="color:var(--${b.tresorerie >= 0 ? 'success' : 'danger'})">${b.tresorerie >= 0 ? '+' : '−'}${fmt(Math.abs(b.tresorerie))} FCFA</b></p>`
+            : ''
+        }
 
         <details style="margin-top:12px">
           <summary>Saisir les prix et les coûts</summary>
