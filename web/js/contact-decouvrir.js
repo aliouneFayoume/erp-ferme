@@ -85,9 +85,26 @@
 
   // Tous les boutons "démonstration" (barre du haut, en-tête, bas de page) ouvrent ce formulaire ;
   // le href="#contact" reste un repli si le JavaScript n'est pas chargé.
+  //
+  // Essai gratuit autonome : quand le serveur annonce l'essai ouvert (/api/essai/disponible : interrupteur ESSAI_AUTONOME_ACTIF
+  // + modèle WhatsApp d'authentification approuvé), « Essayer gratuitement » mène à l'inscription par téléphone au lieu
+  // d'ouvrir ce formulaire. Tant qu'il est fermé (ou si la requête échoue), rien ne change. « Demander ma démo » garde toujours
+  // le formulaire : c'est une demande de démonstration avec une personne.
+  let essaiOuvert = false;
+  fetch('/api/essai/disponible')
+    .then((r) => r.json())
+    .then((d) => {
+      essaiOuvert = !!(d && d.disponible);
+    })
+    .catch(() => {});
+
   document.querySelectorAll('[data-open-contact]').forEach((el) => {
     el.addEventListener('click', (e) => {
       e.preventDefault();
+      if (essaiOuvert && el.dataset.source === 'essai') {
+        window.location.href = '/essai.html?source=essai';
+        return;
+      }
       ouvrir(el.dataset.source);
     });
   });
