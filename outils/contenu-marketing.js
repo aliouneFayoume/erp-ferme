@@ -5,9 +5,9 @@
 const SITE = 'https://massla.sn';
 
 const PRIX_FAQ = (secteur) =>
-  `Massla est gratuit pour suivre un lot (ou un bassin, ou une parcelle)${secteur}. ` +
-  `L'offre Pro tout inclus coûte 10 000 FCFA par mois : lots illimités, relances WhatsApp automatiques, comptes pour votre équipe et support prioritaire par WhatsApp. ` +
-  `Offre de lancement : installation et formation offertes. Sans carte bancaire, sans engagement.`;
+  `L'essai est gratuit pendant 30 jours pour suivre un lot (ou un bassin, ou une parcelle)${secteur}, sans carte bancaire. ` +
+  `Ensuite l'offre Pro coûte 10 000 FCFA par mois : lots illimités, relances WhatsApp automatiques, comptes pour votre équipe et support prioritaire par WhatsApp. ` +
+  `Offre de lancement : installation et formation offertes.`;
 
 const HORS_LIGNE = (lieu) => ({
   q: `Peut-on saisir les relevés sans réseau ${lieu} ?`,
@@ -130,7 +130,7 @@ const SECTEURS = [
       { icone: 'modules', titre: 'Le troupeau en un coup d\'œil', texte: "Retrouvez tous vos animaux, un par un, avec leur statut et leur historique." },
       { icone: 'portefeuille', titre: 'Ventes et sorties', texte: "La vente se fait dans les écrans Clients, Commandes et Finance, avec un produit « tête » rattaché à Bovins, Ovins ou Caprins : facture, paiement mobile et chiffre d'affaires par espèce. Sur la fiche de l'animal, vous passez ensuite le statut à « Vendu » (ou Abattu, Mort) : la fiche garde la date de sortie. Les deux gestes restent distincts." },
     ],
-    note: "Le suivi d'élevage est disponible sur demande avec l'offre Pro tout inclus (10 000 FCFA par mois).",
+    note: "Le suivi d'élevage n'est pas dans l'offre Pro : il est proposé sur demande.",
     etapes: [
       { titre: 'Vous créez la fiche', texte: "Vous enregistrez l'animal avec son identifiant, son espèce et sa date de naissance." },
       { titre: 'Vous notez les événements', texte: 'Pesée, vaccination, traitement, saillie : une saisie rapide, avec la date.' },
@@ -140,7 +140,7 @@ const SECTEURS = [
       { q: 'Quels animaux peut-on suivre ?', a: "Les bovins, les ovins et les caprins, un par un, avec leur identifiant (boucle)." },
       { q: 'Comment Massla calcule-t-il la date de mise-bas ?', a: "À partir de la date de saillie, avec une durée de gestation moyenne : 283 jours pour les bovins, 150 jours pour les ovins et les caprins. Vous pouvez corriger la date ensuite." },
       { q: "Peut-on suivre l'historique de santé d'un animal ?", a: "Oui. Les vaccinations, les traitements, les pesées et les observations sont enregistrés avec leur date dans la fiche de chaque animal." },
-      { q: "Faut-il un abonnement séparé pour l'élevage ?", a: "Non. Le suivi d'élevage est disponible sur demande avec l'offre Pro tout inclus, à 10 000 FCFA par mois, sans rien d'autre à ajouter." },
+      { q: "Le suivi d'élevage est-il dans l'offre Pro ?", a: "Non. Le suivi d'élevage est proposé sur demande, en dehors de l'offre Pro. Écrivez-nous sur WhatsApp pour en parler : nous regardons ensemble ce qui convient à votre troupeau." },
       {
         q: 'Peut-on saisir sans réseau dans les enclos ?',
         a: "Oui, pour les pesées, vaccinations, traitements et observations : le relevé est gardé sur le téléphone et envoyé automatiquement dès que le réseau revient, sans être compté deux fois. Les fiches déjà consultées restent lisibles. L'enregistrement d'un nouvel animal, d'une saillie ou d'une mise-bas demande en revanche une connexion.",
