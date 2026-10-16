@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+const { calculerBilanLot, CATEGORIES_COUT } = require('../bilanLot');
 
 // Un utilisateur ne doit jamais accéder à un lot d'une autre organisation, quel que soit son rôle ;
 // un chef de prod est en plus restreint à son propre secteur au sein de son organisation.
@@ -569,6 +570,86 @@ module.exports = function productionRoutes(pool) {
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: 'Erreur lors du calcul du FCR.' });
+        }
+    });
+
+    // ---- Bilan par lot (migration-36) : ventes rattachées, aliment valorisé, autres coûts, marge --------------------------
+    // Réservé à l'administrateur et au comptable : ce sont des montants (ventes, coûts, marge), pas des relevés de terrain.
+    async function chargerLot(req, res) {
+        const lot = await req.db.query(`SELECT * FROM lots_production WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, [req.params.id, req.user.tenant_id]);
+        if (lot.rows.length === 0) {
+            res.status(404).json({ erreur: 'Lot introuvable.' });
+            return null;
+        }
+        return lot.rows[0];
+    }
+
+    router.get('/lots/:id/bilan', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
+        try {
+            const lot = await chargerLot(req, res);
+            if (!lot) return;
+            res.json(await calculerBilanLot(req.db, lot));
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors du calcul du bilan du lot.' });
+        }
+    });
+
+    router.put('/lots/:id/prix-aliment', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
+        const brut = req.body.prix_aliment_kg;
+        const efface = brut === null || brut === '' || brut === undefined;
+        const prix = efface ? null : Number(brut);
+        if (!efface && (!Number.isFinite(prix) || prix < 0 || prix > 1000000)) {
+            return res.status(400).json({ erreur: "Le prix du kg d'aliment doit être un nombre positif." });
+        }
+        try {
+            const lot = await chargerLot(req, res);
+            if (!lot) return;
+            await req.db.query(`UPDATE lots_production SET prix_aliment_kg = $1 WHERE id = $2 AND tenant_id = $3`, [prix, lot.id, req.user.tenant_id]);
+            await logAudit(req.db, { req, table: 'lots_production', rowId: lot.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { prix_aliment_kg: prix } });
+            res.json({ prix_aliment_kg: prix });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: "Erreur lors de l'enregistrement du prix de l'aliment." });
+        }
+    });
+
+    router.post('/lots/:id/couts', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
+        const { categorie } = req.body;
+        const montant = Number(req.body.montant);
+        const libelle = typeof req.body.libelle === 'string' ? req.body.libelle.trim() : '';
+        const dateCout = typeof req.body.date_cout === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.body.date_cout) ? req.body.date_cout : new Date().toISOString().slice(0, 10);
+        if (!CATEGORIES_COUT.includes(categorie)) return res.status(400).json({ erreur: 'Catégorie de coût invalide.' });
+        if (!Number.isFinite(montant) || montant < 0 || montant > 1000000000000) return res.status(400).json({ erreur: 'Le montant doit être un nombre positif.' });
+        if (libelle.length > 150 || /[<>]/.test(libelle)) return res.status(400).json({ erreur: 'Libellé invalide (150 caractères max, sans < ni >).' });
+        try {
+            const lot = await chargerLot(req, res);
+            if (!lot) return;
+            const result = await req.db.query(
+                `INSERT INTO couts_lot (tenant_id, lot_id, categorie, libelle, montant, date_cout, cree_par)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, categorie, libelle, montant, date_cout`,
+                [req.user.tenant_id, lot.id, categorie, libelle || null, montant, dateCout, req.user.id]
+            );
+            await logAudit(req.db, { req, table: 'couts_lot', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { lot_id: lot.id, categorie, montant } });
+            res.status(201).json(result.rows[0]);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: "Erreur lors de l'enregistrement du coût." });
+        }
+    });
+
+    router.delete('/lots/:id/couts/:coutId', requireAuth(pool), checkRole(['comptable']), async (req, res) => {
+        try {
+            const r = await req.db.query(
+                `UPDATE couts_lot SET deleted_at = now() WHERE id = $1 AND lot_id = $2 AND tenant_id = $3 AND deleted_at IS NULL RETURNING id`,
+                [req.params.coutId, req.params.id, req.user.tenant_id]
+            );
+            if (r.rows.length === 0) return res.status(404).json({ erreur: 'Coût introuvable.' });
+            await logAudit(req.db, { req, table: 'couts_lot', rowId: r.rows[0].id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id });
+            res.status(204).end();
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la suppression du coût.' });
         }
     });
 

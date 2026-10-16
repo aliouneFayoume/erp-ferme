@@ -205,17 +205,22 @@ module.exports = function essaiRoutes(pool) {
     });
 
     /**
-     * Supprime la ferme démo (« supprimable en un clic »). Soft delete du seul lot marqué est_demo : ses relevés disparaissent
-     * des écrans avec lui (ils ne s'affichent que via un lot non supprimé), les données réelles de la ferme ne sont jamais touchées.
+     * Supprime la ferme démo (« supprimable en un clic »). Soft delete du lot marqué est_demo, de ses ventes (commandes), du client
+     * et du produit « démo » : ses relevés et ses coûts disparaissent des écrans avec le lot. Seules les lignes marquées est_demo
+     * sont touchées — les données réelles de la ferme ne le sont jamais.
      */
     router.delete('/demo', requireAuth(pool), checkRole(['admin']), async (req, res) => {
         try {
+            const tenantId = req.user.tenant_id;
             const r = await req.db.query(
                 `UPDATE lots_production SET deleted_at = now() WHERE tenant_id = $1 AND est_demo = TRUE AND deleted_at IS NULL RETURNING id`,
-                [req.user.tenant_id]
+                [tenantId]
             );
+            await req.db.query(`UPDATE commandes SET deleted_at = now() WHERE tenant_id = $1 AND est_demo = TRUE AND deleted_at IS NULL`, [tenantId]);
+            await req.db.query(`UPDATE clients SET deleted_at = now() WHERE tenant_id = $1 AND est_demo = TRUE AND deleted_at IS NULL`, [tenantId]);
+            await req.db.query(`UPDATE produits SET deleted_at = now() WHERE tenant_id = $1 AND est_demo = TRUE AND deleted_at IS NULL`, [tenantId]);
             for (const ligne of r.rows) {
-                await logAudit(req.db, { req, table: 'lots_production', rowId: ligne.id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id, details: { demo: true } });
+                await logAudit(req.db, { req, table: 'lots_production', rowId: ligne.id, action: 'DELETE', userId: req.user.id, tenantId, details: { demo: true } });
             }
             res.json({ supprimes: r.rows.length });
         } catch (err) {

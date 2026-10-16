@@ -26,17 +26,21 @@ function consommationGParPoulet(jour) {
 /**
  * Remplit la « Ferme démo — 2 000 poulets, lot n°12 » : un lot TERMINÉ (il n'entre donc ni dans la limite « 1 lot en cours »
  * de l'essai, ni dans les statistiques des lots actifs) avec 42 jours de relevés (mortalité, aliment, pesées). Marqué
- * est_demo pour s'afficher « Démo » et se supprimer en un clic. Ne crée volontairement ni ventes ni bilan : ils n'existent pas
- * encore dans l'application (voir le dossier Easystart, phase 4) — on ne montre pas une fonction qui n'existe pas.
+ * est_demo pour s'afficher « Démo » et se supprimer en un clic. Porte aussi son BILAN (migration-36) : prix de l'aliment, coûts
+ * (poussins, vaccins, main-d'œuvre) et deux ventes de poulets rattachées au lot — via un client et un produit « (démo) », eux
+ * aussi marqués est_demo et supprimés avec le lot — pour qu'un nouvel utilisateur voie une marge complète en 60 secondes.
  * Doit tourner sur la connexion de la transaction de création, contexte tenant déjà posé (RLS).
  */
+const PRIX_ALIMENT_KG_DEMO = 520;
+const PRIX_POUSSIN_DEMO = 650;
+
 async function semerFermeDemo(client, { tenantId, secteurId, utilisateurId, maintenant = new Date() }) {
     const effectifInitial = 2000;
     const debutIlYa = DUREE_LOT_DEMO_JOURS + 7; // lot terminé depuis une semaine
     const lotRes = await client.query(
-        `INSERT INTO lots_production (tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, statut, est_demo, cree_par)
-         VALUES ($1, $2, $3, $4, $5, 'TERMINE', TRUE, $6) RETURNING id`,
-        [tenantId, secteurId, 'Lot n°12 (démo)', effectifInitial, dateIlYa(debutIlYa, maintenant), utilisateurId]
+        `INSERT INTO lots_production (tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, statut, est_demo, prix_aliment_kg, cree_par)
+         VALUES ($1, $2, $3, $4, $5, 'TERMINE', TRUE, $6, $7) RETURNING id`,
+        [tenantId, secteurId, 'Lot n°12 (démo)', effectifInitial, dateIlYa(debutIlYa, maintenant), PRIX_ALIMENT_KG_DEMO, utilisateurId]
     );
     const lotId = lotRes.rows[0].id;
 
@@ -49,6 +53,48 @@ async function semerFermeDemo(client, { tenantId, secteurId, utilisateurId, main
             `INSERT INTO releves_journaliers (lot_id, utilisateur_id, date_releve, mortalite, conso_aliment_kg, poids_moyen_g, est_synchronise)
              VALUES ($1, $2, $3, $4, $5, $6, TRUE)`,
             [lotId, utilisateurId, dateIlYa(debutIlYa - (jour - 1), maintenant), mortalite, alimentKg, POIDS_PESEES_G[jour] || 0]
+        );
+    }
+
+    // Coûts du lot (hors aliment, calculé depuis les relevés) : poussins, vaccins, un coup de main.
+    const coutsDemo = [
+        ['Poussins', `${effectifInitial} poussins à ${PRIX_POUSSIN_DEMO} FCFA`, effectifInitial * PRIX_POUSSIN_DEMO, debutIlYa],
+        ['Vétérinaire', 'Vaccins et traitements', 85000, debutIlYa - 10],
+        ["Main d'œuvre", 'Aide ponctuelle', 150000, debutIlYa - 25],
+    ];
+    for (const [categorie, libelle, montant, ilYa] of coutsDemo) {
+        await client.query(
+            `INSERT INTO couts_lot (tenant_id, lot_id, categorie, libelle, montant, date_cout, cree_par) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [tenantId, lotId, categorie, libelle, montant, dateIlYa(ilYa, maintenant), utilisateurId]
+        );
+    }
+
+    // Ventes : un client et un produit « (démo) » (téléphone factice, unique par ferme), puis deux commandes livrées dont les lignes
+    // portent le lot — c'est ce rattachement qui alimente le bilan. Marqués est_demo : supprimés avec le lot (routes/essai.js).
+    const clientRes = await client.query(
+        `INSERT INTO clients (tenant_id, nom, type_client, telephone, est_demo) VALUES ($1, 'Client démo', 'B2C', $2, TRUE) RETURNING id`,
+        [tenantId, `DEMO-${tenantId}`]
+    );
+    const produitRes = await client.query(
+        `INSERT INTO produits (tenant_id, secteur_id, nom, unite_mesure, prix_unitaire_b2b, prix_unitaire_b2c, est_demo)
+         VALUES ($1, $2, 'Poulet de chair (démo)', 'TETE', 3300, 3300, TRUE) RETURNING id`,
+        [tenantId, secteurId]
+    );
+    await client.query(`INSERT INTO stocks (produit_id, quantite_disponible) VALUES ($1, 0)`, [produitRes.rows[0].id]);
+    const ventesDemo = [
+        ['CMD-DEMO-1', 1000, 3300, 6],
+        ['CMD-DEMO-2', 920, 3400, 3],
+    ];
+    for (const [numero, quantite, prix, ilYa] of ventesDemo) {
+        const total = quantite * prix;
+        const cmd = await client.query(
+            `INSERT INTO commandes (tenant_id, numero_commande, client_id, statut, montant_total, est_demo, cree_le)
+             VALUES ($1, $2, $3, 'LIVREE', $4, TRUE, $5) RETURNING id`,
+            [tenantId, numero, clientRes.rows[0].id, total, dateIlYa(ilYa, maintenant)]
+        );
+        await client.query(
+            `INSERT INTO lignes_commande (commande_id, produit_id, quantite, prix_unitaire_applique, sous_total, lot_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [cmd.rows[0].id, produitRes.rows[0].id, quantite, prix, total, lotId]
         );
     }
     return lotId;

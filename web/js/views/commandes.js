@@ -2,11 +2,17 @@ window.Views = window.Views || {};
 
 window.Views.commandes = {
   async render(container) {
-    const [commandes, clients, produits] = await Promise.all([
+    const [commandes, clients, produits, tousLots] = await Promise.all([
       Api.get('/commandes'),
       Api.get('/clients'),
       Api.get('/catalogue/produits'),
+      // Lots avicoles proposés pour rattacher une vente (bilan par lot) — facultatif : une erreur ne bloque jamais la commande.
+      Api.get('/production/lots').catch(() => []),
     ]);
+    const lotsVendables = tousLots.filter((l) => l.secteur_nom === 'Avicole');
+    const lotOptions = `<option value="">Lot : aucun</option>${lotsVendables
+      .map((l) => `<option value="${l.id}">${esc(l.code_lot)} (${esc(({ EN_COURS: 'en cours', ABATTAGE: 'abattage', TERMINE: 'terminé', PERDU: 'perdu' })[l.statut] || l.statut)})</option>`)
+      .join('')}`;
 
     container.innerHTML = `
       <div class="panel">
@@ -64,10 +70,12 @@ window.Views.commandes = {
       const row = el(`
         <div class="ligne-row">
           <select class="ligne-produit">${produitOptions}</select>
+          ${lotsVendables.length ? `<select class="ligne-lot" title="D'où viennent ces sujets ? Alimente le bilan du lot.">${lotOptions}</select>` : ''}
           <input type="number" class="ligne-qte" min="1" value="1" />
           <button type="button" class="secondary btn-remove-ligne">✕</button>
         </div>
       `);
+      if (lotsVendables.length) row.style.gridTemplateColumns = '2fr 1.3fr 1fr auto';
       row.querySelector('.btn-remove-ligne').addEventListener('click', () => {
         row.remove();
         updateTotal();
@@ -109,6 +117,7 @@ window.Views.commandes = {
       const client_id = Number(container.querySelector('#select-client').value);
       const lignes = [...builder.querySelectorAll('.ligne-row')].map((row) => ({
         produit_id: Number(row.querySelector('.ligne-produit').value),
+        lot_id: row.querySelector('.ligne-lot')?.value ? Number(row.querySelector('.ligne-lot').value) : undefined,
         quantite: Number(row.querySelector('.ligne-qte').value),
       }));
       try {

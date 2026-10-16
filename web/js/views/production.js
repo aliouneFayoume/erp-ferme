@@ -452,6 +452,8 @@ async function openRelevePanel(container, lot) {
         : ''
     }
 
+    <div id="bilan-lot" style="margin-top:16px"></div>
+
     ${
       lot.statut && lot.statut !== 'EN_COURS'
         ? `<p class="desc" style="margin-top:16px">Ce lot est clôturé (${esc(LOT_STATUT_LABEL[lot.statut] || lot.statut)}) : aucun nouveau relevé ne peut être ajouté.</p>`
@@ -516,6 +518,7 @@ async function openRelevePanel(container, lot) {
   `;
 
   panel.querySelector('#close-releve').addEventListener('click', () => panel.classList.add('hidden'));
+  chargerBilanLot(panel, lot);
 
   const formReleve = panel.querySelector('#form-releve');
   if (!formReleve) return;
@@ -621,3 +624,124 @@ async function updateOfflineBanner(container, rafraichir) {
 
 // Pas de listener 'online' local ici : app.js synchronise déjà globalement la file partagée
 // (OfflineQueue) à la reconnexion et périodiquement, quelle que soit la vue affichée.
+
+// ---- Bilan du lot (migration-36) : ce que ce lot rapporte ------------------------------------------------------------------
+// Ventes rattachées au lot (choisies sur la ligne de commande) − aliment (kg des relevés × prix du kg saisi ici) − autres coûts
+// saisis ici. Visible de l'administrateur et du comptable seulement (montants). Pour l'instant réservé aux lots Avicole, dont la
+// logique (poussins, aliment, sujets vendus) est celle du bilan.
+const CATEGORIES_COUT_LOT = ['Poussins', 'Vétérinaire', "Main d'œuvre", 'Transport', 'Autre'];
+const MANQUES_LIBELLES = {
+  prix_aliment: "le prix du kg d'aliment",
+  poussins: "le coût d'achat des poussins",
+  ventes: "aucune vente rattachée à ce lot (choisissez le lot sur la ligne de commande)",
+};
+
+function ligneBilan(libelle, montant, { signe = '', fort = false, note = '' } = {}) {
+  const valeur = montant === null ? '<span class="desc">à renseigner</span>' : `${signe}${fmt(Math.abs(montant))} FCFA`;
+  return `<tr${fort ? ' style="font-weight:700"' : ''}><td>${libelle}${note ? ` <span class="desc">${note}</span>` : ''}</td><td class="num">${valeur}</td></tr>`;
+}
+
+async function chargerBilanLot(panel, lot) {
+  const role = Api.getUser()?.role;
+  const zone = panel.querySelector('#bilan-lot');
+  if (!zone || lot.secteur_nom !== 'Avicole' || !['admin', 'comptable'].includes(role)) return;
+
+  async function afficher() {
+    let b;
+    try {
+      b = await Api.get(`/production/lots/${lot.id}/bilan`);
+    } catch (err) {
+      zone.innerHTML = `<p class="desc">Bilan indisponible : ${esc(err.message)}</p>`;
+      return;
+    }
+    const lignesCouts = b.couts.lignes
+      .map(
+        (c) => `<tr>
+          <td>${esc(c.categorie)}${c.libelle ? ` — ${esc(c.libelle)}` : ''} <span class="desc">${fmtDate(c.date_cout)}</span></td>
+          <td class="num">${fmt(c.montant)} FCFA</td>
+          <td><button class="secondary btn-supprimer-cout" data-cout="${c.id}" title="Supprimer ce coût">×</button></td>
+        </tr>`
+      )
+      .join('');
+    const margePositive = b.marge >= 0;
+    zone.innerHTML = `
+      <div class="panel" style="margin-bottom:0">
+        <div class="panel-row"><h2>Bilan du lot</h2>${b.lot.est_demo ? '<span class="badge info">Démo</span>' : ''}</div>
+        ${
+          b.complet
+            ? ''
+            : `<p class="desc" style="color:var(--warn)">Bilan incomplet — il manque : ${b.manques.map((m) => MANQUES_LIBELLES[m]).join(' ; ')}. La marge ci-dessous est provisoire.</p>`
+        }
+        <table>
+          <tbody>
+            ${ligneBilan('Ventes rattachées au lot', b.ventes.total, { fort: true, note: b.ventes.nb_lignes ? `${fmt(b.ventes.sujets_vendus)} sujets vendus · ${b.ventes.nb_lignes} ligne(s)` : '' })}
+            ${ligneBilan('Aliment', b.aliment.cout, { signe: '− ', note: `${fmt(b.aliment.kg)} kg${b.aliment.prix_kg !== null ? ` × ${fmt(b.aliment.prix_kg)} FCFA/kg` : ''}` })}
+            ${Object.entries(b.couts.par_categorie)
+              .filter(([, v]) => v > 0)
+              .map(([cat, v]) => ligneBilan(esc(cat), v, { signe: '− ' }))
+              .join('')}
+            <tr style="font-weight:700;border-top:2px solid var(--border)">
+              <td>Marge ${b.marge_pct !== null ? `<span class="desc">(${fmt(b.marge_pct)} % des ventes${b.marge_par_sujet !== null ? ` · ${fmt(b.marge_par_sujet)} FCFA par sujet vendu` : ''})</span>` : ''}</td>
+              <td class="num" style="color:var(--${margePositive ? 'success' : 'danger'})">${margePositive ? '+' : '−'}${fmt(Math.abs(b.marge))} FCFA</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <details style="margin-top:12px">
+          <summary>Saisir les prix et les coûts</summary>
+          <form id="form-prix-aliment" class="form-grid" style="margin-top:10px" autocomplete="off">
+            <label>Prix moyen du kg d'aliment (FCFA)<input type="number" min="0" step="any" inputmode="decimal" name="prix_aliment_kg" value="${b.aliment.prix_kg ?? ''}" placeholder="ex : 580 (sac de 25 kg à 14 500)" /></label>
+            <button type="submit" class="secondary">Enregistrer le prix</button>
+          </form>
+          <form id="form-cout" class="form-grid" style="margin-top:10px" autocomplete="off">
+            <label>Type de coût<select name="categorie">${CATEGORIES_COUT_LOT.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select></label>
+            <label>Précision (facultatif)<input type="text" name="libelle" maxlength="150" placeholder="ex : 2 000 poussins" /></label>
+            <label>Montant (FCFA)<input type="number" name="montant" min="0" step="any" inputmode="decimal" required /></label>
+            <label>Date<input type="date" name="date_cout" value="${new Date().toISOString().slice(0, 10)}" /></label>
+            <button type="submit">Ajouter ce coût</button>
+          </form>
+          ${lignesCouts ? `<table style="margin-top:10px"><tbody>${lignesCouts}</tbody></table>` : ''}
+        </details>
+      </div>
+    `;
+
+    zone.querySelector('#form-prix-aliment').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await Api.put(`/production/lots/${lot.id}/prix-aliment`, { prix_aliment_kg: new FormData(e.target).get('prix_aliment_kg') });
+        showToast("Prix de l'aliment enregistré.", 'success');
+        afficher();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+    zone.querySelector('#form-cout').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      try {
+        await Api.post(`/production/lots/${lot.id}/couts`, {
+          categorie: fd.get('categorie'),
+          libelle: fd.get('libelle'),
+          montant: fd.get('montant'),
+          date_cout: fd.get('date_cout'),
+        });
+        showToast('Coût ajouté.', 'success');
+        afficher();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+    zone.querySelectorAll('.btn-supprimer-cout').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          await Api.del(`/production/lots/${lot.id}/couts/${btn.dataset.cout}`);
+          showToast('Coût supprimé.', 'success');
+          afficher();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+    });
+  }
+  afficher();
+}

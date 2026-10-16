@@ -174,6 +174,7 @@ CREATE TABLE clients (
     pin_version INT NOT NULL DEFAULT 1, -- Incrémenté à chaque régénération du PIN : invalide immédiatement les sessions portail déjà émises
     pin_tentatives_echouees INT NOT NULL DEFAULT 0, -- Verrouillage par compte (routes/portail.js) : un PIN à 6 chiffres a peu d'entropie, la limite par IP seule (express-rate-limit) est contournable en distribuant les tentatives sur plusieurs IP
     pin_bloque_jusqu TIMESTAMPTZ, -- Non NULL et dans le futur => connexion refusée même avec le bon PIN, jusqu'à expiration
+    est_demo BOOLEAN NOT NULL DEFAULT FALSE, -- client de la « Ferme démo » d'un essai (migration-36) : supprimé avec la démo
     deleted_at TIMESTAMP,
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -219,6 +220,7 @@ CREATE TABLE lots_production (
     duree_maturite_jours INT, -- Maraîcher : durée avant récolte prévue, en jours depuis date_demarrage
     espece VARCHAR(100), -- Piscicole : espèce actuellement dans ce bassin (voir migration-28) ; change quand des poissons y sont déplacés
     est_demo BOOLEAN NOT NULL DEFAULT FALSE, -- lot de la « Ferme démo » d'un essai (migration-35) : créé TERMINÉ, supprimable en un clic
+    prix_aliment_kg NUMERIC, -- prix moyen du kg d'aliment de ce lot, saisi une fois : sert au bilan par lot (migration-36)
     cree_par INT REFERENCES utilisateurs(id),
     deleted_at TIMESTAMP,
     UNIQUE (tenant_id, code_lot)
@@ -260,6 +262,22 @@ CREATE TABLE releves_journaliers (
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE UNIQUE INDEX uq_releves_lot_client ON releves_journaliers (lot_id, client_id);
+
+-- Autres coûts d'un lot (migration-36) : poussins, vaccins/vétérinaire, main-d'œuvre, transport, autre. L'aliment n'y est pas :
+-- il se calcule depuis les relevés (kg consommés) × lots_production.prix_aliment_kg. Sert au bilan par lot (routes/production.js).
+CREATE TABLE couts_lot (
+    id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
+    lot_id INT NOT NULL REFERENCES lots_production(id),
+    categorie VARCHAR(30) NOT NULL CHECK (categorie IN ('Poussins', 'Vétérinaire', 'Main d''œuvre', 'Transport', 'Autre')),
+    libelle VARCHAR(150),
+    montant NUMERIC NOT NULL CHECK (montant >= 0),
+    date_cout DATE NOT NULL DEFAULT CURRENT_DATE,
+    cree_par INT REFERENCES utilisateurs(id),
+    deleted_at TIMESTAMP,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_couts_lot_lot ON couts_lot (lot_id);
 
 -- --------------------------------------------------------
 -- 3bis. ÉLEVAGE INDIVIDUEL (bovins/ovins/caprins) — suivi animal par animal, pas par lot
@@ -344,6 +362,7 @@ CREATE TABLE produits (
     prix_unitaire_b2c NUMERIC NOT NULL, -- Tarif "standard" (particuliers)
     prix_unitaire_grossiste NUMERIC, -- Tarif préférentiel gros volumes (catégorie B2B "grossiste") ; NULL = retombe sur le tarif B2B standard
     actif BOOLEAN DEFAULT TRUE,
+    est_demo BOOLEAN NOT NULL DEFAULT FALSE, -- produit de la « Ferme démo » d'un essai (migration-36) : supprimé avec la démo
     deleted_at TIMESTAMP
 );
 
@@ -373,6 +392,7 @@ CREATE TABLE commandes (
     client_id INT REFERENCES clients(id),
     statut VARCHAR(20) CHECK (statut IN ('EN_ATTENTE', 'PREPAREE', 'EN_LIVRAISON', 'LIVREE', 'ANNULEE')),
     montant_total NUMERIC NOT NULL,
+    est_demo BOOLEAN NOT NULL DEFAULT FALSE, -- vente de la « Ferme démo » d'un essai (migration-36) : supprimée avec la démo
     deleted_at TIMESTAMP,
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (tenant_id, numero_commande)
@@ -384,7 +404,8 @@ CREATE TABLE lignes_commande (
     produit_id INT REFERENCES produits(id),
     quantite INT NOT NULL,
     prix_unitaire_applique NUMERIC NOT NULL, -- Fige le prix au moment de l'achat
-    sous_total NUMERIC NOT NULL
+    sous_total NUMERIC NOT NULL,
+    lot_id INT REFERENCES lots_production(id) -- lot d'où viennent les sujets vendus sur cette ligne (facultatif) : base du bilan par lot (migration-36)
 );
 
 CREATE TABLE livraisons (

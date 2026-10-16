@@ -82,7 +82,15 @@ module.exports = function commandesRoutes(pool) {
                 const sousTotal = prixUnitaire * Number(ligne.quantite);
                 montantTotal += sousTotal;
 
-                lignesPreparees.push({ produit_id: produit.id, quantite: Number(ligne.quantite), prixUnitaire, sousTotal });
+                // Lot d'où viennent les sujets vendus (facultatif, migration-36) : alimente le bilan par lot.
+                let lotId = null;
+                if (ligne.lot_id !== undefined && ligne.lot_id !== null && ligne.lot_id !== '') {
+                    const lotRes = await client.query(`SELECT id FROM lots_production WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, [ligne.lot_id, tenantId]);
+                    if (lotRes.rows.length === 0) throw { statut: 404, message: `Lot ${ligne.lot_id} introuvable.` };
+                    lotId = lotRes.rows[0].id;
+                }
+
+                lignesPreparees.push({ produit_id: produit.id, quantite: Number(ligne.quantite), prixUnitaire, sousTotal, lotId });
 
                 const colonnePool = estB2B ? 'quantite_reservee_b2b' : 'quantite_reservee_b2c';
                 // Note : pg-mem (simulation) calcule mal "colonne - $param" (inversion de signe) ; on ajoute
@@ -114,8 +122,8 @@ module.exports = function commandesRoutes(pool) {
 
             for (const l of lignesPreparees) {
                 await client.query(
-                    `INSERT INTO lignes_commande (commande_id, produit_id, quantite, prix_unitaire_applique, sous_total) VALUES ($1, $2, $3, $4, $5)`,
-                    [commande.id, l.produit_id, l.quantite, l.prixUnitaire, l.sousTotal]
+                    `INSERT INTO lignes_commande (commande_id, produit_id, quantite, prix_unitaire_applique, sous_total, lot_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+                    [commande.id, l.produit_id, l.quantite, l.prixUnitaire, l.sousTotal, l.lotId]
                 );
             }
 
