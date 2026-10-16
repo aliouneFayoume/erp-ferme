@@ -406,7 +406,10 @@ td.num, th.num { text-align: right; font-family: var(--font-num); font-variant-n
 /* Téléphone : le texte garde toute la largeur, les commandes (bascule, synchroniser) passent dessous. */
 .offline-banner { flex-wrap: wrap; }
 .offline-banner > span:first-child { flex: 1 1 240px; }
-
+/* Bandeau d'offre (essai gratuit / essai terminé) : même habillage que le bandeau hors ligne ; action = accent unique de l'écran. */
+.bandeau-offre.expire { background: var(--danger-bg); color: var(--danger-ink); }
+.btn-lien-offre { flex: none; display: inline-flex; align-items: center; justify-content: center; min-height: var(--tap-min); padding: 0 var(--space-4); border-radius: var(--radius-md); background: var(--dakar-500); color: var(--on-accent); font-weight: 700; text-decoration: none; }
+.btn-lien-offre:hover { filter: brightness(1.08); }
 .empty { color: var(--muted-2); font-size: 15px; padding: 20px 0; text-align: center; }
 
 .gps-map { height: 220px; border-radius: var(--radius); overflow: hidden; margin-top: 10px; border: 1px solid var(--border); }

@@ -14,11 +14,11 @@ async function verifierAccesLot(db, lotId, user) {
     return true;
 }
 
-// Offre Gratuit (migration-34) : un seul lot suivi à la fois. Le lot « suivi » est le plus ancien lot en cours ; les autres
-// (par exemple ceux créés pendant un essai de 30 jours) restent consultables mais ne reçoivent plus de relevés. Rien n'est
-// jamais supprimé. Les fermes sur mesure, en essai et Pro ne sont pas concernées (req.offre !== 'GRATUIT').
-const MESSAGE_GRATUIT_LOT = "Offre Gratuit : un seul lot est suivi à la fois. Ce lot reste consultable ; passez en Pro pour suivre plusieurs lots.";
-async function lotSuiviGratuit(db, tenantId) {
+// Essai gratuit (migration-34) : un seul lot suivi à la fois. Le lot « suivi » est le plus ancien lot en cours ; les autres
+// restent consultables mais ne reçoivent plus de relevés. Rien n'est jamais supprimé. Les fermes sur mesure et Pro ne sont
+// pas concernées (req.offre !== 'ESSAI') ; en consultation seule (EXPIRE), toute écriture est déjà refusée par requireAuth.
+const MESSAGE_ESSAI_LOT = "Essai gratuit : un seul lot est suivi à la fois. Ce lot reste consultable ; passez en Pro pour suivre plusieurs lots.";
+async function lotSuiviEssai(db, tenantId) {
     const r = await db.query(
         `SELECT id FROM lots_production WHERE tenant_id = $1 AND statut = 'EN_COURS' AND deleted_at IS NULL ORDER BY id ASC LIMIT 1`,
         [tenantId]
@@ -129,10 +129,10 @@ module.exports = function productionRoutes(pool) {
         const espece = normaliserEspece(req.body.espece);
         if (espece === false) return res.status(400).json({ erreur: `L'espèce ne peut pas dépasser ${ESPECE_MAX} caractères.` });
         try {
-            if (req.offre === 'GRATUIT' && (await lotSuiviGratuit(req.db, req.user.tenant_id)) !== null) {
+            if (req.offre === 'ESSAI' && (await lotSuiviEssai(req.db, req.user.tenant_id)) !== null) {
                 return res.status(402).json({
-                    erreur: "Offre Gratuit : un lot est déjà en cours. Clôturez-le ou passez en Pro pour suivre plusieurs lots.",
-                    code: 'PLAN_GRATUIT_LIMITE_LOTS',
+                    erreur: "Essai gratuit : un lot est déjà en cours. Clôturez-le ou passez en Pro pour suivre plusieurs lots.",
+                    code: 'ESSAI_LIMITE_LOTS',
                 });
             }
             const secteurRes = await req.db.query(`SELECT id FROM secteurs WHERE id = $1 AND tenant_id = $2`, [secteur_id, req.user.tenant_id]);
@@ -219,9 +219,9 @@ module.exports = function productionRoutes(pool) {
      *    (mélange possible mais rarement voulu) — le mouvement est enregistré avec l'espèce déplacée.
      */
     router.post('/mouvements', requireAuth(pool), checkRole(['chef_prod']), async (req, res) => {
-        // Offre Gratuit : un seul bassin suivi, donc rien à déplacer entre bassins.
-        if (req.offre === 'GRATUIT') {
-            return res.status(402).json({ erreur: 'Offre Gratuit : le déplacement entre bassins est réservé à l\'offre Pro.', code: 'PLAN_GRATUIT_LIMITE_LOTS' });
+        // Essai gratuit : un seul bassin suivi, donc rien à déplacer entre bassins.
+        if (req.offre === 'ESSAI') {
+            return res.status(402).json({ erreur: 'Essai gratuit : le déplacement entre bassins est réservé à l\'offre Pro.', code: 'ESSAI_LIMITE_LOTS' });
         }
         const sourceId = Number(req.body.lot_source_id);
         const destinationId = Number(req.body.lot_destination_id);
@@ -400,15 +400,15 @@ module.exports = function productionRoutes(pool) {
         let doublonsIgnores = 0;
         try {
             await client.query('BEGIN');
-            const lotSuivi = req.offre === 'GRATUIT' ? await lotSuiviGratuit(req.db, req.user.tenant_id) : null;
+            const lotSuivi = req.offre === 'ESSAI' ? await lotSuiviEssai(req.db, req.user.tenant_id) : null;
 
             for (const releve of releves) {
                 if (!(await verifierAccesLot(req.db, releve.lot_id, req.user))) {
                     throw { statut: 403, message: `Le lot ${releve.lot_id} ne relève pas de votre secteur.` };
                 }
                 // 402 (et pas 403 : la file hors ligne prendrait un 403 pour une session expirée et s'arrêterait).
-                if (req.offre === 'GRATUIT' && Number(releve.lot_id) !== lotSuivi) {
-                    throw { statut: 402, message: MESSAGE_GRATUIT_LOT };
+                if (req.offre === 'ESSAI' && Number(releve.lot_id) !== lotSuivi) {
+                    throw { statut: 402, message: MESSAGE_ESSAI_LOT };
                 }
 
                 // Nombres d'éléments (colonnes INT) : ramenés à un entier ≥ 0 plutôt que de laisser PostgreSQL rejeter

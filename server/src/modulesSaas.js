@@ -51,29 +51,32 @@ const FRAIS_CONFIGURATION_DEFAUT = 75000;
 
 const CLES_MODULES = MODULES_SAAS.map((m) => m.cle);
 
-// ---- Offres Gratuit / Essai / Pro (dossier Easystart, migration-34) -------------------------------------------------
+// ---- Offres : essai gratuit de 30 jours, puis Pro (dossier Easystart, migration-34) ---------------------------------
 // organisation_abonnement_saas.plan : NULL = ferme « sur mesure » (modules_actifs + prix négocié, comportement
-// historique, TOUTES les fermes existantes) ; GRATUIT ; ESSAI (tout inclus jusqu'à essai_fin_le, puis Gratuit) ; PRO.
+// historique : TOUTES les fermes existantes et la ferme Massla) ; ESSAI ; PRO.
+//   ESSAI : 30 jours gratuits, sans carte bancaire. Limites : 1 lot en cours, 1 utilisateur, pas de relances WhatsApp
+//           automatiques. Une fois la date de fin passée, la ferme passe en consultation seule (EXPIRE) : ses lots et
+//           ses données restent visibles, rien n'est supprimé, mais aucune saisie n'est acceptée jusqu'au passage en Pro.
+//   PRO   : lots illimités, relances WhatsApp automatiques, comptes pour l'équipe.
+// L'offre ne comprend que les fonctions de la grille publique : Socle + Clients, Commandes (encaissements) et Finance.
+// La version complète (Élevage, Paie, Logistique, Comptabilité, Support client) est réservée à la ferme Massla ; une
+// ferme cliente peut en recevoir à la demande, module par module, via modules_actifs (ajoutés aux modules de l'offre).
 const DUREE_ESSAI_JOURS = 30;
-// Gratuit = Socle + de quoi encaisser (clients, commandes, finance) ; pas d'Élevage, de Paie, de Logistique…
-const MODULES_GRATUIT = ['clients_abonnements', 'commandes_fournisseurs', 'finance'];
-const LIMITES_GRATUIT = { lotsEnCours: 1, utilisateurs: 1 };
+const MODULES_OFFRE = ['clients_abonnements', 'commandes_fournisseurs', 'finance'];
+const LIMITES_ESSAI = { lotsEnCours: 1, utilisateurs: 1 };
 
 /**
- * Offre EFFECTIVE d'une ferme à un instant donné : null (sur mesure / pas d'abonnement), 'GRATUIT', 'ESSAI' ou 'PRO'.
- * Un essai dont la date de fin est passée (ou absente) retombe sur GRATUIT : calculé à chaque requête, donc aucune
- * tâche planifiée à faire tourner et aucune donnée touchée — le lot de l'essai reste consultable.
+ * Offre EFFECTIVE d'une ferme à un instant donné : null (sur mesure / pas d'abonnement), 'ESSAI', 'EXPIRE' (essai
+ * terminé : consultation seule) ou 'PRO'. Calculée à chaque requête à partir de la date de fin : aucune tâche
+ * planifiée à faire tourner, aucune donnée touchée.
  * `ligne` = { plan, essai_fin_le } de la ligne d'abonnement (ou undefined/null s'il n'y en a pas).
  */
 function planEffectif(ligne, maintenant = new Date()) {
     const plan = ligne && ligne.plan;
     if (!plan) return null;
     if (plan === 'PRO') return 'PRO';
-    if (plan === 'ESSAI') {
-        const fin = ligne.essai_fin_le ? new Date(ligne.essai_fin_le) : null;
-        return fin && fin.getTime() > maintenant.getTime() ? 'ESSAI' : 'GRATUIT';
-    }
-    return 'GRATUIT';
+    const fin = ligne.essai_fin_le ? new Date(ligne.essai_fin_le) : null;
+    return fin && fin.getTime() > maintenant.getTime() ? 'ESSAI' : 'EXPIRE';
 }
 
 /** Jours entiers restants avant la fin d'un essai (0 si terminé ou sans date). */
@@ -90,10 +93,13 @@ function joursRestantsEssai(ligne, maintenant = new Date()) {
  * `modulesActifs === undefined/null` = pas de ligne d'abonnement.
  */
 function resoudreAcces(modulesActifs, offre = null) {
-    // Offre effective (voir planEffectif) : PRO et ESSAI ouvrent tout ; GRATUIT impose sa propre liste de modules, quelle
-    // que soit modules_actifs. null = ferme sur mesure : comportement historique, inchangé.
-    if (offre === 'PRO' || offre === 'ESSAI') return null;
-    if (offre === 'GRATUIT') modulesActifs = MODULES_GRATUIT;
+    // Offre effective (voir planEffectif) : ESSAI, EXPIRE et PRO donnent les modules de l'offre (MODULES_OFFRE) PLUS les
+    // modules accordés à la demande dans modules_actifs (élevage, paie…). Le Pack tout compris reste la version complète
+    // (ferme Massla). null = ferme sur mesure : comportement historique, inchangé.
+    if (offre === 'ESSAI' || offre === 'EXPIRE' || offre === 'PRO') {
+        const demandes = Array.isArray(modulesActifs) ? modulesActifs : [];
+        modulesActifs = [...new Set([...MODULES_OFFRE, ...demandes])];
+    }
     if (!Array.isArray(modulesActifs)) return null;
     if (modulesActifs.includes(PACK_TOUT_COMPRIS.cle)) return null;
     const souscrits = CLES_MODULES.filter((cle) => modulesActifs.includes(cle));
@@ -131,8 +137,8 @@ module.exports = {
     PACK_TOUT_COMPRIS,
     FRAIS_CONFIGURATION_DEFAUT,
     DUREE_ESSAI_JOURS,
-    MODULES_GRATUIT,
-    LIMITES_GRATUIT,
+    MODULES_OFFRE,
+    LIMITES_ESSAI,
     planEffectif,
     joursRestantsEssai,
     resoudreAcces,

@@ -70,7 +70,9 @@ async function traiterFerme(pool, org, { maintenant, envoyer, globalConfigure })
             const ligne = abo.rows[0];
             if (ligne && ligne.actif === false) return; // accès suspendu -> aucune relance en son nom
             const offre = planEffectif(ligne, maintenant);
-            if (offre === 'GRATUIT') return; // relances WhatsApp automatiques = offre Pro (ou essai) ; le manuel reste possible
+            // Relances WhatsApp automatiques = offre Pro uniquement (ou ferme sur mesure) ; en essai ou une fois l'essai terminé,
+            // la relance manuelle reste possible depuis l'écran Finance.
+            if (offre === 'ESSAI' || offre === 'EXPIRE') return;
             acces = resoudreAcces(ligne ? ligne.modules_actifs : undefined, offre);
         }
         if (!moduleAutorise(acces, 'finance', 'POST')) return; // relances WhatsApp = module Finance

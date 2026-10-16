@@ -103,6 +103,42 @@ describe('relances automatiques J+7 — factures clients impayées', () => {
         expect(f.dernier_rappel_le).not.toBeNull();
     });
 
+    // Offres (migration-34) : les relances WhatsApp AUTOMATIQUES sont une fonction Pro. En essai gratuit et une fois l'essai
+    // terminé elles ne partent pas (la relance manuelle reste possible) ; une ferme sur mesure garde son comportement.
+    describe('selon l\'offre de la ferme', () => {
+        const avecOffre = async (plan, finEssaiJours) => {
+            const ferme = await creerFerme({ modules: [] });
+            await pool.query(`UPDATE organisation_abonnement_saas SET plan = $2, essai_fin_le = $3 WHERE tenant_id = $1`, [
+                ferme,
+                plan,
+                finEssaiJours === undefined ? null : new Date(MAINTENANT.getTime() + finEssaiJours * JOUR_MS),
+            ]);
+            await creerFacture(ferme);
+            return ferme;
+        };
+
+        test('PRO : relancée automatiquement', async () => {
+            await avecOffre('PRO');
+            expect((await balayer()).envoyees).toBe(1);
+        });
+
+        test.each([
+            ['essai en cours', 'ESSAI', 10],
+            ['essai terminé (consultation seule)', 'ESSAI', -1],
+        ])('%s : jamais relancée automatiquement', async (_nom, plan, fin) => {
+            await avecOffre(plan, fin);
+            const bilan = await balayer();
+            expect(bilan.envoyees).toBe(0);
+            expect(envoyer).not.toHaveBeenCalled();
+        });
+
+        test('ferme sur mesure avec Finance (plan NULL) : relancée comme avant', async () => {
+            const ferme = await creerFerme({ modules: ['finance'] });
+            await creerFacture(ferme);
+            expect((await balayer()).envoyees).toBe(1);
+        });
+    });
+
     test('une facture partiellement payée mais en retard est relancée', async () => {
         const ferme = await creerFerme();
         await creerFacture(ferme, { statut: 'PAYEE_PARTIEL', montant: 2000 });

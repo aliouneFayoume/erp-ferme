@@ -1,7 +1,7 @@
 const express = require('express');
 const { requireAuth, requireSuperviseurPlateforme, signToken } = require('../auth');
 const { logAudit } = require('../audit');
-const { SOCLE_ESSENTIEL, MODULES_SAAS, PACK_TOUT_COMPRIS, FRAIS_CONFIGURATION_DEFAUT } = require('../modulesSaas');
+const { SOCLE_ESSENTIEL, MODULES_SAAS, PACK_TOUT_COMPRIS, FRAIS_CONFIGURATION_DEFAUT, MODULES_OFFRE, DUREE_ESSAI_JOURS } = require('../modulesSaas');
 const { creerNouvelleFerme } = require('../creerFerme');
 const { envoyerMessageWhatsapp } = require('../whatsapp');
 const { envoyerEmailRappelSaas } = require('../email');
@@ -464,7 +464,15 @@ module.exports = function plateformeRoutes(pool) {
     });
 
     router.get('/modules-saas', ...garde, async (req, res) => {
-        res.json({ socleEssentiel: SOCLE_ESSENTIEL, modules: MODULES_SAAS, packToutCompris: PACK_TOUT_COMPRIS, fraisConfigurationDefaut: FRAIS_CONFIGURATION_DEFAUT });
+        res.json({
+            socleEssentiel: SOCLE_ESSENTIEL,
+            modules: MODULES_SAAS,
+            packToutCompris: PACK_TOUT_COMPRIS,
+            fraisConfigurationDefaut: FRAIS_CONFIGURATION_DEFAUT,
+            // Offres (migration-34) : modules compris dans l'essai et le Pro, durée de l'essai.
+            modulesOffre: MODULES_OFFRE,
+            dureeEssaiJours: DUREE_ESSAI_JOURS,
+        });
     });
 
     router.get('/organisations/:id/abonnement-saas', ...garde, async (req, res) => {
@@ -494,14 +502,50 @@ module.exports = function plateformeRoutes(pool) {
                 return res.status(400).json({ erreur: 'Modules actifs et montant mensuel (0 ou plus) sont requis.' });
             }
 
-            const existant = await req.db.query(`SELECT tenant_id, frais_configuration_facture FROM organisation_abonnement_saas WHERE tenant_id = $1`, [tenantId]);
+            const existant = await req.db.query(
+                `SELECT tenant_id, frais_configuration_facture, plan, essai_debut_le, essai_fin_le, converti_pro_le, source_inscription
+                 FROM organisation_abonnement_saas WHERE tenant_id = $1`,
+                [tenantId]
+            );
+
+            // Offre (migration-34) : 'SUR_MESURE' (plan NULL, modules + prix négocié, comportement historique), 'ESSAI' (30 jours
+            // gratuits puis consultation seule) ou 'PRO'. Absente = les colonnes d'offre ne sont pas touchées (anciens appels).
+            const offreDemandee = req.body.offre;
+            if (offreDemandee !== undefined && !['SUR_MESURE', 'ESSAI', 'PRO'].includes(offreDemandee)) {
+                return res.status(400).json({ erreur: 'Offre invalide (SUR_MESURE, ESSAI ou PRO).' });
+            }
+            const avant = existant.rows[0] || {};
+            const maintenant = new Date();
+            let plan = avant.plan || null;
+            let essaiDebut = avant.essai_debut_le || null;
+            let essaiFin = avant.essai_fin_le || null;
+            let convertiPro = avant.converti_pro_le || null;
+            let sourceInscription = avant.source_inscription || null;
+            if (offreDemandee === 'SUR_MESURE') {
+                plan = null;
+            } else if (offreDemandee === 'ESSAI') {
+                plan = 'ESSAI';
+                // Un essai déjà en place garde ses dates (enregistrer ne le prolonge pas) ; on le (re)démarre à la création de
+                // l'essai, ou si le support le demande explicitement (redemarrerEssai).
+                if (avant.plan !== 'ESSAI' || req.body.redemarrerEssai === true) {
+                    essaiDebut = maintenant;
+                    essaiFin = new Date(maintenant.getTime() + DUREE_ESSAI_JOURS * 24 * 3600 * 1000);
+                }
+            } else if (offreDemandee === 'PRO') {
+                plan = 'PRO';
+                if (avant.plan !== 'PRO') convertiPro = maintenant; // mesure de la conversion
+            }
+            if (req.body.sourceInscription !== undefined && ['essai', 'demo'].includes(req.body.sourceInscription)) {
+                sourceInscription = req.body.sourceInscription;
+            }
 
             let result;
             if (existant.rows.length === 0) {
                 result = await req.db.query(
-                    `INSERT INTO organisation_abonnement_saas (tenant_id, modules_actifs, montant_mensuel, frais_configuration, actif, telephone_contact)
-                     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-                    [tenantId, modulesActifs, montantMensuel, fraisConfiguration || null, actif !== false, telephoneContact || null]
+                    `INSERT INTO organisation_abonnement_saas
+                       (tenant_id, modules_actifs, montant_mensuel, frais_configuration, actif, telephone_contact, plan, essai_debut_le, essai_fin_le, converti_pro_le, source_inscription)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+                    [tenantId, modulesActifs, montantMensuel, fraisConfiguration || null, actif !== false, telephoneContact || null, plan, essaiDebut, essaiFin, convertiPro, sourceInscription]
                 );
                 if (Number(fraisConfiguration) > 0) {
                     await req.db.query(
@@ -515,8 +559,11 @@ module.exports = function plateformeRoutes(pool) {
                 }
             } else {
                 result = await req.db.query(
-                    `UPDATE organisation_abonnement_saas SET modules_actifs = $1, montant_mensuel = $2, actif = $3, telephone_contact = $4 WHERE tenant_id = $5 RETURNING *`,
-                    [modulesActifs, montantMensuel, actif !== false, telephoneContact || null, tenantId]
+                    `UPDATE organisation_abonnement_saas
+                     SET modules_actifs = $1, montant_mensuel = $2, actif = $3, telephone_contact = $4,
+                         plan = $6, essai_debut_le = $7, essai_fin_le = $8, converti_pro_le = $9, source_inscription = $10
+                     WHERE tenant_id = $5 RETURNING *`,
+                    [modulesActifs, montantMensuel, actif !== false, telephoneContact || null, tenantId, plan, essaiDebut, essaiFin, convertiPro, sourceInscription]
                 );
             }
 

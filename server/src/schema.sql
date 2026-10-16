@@ -781,7 +781,7 @@ CREATE TABLE organisation_abonnement_saas (
     -- peut être celui d'un comptable ou autre contact désigné par la ferme pour la facturation.
     telephone_contact VARCHAR(20),
     -- Offre (migration-34) : NULL = ferme sur mesure (modules + prix négocié, comportement historique). Voir modulesSaas.js.
-    plan VARCHAR(10) CHECK (plan IS NULL OR plan IN ('GRATUIT', 'ESSAI', 'PRO')),
+    plan VARCHAR(10) CHECK (plan IS NULL OR plan IN ('ESSAI', 'PRO')),
     essai_debut_le TIMESTAMP,
     essai_fin_le TIMESTAMP,
     source_inscription VARCHAR(10) CHECK (source_inscription IS NULL OR source_inscription IN ('essai', 'demo')),

@@ -273,11 +273,24 @@ function requireAuth(pool, { module: moduleRequis = null } = {}) {
             // Appliqué même pendant une impersonation : le superviseur voit la ferme telle que ses
             // utilisateurs la voient, et corrige les modules depuis la vue plateforme si besoin.
             // modules_actifs n'est lu que si une ligne d'abonnement existe (LEFT JOIN => NULL sinon).
-            // Offre (migration-34) : req.offre = null (ferme sur mesure / plateforme), 'GRATUIT', 'ESSAI' ou 'PRO'. Les
-            // limites du Gratuit (1 lot en cours, 1 utilisateur…) sont appliquées par les routes concernées.
+            // Offre (migration-34) : req.offre = null (ferme sur mesure / plateforme), 'ESSAI', 'EXPIRE' (essai terminé) ou
+            // 'PRO'. Les limites de l'essai (1 lot en cours, 1 utilisateur…) sont appliquées par les routes concernées.
             req.offre = ligne.est_plateforme ? null : planEffectif(ligne);
             req.joursEssaiRestants = req.offre === 'ESSAI' ? joursRestantsEssai(ligne) : null;
             req.acces = ligne.est_plateforme ? null : resoudreAcces(ligne.modules_actifs, req.offre);
+
+            // Essai terminé = consultation seule : toute écriture est refusée (402) tant que la ferme n'est pas passée en Pro.
+            // Exceptions : /api/auth/* (connexion, mot de passe, MFA : l'utilisateur doit rester maître de son compte) et
+            // une session d'impersonation du support (qui doit pouvoir dépanner la ferme).
+            if (req.offre === 'EXPIRE' && !req.user.impersonation && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+                const chemin = req.originalUrl.split('?')[0];
+                if (!chemin.startsWith('/api/auth/')) {
+                    return res.status(402).json({
+                        erreur: 'Votre essai gratuit est terminé : vos données restent consultables. Passez en Pro pour continuer à saisir.',
+                        code: 'ESSAI_TERMINE',
+                    });
+                }
+            }
             if (moduleRequis && !moduleAutorise(req.acces, moduleRequis, req.method)) {
                 return res.status(403).json({
                     erreur: `Le module « ${libelleModule(moduleRequis)} » n'est pas inclus dans votre abonnement. Contactez le support pour l'activer.`,

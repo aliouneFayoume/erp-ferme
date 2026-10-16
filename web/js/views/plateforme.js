@@ -616,6 +616,18 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
   const modulesActifs = abonnement?.modules_actifs || [];
   const surPack = modulesActifs.includes(catalogue.packToutCompris.cle);
   const dejaConfigure = !!abonnement;
+  // Offre (migration-34) : NULL = sur mesure (modules + prix négocié) ; ESSAI = 30 jours gratuits puis consultation seule ;
+  // PRO = fonctions de la grille. Les modules « de l'offre » sont toujours compris ; les autres se cochent à la demande.
+  const offreActuelle = abonnement?.plan === 'ESSAI' || abonnement?.plan === 'PRO' ? abonnement.plan : 'SUR_MESURE';
+  const modulesOffre = catalogue.modulesOffre || [];
+  const infoEssai = () => {
+    if (abonnement?.plan !== 'ESSAI' || !abonnement.essai_fin_le) return '';
+    const fin = new Date(abonnement.essai_fin_le);
+    const restant = Math.ceil((fin.getTime() - Date.now()) / 86400000);
+    return restant > 0
+      ? `Essai en cours : fin le ${fin.toLocaleDateString('fr-FR')} (${restant} jour(s) restant(s)).`
+      : `Essai terminé le ${fin.toLocaleDateString('fr-FR')} : la ferme est en consultation seule jusqu'au passage en Pro.`;
+  };
 
   const overlay = el(`
     <div class="modal-overlay">
@@ -649,7 +661,18 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
         <p class="desc">${esc(catalogue.socleEssentiel.label)} — ${catalogue.socleEssentiel.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois (toujours inclus)</p>
         <p class="desc"><b>Les modules cochés donnent réellement accès</b> : un module décoché disparaît du menu de la ferme et son API est refusée, immédiatement à l'enregistrement. Le Pack tout compris ouvre tout. Une ferme sans abonnement enregistré n'est pas restreinte.</p>
         <form id="form-abonnement-saas" class="form-grid" autocomplete="off">
-          <label style="flex-direction: row; align-items: center; gap: 8px;">
+          <label>Offre
+            <select name="offre" id="select-offre">
+              <option value="SUR_MESURE" ${offreActuelle === 'SUR_MESURE' ? 'selected' : ''}>Sur mesure — modules et prix négociés (fermes existantes, ferme Massla)</option>
+              <option value="ESSAI" ${offreActuelle === 'ESSAI' ? 'selected' : ''}>Essai gratuit — 30 jours, puis consultation seule jusqu'au Pro</option>
+              <option value="PRO" ${offreActuelle === 'PRO' ? 'selected' : ''}>Pro — 10 000 FCFA/mois (fonctions de la grille)</option>
+            </select>
+          </label>
+          <p class="desc" id="info-offre">${esc(infoEssai())}</p>
+          <label id="champ-redemarrer-essai" class="hidden" style="flex-direction: row; align-items: center; gap: 8px;">
+            <input type="checkbox" name="redemarrerEssai" style="width:auto" /> Redémarrer l'essai de 30 jours à partir d'aujourd'hui
+          </label>
+          <label id="champ-pack" style="flex-direction: row; align-items: center; gap: 8px;">
             <input type="checkbox" name="pack" style="width:auto" ${surPack ? 'checked' : ''} />
             ${esc(catalogue.packToutCompris.label)} (${catalogue.packToutCompris.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois)
           </label>
@@ -657,7 +680,7 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
             ${catalogue.modules
               .map(
                 (m) => `<label style="flex-direction: row; align-items: center; gap: 8px;">
-                  <input type="checkbox" name="module" value="${m.cle}" style="width:auto" ${surPack || modulesActifs.includes(m.cle) ? 'checked' : ''} />
+                  <input type="checkbox" name="module" value="${m.cle}" data-offre="${modulesOffre.includes(m.cle) ? '1' : ''}" style="width:auto" ${surPack || modulesActifs.includes(m.cle) ? 'checked' : ''} />
                   ${esc(m.label)} (${m.prixMensuelDefaut.toLocaleString('fr-FR')} FCFA/mois)
                 </label>`
               )
@@ -748,12 +771,39 @@ async function ouvrirAbonnementSaas(container, org, catalogue) {
     });
   });
 
+  // Choix de l'offre : en essai et en Pro, les modules de l'offre sont toujours compris (cochés, non modifiables) et les autres
+  // se cochent « à la demande » ; le Pack tout compris (version complète) n'a de sens que sur mesure.
+  const selectOffre = overlay.querySelector('#select-offre');
+  const appliquerOffre = (decalage = true) => {
+    const offre = selectOffre.value;
+    const surMesure = offre === 'SUR_MESURE';
+    overlay.querySelector('#champ-pack').classList.toggle('hidden', !surMesure);
+    overlay.querySelector('#champ-redemarrer-essai').classList.toggle('hidden', !(offre === 'ESSAI' && abonnement?.plan === 'ESSAI'));
+    if (!surMesure) overlay.querySelector('input[name="pack"]').checked = false;
+    overlay.querySelectorAll('#modules-a-la-carte input[name="module"]').forEach((cb) => {
+      if (cb.dataset.offre === '1') {
+        cb.disabled = !surMesure;
+        if (!surMesure) cb.checked = true;
+      }
+    });
+    overlay.querySelector('#modules-a-la-carte').style.opacity = '1';
+    if (decalage) {
+      const champMontant = overlay.querySelector('input[name="montantMensuel"]');
+      if (offre === 'ESSAI') champMontant.value = '0';
+      if (offre === 'PRO') champMontant.value = '10000';
+    }
+  };
+  selectOffre.addEventListener('change', () => appliquerOffre(true));
+  appliquerOffre(false);
+
   overlay.querySelector('[data-action="enregistrer"]').addEventListener('click', async () => {
     const fd = new FormData(overlay.querySelector('#form-abonnement-saas'));
     const surPackCoche = fd.get('pack') === 'on';
     const modules = surPackCoche ? [catalogue.packToutCompris.cle] : fd.getAll('module');
     try {
       await Api.put(`/plateforme/organisations/${org.id}/abonnement-saas`, {
+        offre: fd.get('offre'),
+        redemarrerEssai: fd.get('redemarrerEssai') === 'on',
         modulesActifs: modules,
         montantMensuel: Number(fd.get('montantMensuel')),
         fraisConfiguration: dejaConfigure ? undefined : Number(fd.get('fraisConfiguration') || 0),
