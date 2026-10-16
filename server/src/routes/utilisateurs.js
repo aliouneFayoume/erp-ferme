@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
 const { motDePasseValide, motDePasseErreurs } = require('../validation');
+const { LIMITES_GRATUIT } = require('../modulesSaas');
 // Nommé `emailService` (pas `email`) : cette route destructure déjà `email` depuis req.body.
 const emailService = require('../email');
 
@@ -48,6 +49,16 @@ module.exports = function utilisateursRoutes(pool) {
             return res.status(503).json({ erreur: 'Vérification email indisponible pour le moment.' });
         }
         try {
+            // Offre Gratuit : un seul compte (le gérant). Les comptes pour l'équipe sont réservés à l'offre Pro.
+            if (req.offre === 'GRATUIT') {
+                const actifs = await req.db.query(`SELECT COUNT(*)::int AS n FROM utilisateurs WHERE tenant_id = $1 AND actif = TRUE AND deleted_at IS NULL`, [req.user.tenant_id]);
+                if (actifs.rows[0].n >= LIMITES_GRATUIT.utilisateurs) {
+                    return res.status(402).json({
+                        erreur: "Offre Gratuit : un seul compte. Passez en Pro pour ajouter votre équipe (gérant + ouvrier).",
+                        code: 'PLAN_GRATUIT_LIMITE_UTILISATEURS',
+                    });
+                }
+            }
             const roleRes = await req.db.query(`SELECT id FROM roles WHERE nom = $1`, [role]);
             if (roleRes.rows.length === 0) return res.status(400).json({ erreur: 'Rôle invalide.' });
 

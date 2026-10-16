@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { resoudreAcces, moduleAutorise, libelleModule } = require('./modulesSaas');
+const { resoudreAcces, moduleAutorise, libelleModule, planEffectif, joursRestantsEssai } = require('./modulesSaas');
 
 // La présence de DATABASE_URL signale un déploiement réel (par opposition à la simulation locale
 // pg-mem) : dans ce cas, un secret par défaut connu de tous permettrait à quiconque de forger un
@@ -231,7 +231,7 @@ function requireAuth(pool, { module: moduleRequis = null } = {}) {
                 `SELECT u.actif, u.deleted_at AS utilisateur_supprime_le, u.token_version, r.nom AS role,
                         u.mfa_obligatoire, u.mfa_actif,
                         o.deleted_at AS organisation_supprimee_le, o.est_plateforme,
-                        s.actif AS abonnement_actif, s.modules_actifs
+                        s.actif AS abonnement_actif, s.modules_actifs, s.plan, s.essai_fin_le
                  FROM utilisateurs u
                  JOIN roles r ON r.id = u.role_id
                  LEFT JOIN organisations o ON o.id = u.tenant_id
@@ -273,7 +273,11 @@ function requireAuth(pool, { module: moduleRequis = null } = {}) {
             // Appliqué même pendant une impersonation : le superviseur voit la ferme telle que ses
             // utilisateurs la voient, et corrige les modules depuis la vue plateforme si besoin.
             // modules_actifs n'est lu que si une ligne d'abonnement existe (LEFT JOIN => NULL sinon).
-            req.acces = ligne.est_plateforme ? null : resoudreAcces(ligne.modules_actifs);
+            // Offre (migration-34) : req.offre = null (ferme sur mesure / plateforme), 'GRATUIT', 'ESSAI' ou 'PRO'. Les
+            // limites du Gratuit (1 lot en cours, 1 utilisateur…) sont appliquées par les routes concernées.
+            req.offre = ligne.est_plateforme ? null : planEffectif(ligne);
+            req.joursEssaiRestants = req.offre === 'ESSAI' ? joursRestantsEssai(ligne) : null;
+            req.acces = ligne.est_plateforme ? null : resoudreAcces(ligne.modules_actifs, req.offre);
             if (moduleRequis && !moduleAutorise(req.acces, moduleRequis, req.method)) {
                 return res.status(403).json({
                     erreur: `Le module « ${libelleModule(moduleRequis)} » n'est pas inclus dans votre abonnement. Contactez le support pour l'activer.`,

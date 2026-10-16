@@ -652,6 +652,8 @@ module.exports = function authRoutes(pool) {
                 mfaObligatoire: !!row.mfa_obligatoire,
                 onglets: ongletsAutorises(req.acces),
                 modules: req.acces === null ? null : req.acces.souscrits,
+                // Offre (migration-34) : null = ferme sur mesure ; sinon { plan, joursRestants } pour le bandeau « Passer en Pro ».
+                offre: req.offre ? { plan: req.offre, joursRestants: req.joursEssaiRestants } : null,
             },
         });
     });

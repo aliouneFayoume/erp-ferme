@@ -14,6 +14,18 @@ async function verifierAccesLot(db, lotId, user) {
     return true;
 }
 
+// Offre Gratuit (migration-34) : un seul lot suivi à la fois. Le lot « suivi » est le plus ancien lot en cours ; les autres
+// (par exemple ceux créés pendant un essai de 30 jours) restent consultables mais ne reçoivent plus de relevés. Rien n'est
+// jamais supprimé. Les fermes sur mesure, en essai et Pro ne sont pas concernées (req.offre !== 'GRATUIT').
+const MESSAGE_GRATUIT_LOT = "Offre Gratuit : un seul lot est suivi à la fois. Ce lot reste consultable ; passez en Pro pour suivre plusieurs lots.";
+async function lotSuiviGratuit(db, tenantId) {
+    const r = await db.query(
+        `SELECT id FROM lots_production WHERE tenant_id = $1 AND statut = 'EN_COURS' AND deleted_at IS NULL ORDER BY id ASC LIMIT 1`,
+        [tenantId]
+    );
+    return r.rows.length ? Number(r.rows[0].id) : null;
+}
+
 // Identifiant unique d'un relevé, créé par le navigateur (voir migration-30) : un envoi rejoué (réponse perdue puis
 // file hors ligne, ou formulaire renvoyé) n'est jamais compté deux fois. Un identifiant absent OU mal formé est
 // simplement ignoré (pas de déduplication) plutôt que refusé : la file hors ligne supprime une action refusée en
@@ -117,6 +129,12 @@ module.exports = function productionRoutes(pool) {
         const espece = normaliserEspece(req.body.espece);
         if (espece === false) return res.status(400).json({ erreur: `L'espèce ne peut pas dépasser ${ESPECE_MAX} caractères.` });
         try {
+            if (req.offre === 'GRATUIT' && (await lotSuiviGratuit(req.db, req.user.tenant_id)) !== null) {
+                return res.status(402).json({
+                    erreur: "Offre Gratuit : un lot est déjà en cours. Clôturez-le ou passez en Pro pour suivre plusieurs lots.",
+                    code: 'PLAN_GRATUIT_LIMITE_LOTS',
+                });
+            }
             const secteurRes = await req.db.query(`SELECT id FROM secteurs WHERE id = $1 AND tenant_id = $2`, [secteur_id, req.user.tenant_id]);
             if (secteurRes.rows.length === 0) return res.status(400).json({ erreur: 'Secteur invalide.' });
             const result = await req.db.query(
@@ -201,6 +219,10 @@ module.exports = function productionRoutes(pool) {
      *    (mélange possible mais rarement voulu) — le mouvement est enregistré avec l'espèce déplacée.
      */
     router.post('/mouvements', requireAuth(pool), checkRole(['chef_prod']), async (req, res) => {
+        // Offre Gratuit : un seul bassin suivi, donc rien à déplacer entre bassins.
+        if (req.offre === 'GRATUIT') {
+            return res.status(402).json({ erreur: 'Offre Gratuit : le déplacement entre bassins est réservé à l\'offre Pro.', code: 'PLAN_GRATUIT_LIMITE_LOTS' });
+        }
         const sourceId = Number(req.body.lot_source_id);
         const destinationId = Number(req.body.lot_destination_id);
         const quantite = Number(req.body.quantite);
@@ -378,10 +400,15 @@ module.exports = function productionRoutes(pool) {
         let doublonsIgnores = 0;
         try {
             await client.query('BEGIN');
+            const lotSuivi = req.offre === 'GRATUIT' ? await lotSuiviGratuit(req.db, req.user.tenant_id) : null;
 
             for (const releve of releves) {
                 if (!(await verifierAccesLot(req.db, releve.lot_id, req.user))) {
                     throw { statut: 403, message: `Le lot ${releve.lot_id} ne relève pas de votre secteur.` };
+                }
+                // 402 (et pas 403 : la file hors ligne prendrait un 403 pour une session expirée et s'arrêterait).
+                if (req.offre === 'GRATUIT' && Number(releve.lot_id) !== lotSuivi) {
+                    throw { statut: 402, message: MESSAGE_GRATUIT_LOT };
                 }
 
                 // Nombres d'éléments (colonnes INT) : ramenés à un entier ≥ 0 plutôt que de laisser PostgreSQL rejeter

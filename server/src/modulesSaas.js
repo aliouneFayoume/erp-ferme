@@ -51,13 +51,49 @@ const FRAIS_CONFIGURATION_DEFAUT = 75000;
 
 const CLES_MODULES = MODULES_SAAS.map((m) => m.cle);
 
+// ---- Offres Gratuit / Essai / Pro (dossier Easystart, migration-34) -------------------------------------------------
+// organisation_abonnement_saas.plan : NULL = ferme « sur mesure » (modules_actifs + prix négocié, comportement
+// historique, TOUTES les fermes existantes) ; GRATUIT ; ESSAI (tout inclus jusqu'à essai_fin_le, puis Gratuit) ; PRO.
+const DUREE_ESSAI_JOURS = 30;
+// Gratuit = Socle + de quoi encaisser (clients, commandes, finance) ; pas d'Élevage, de Paie, de Logistique…
+const MODULES_GRATUIT = ['clients_abonnements', 'commandes_fournisseurs', 'finance'];
+const LIMITES_GRATUIT = { lotsEnCours: 1, utilisateurs: 1 };
+
+/**
+ * Offre EFFECTIVE d'une ferme à un instant donné : null (sur mesure / pas d'abonnement), 'GRATUIT', 'ESSAI' ou 'PRO'.
+ * Un essai dont la date de fin est passée (ou absente) retombe sur GRATUIT : calculé à chaque requête, donc aucune
+ * tâche planifiée à faire tourner et aucune donnée touchée — le lot de l'essai reste consultable.
+ * `ligne` = { plan, essai_fin_le } de la ligne d'abonnement (ou undefined/null s'il n'y en a pas).
+ */
+function planEffectif(ligne, maintenant = new Date()) {
+    const plan = ligne && ligne.plan;
+    if (!plan) return null;
+    if (plan === 'PRO') return 'PRO';
+    if (plan === 'ESSAI') {
+        const fin = ligne.essai_fin_le ? new Date(ligne.essai_fin_le) : null;
+        return fin && fin.getTime() > maintenant.getTime() ? 'ESSAI' : 'GRATUIT';
+    }
+    return 'GRATUIT';
+}
+
+/** Jours entiers restants avant la fin d'un essai (0 si terminé ou sans date). */
+function joursRestantsEssai(ligne, maintenant = new Date()) {
+    if (!ligne || !ligne.essai_fin_le) return 0;
+    const reste = new Date(ligne.essai_fin_le).getTime() - maintenant.getTime();
+    return reste > 0 ? Math.ceil(reste / (24 * 3600 * 1000)) : 0;
+}
+
 /**
  * Traduit la liste modules_actifs d'une ligne d'abonnement en "accès" :
  * - null : aucune restriction (pas de ligne d'abonnement, ou Pack tout compris) ;
  * - { souscrits, lecture } sinon. Les clés inconnues (faute de frappe, ancien module) sont ignorées.
  * `modulesActifs === undefined/null` = pas de ligne d'abonnement.
  */
-function resoudreAcces(modulesActifs) {
+function resoudreAcces(modulesActifs, offre = null) {
+    // Offre effective (voir planEffectif) : PRO et ESSAI ouvrent tout ; GRATUIT impose sa propre liste de modules, quelle
+    // que soit modules_actifs. null = ferme sur mesure : comportement historique, inchangé.
+    if (offre === 'PRO' || offre === 'ESSAI') return null;
+    if (offre === 'GRATUIT') modulesActifs = MODULES_GRATUIT;
     if (!Array.isArray(modulesActifs)) return null;
     if (modulesActifs.includes(PACK_TOUT_COMPRIS.cle)) return null;
     const souscrits = CLES_MODULES.filter((cle) => modulesActifs.includes(cle));
@@ -94,6 +130,11 @@ module.exports = {
     MODULES_SAAS,
     PACK_TOUT_COMPRIS,
     FRAIS_CONFIGURATION_DEFAUT,
+    DUREE_ESSAI_JOURS,
+    MODULES_GRATUIT,
+    LIMITES_GRATUIT,
+    planEffectif,
+    joursRestantsEssai,
     resoudreAcces,
     moduleAutorise,
     ongletsAutorises,

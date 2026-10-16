@@ -13,7 +13,7 @@
 //   identifiants globaux ; toute autre ferme doit avoir les siens, sinon elle est simplement ignorée.
 const { envoyerMessageWhatsapp, estConfigure: whatsappGlobalConfigure } = require('./whatsapp');
 const { getWhatsappConfig } = require('./whatsappConfig');
-const { resoudreAcces, moduleAutorise } = require('./modulesSaas');
+const { resoudreAcces, moduleAutorise, planEffectif } = require('./modulesSaas');
 const { logAudit } = require('./audit');
 
 const JOURS_AVANT_RELANCE = 7;
@@ -66,10 +66,12 @@ async function traiterFerme(pool, org, { maintenant, envoyer, globalConfigure })
         // d'échappatoire pré-tenant, voir rls-policies.sql).
         let acces = null;
         if (!org.est_plateforme) {
-            const abo = await db.query(`SELECT actif, modules_actifs FROM organisation_abonnement_saas WHERE tenant_id = $1`, [org.id]);
+            const abo = await db.query(`SELECT actif, modules_actifs, plan, essai_fin_le FROM organisation_abonnement_saas WHERE tenant_id = $1`, [org.id]);
             const ligne = abo.rows[0];
             if (ligne && ligne.actif === false) return; // accès suspendu -> aucune relance en son nom
-            acces = resoudreAcces(ligne ? ligne.modules_actifs : undefined);
+            const offre = planEffectif(ligne, maintenant);
+            if (offre === 'GRATUIT') return; // relances WhatsApp automatiques = offre Pro (ou essai) ; le manuel reste possible
+            acces = resoudreAcces(ligne ? ligne.modules_actifs : undefined, offre);
         }
         if (!moduleAutorise(acces, 'finance', 'POST')) return; // relances WhatsApp = module Finance
 
