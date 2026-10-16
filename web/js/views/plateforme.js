@@ -9,13 +9,15 @@ const FACTURE_SAAS_STATUT_BADGE = { A_PAYER: 'warn', PAYEE: 'ok', EN_RETARD: 'da
 
 window.Views.plateforme = {
   async render(container) {
-    const [organisations, tickets, catalogue, facturesSaas, avis, activite] = await Promise.all([
+    const [organisations, tickets, catalogue, facturesSaas, avis, activite, essaisNonConfirmes] = await Promise.all([
       Api.get('/plateforme/organisations'),
       Api.get('/plateforme/tickets'),
       Api.get('/plateforme/modules-saas'),
       Api.get('/plateforme/factures-saas'),
       Api.get('/plateforme/avis'),
       Api.get('/plateforme/activite'),
+      // Essais autonomes jamais confirmés : une erreur ici ne doit jamais empêcher d'afficher le reste de la vue.
+      Api.get('/plateforme/essais-non-confirmes').catch(() => ({ jours: 7, fermes: [] })),
     ]);
 
     container.innerHTML = `
@@ -84,6 +86,20 @@ window.Views.plateforme = {
         </table>
       </div>
 
+      ${
+        essaisNonConfirmes.fermes.length
+          ? `<div class="panel">
+        <h2>Essais jamais confirmés (${essaisNonConfirmes.fermes.length})</h2>
+        <p class="desc">Un numéro WhatsApp a été saisi sur la page d'essai, mais le code reçu n'a jamais été entré depuis plus de ${essaisNonConfirmes.jours} jours : personne n'a pu se connecter. Les supprimer évite d'encombrer la liste des fermes (suppression douce, tracée dans le journal d'audit).</p>
+        <table>
+          <thead><tr><th>Ferme</th><th>Numéro</th><th>Créée il y a</th></tr></thead>
+          <tbody>${essaisNonConfirmes.fermes.map((f) => `<tr><td>${esc(f.nom)}</td><td>${esc(f.telephone)}</td><td>${f.jours} j</td></tr>`).join('')}</tbody>
+        </table>
+        <button class="danger" id="btn-nettoyer-essais" style="margin-top:12px">Supprimer ces ${essaisNonConfirmes.fermes.length} essai(s)</button>
+      </div>`
+          : ''
+      }
+
       <div class="panel">
         <h2>Tickets — toutes fermes (${tickets.length})</h2>
         <div class="form-grid" style="margin-bottom: 1rem;">
@@ -116,6 +132,20 @@ window.Views.plateforme = {
     });
     container.querySelectorAll('button[data-modifier-slug]').forEach((btn) => {
       btn.addEventListener('click', () => modifierSlug(container, btn.dataset.modifierSlug, btn.dataset.slug));
+    });
+
+    container.querySelector('#btn-nettoyer-essais')?.addEventListener('click', async () => {
+      const values = await Modal.open(`Supprimer ${essaisNonConfirmes.fermes.length} essai(s) jamais confirmé(s) ?`, [
+        { name: 'confirmer', label: 'Tapez "OUI" pour confirmer (ces fermes ne se sont jamais connectées)', type: 'text', value: '' },
+      ]);
+      if (!values || values.confirmer.trim().toUpperCase() !== 'OUI') return;
+      try {
+        const r = await Api.post('/plateforme/essais-non-confirmes/nettoyer', { jours: essaisNonConfirmes.jours });
+        showToast(`${r.supprimees} essai(s) supprimé(s).`, 'success');
+        window.Views.plateforme.render(container);
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
     });
 
     container.querySelector('#filtre-statut-plateforme').addEventListener('change', async (e) => {

@@ -251,6 +251,71 @@ module.exports = function plateformeRoutes(pool) {
     });
 
     /**
+     * Essais autonomes jamais confirmés (migration-35) : quelqu'un a saisi un numéro WhatsApp (le sien ou pas) mais n'a jamais
+     * entré le code reçu. Sans lui, la ferme créée ne peut jamais servir : aucune session n'a pu s'ouvrir. On ne cible que les
+     * fermes d'ESSAI créées par l'inscription autonome — un seul compte, un numéro, aucun e-mail, jamais vérifié, jamais
+     * converties en Pro — plus vieilles que `jours` jours (7 par défaut, 3 au minimum).
+     */
+    const JOURS_ESSAI_NON_CONFIRME = 7;
+    const JOURS_ESSAI_NON_CONFIRME_MIN = 3;
+
+    async function chercherEssaisNonConfirmes(db, jours) {
+        const limite = new Date(Date.now() - jours * JOUR_MS);
+        // Une ligne par (ferme d'essai, utilisateur) ; le tri « jamais confirmée, sans e-mail » se fait ensuite sur TOUS les
+        // comptes de la ferme — une seule personne confirmée ou ayant un e-mail suffit à l'exclure.
+        const r = await db.query(
+            `SELECT o.id, o.nom, o.cree_le, u.telephone, u.telephone_verifie, u.email
+             FROM organisations o
+             JOIN organisation_abonnement_saas a ON a.tenant_id = o.id AND a.plan = 'ESSAI' AND a.converti_pro_le IS NULL
+             JOIN utilisateurs u ON u.tenant_id = o.id AND u.deleted_at IS NULL
+             WHERE o.deleted_at IS NULL AND o.est_plateforme = FALSE AND o.cree_le < $1
+             ORDER BY o.cree_le ASC, o.id ASC`,
+            [limite]
+        );
+        const parFerme = new Map();
+        for (const ligne of r.rows) {
+            if (!parFerme.has(ligne.id)) parFerme.set(ligne.id, { ferme: ligne, comptes: [] });
+            parFerme.get(ligne.id).comptes.push(ligne);
+        }
+        return [...parFerme.values()]
+            .filter(({ comptes }) => comptes.every((c) => c.telephone && !c.telephone_verifie && !c.email))
+            .map(({ ferme: f }) => ({ id: f.id, nom: f.nom, telephone: f.telephone, cree_le: f.cree_le, jours: Math.floor((Date.now() - new Date(f.cree_le).getTime()) / JOUR_MS) }));
+    }
+
+    function lireJoursEssai(valeur) {
+        const jours = valeur === undefined || valeur === '' ? JOURS_ESSAI_NON_CONFIRME : Number(valeur);
+        return Number.isInteger(jours) && jours >= JOURS_ESSAI_NON_CONFIRME_MIN ? jours : null;
+    }
+
+    router.get('/essais-non-confirmes', ...garde, async (req, res) => {
+        const jours = lireJoursEssai(req.query.jours);
+        if (jours === null) return res.status(400).json({ erreur: `Délai invalide : ${JOURS_ESSAI_NON_CONFIRME_MIN} jours au minimum.` });
+        try {
+            res.json({ jours, fermes: await chercherEssaisNonConfirmes(req.db, jours) });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la recherche des essais non confirmés.' });
+        }
+    });
+
+    /** Supprime (soft delete, comme DELETE /organisations/:id) les fermes listées ci-dessus, chacune tracée dans le journal d'audit. */
+    router.post('/essais-non-confirmes/nettoyer', ...garde, async (req, res) => {
+        const jours = lireJoursEssai(req.body.jours);
+        if (jours === null) return res.status(400).json({ erreur: `Délai invalide : ${JOURS_ESSAI_NON_CONFIRME_MIN} jours au minimum.` });
+        try {
+            const fermes = await chercherEssaisNonConfirmes(req.db, jours);
+            for (const f of fermes) {
+                await req.db.query(`UPDATE organisations SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted_at IS NULL`, [f.id]);
+                await logAudit(req.db, { req, table: 'organisations', rowId: f.id, action: 'DELETE', userId: req.user.id, tenantId: f.id, details: { superviseur: req.user.nom, motif: 'essai_autonome_non_confirme', jours } });
+            }
+            res.json({ supprimees: fermes.length, jours });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors du nettoyage des essais non confirmés.' });
+        }
+    });
+
+    /**
      * Modifie le sous-domaine (<slug>.massla.sn, voir routes/public.js) d'une ferme — généré
      * automatiquement à la création (creerFerme.js), mais ajustable ici si le nom auto-dérivé ne
      * convient pas. Format volontairement strict (DNS-safe) : minuscules, chiffres, tirets, jamais
