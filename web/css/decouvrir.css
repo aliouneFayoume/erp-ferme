@@ -274,6 +274,29 @@ a.puce-secteur:hover { text-decoration: underline; text-underline-offset: 3px; }
 .comparaison .cote strong { font-size: 22px; line-height: 28px; font-variant-numeric: tabular-nums; }
 .comparaison .badge-eco { padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--dakar-500); color: var(--on-accent); font-weight: 800; }
 .note-tarifs { margin: var(--space-4) 0 0; font-size: 16px; opacity: 0.88; max-width: var(--texte-max); }
+/* ---------- Offres : Gratuit / Pro tout inclus ---------- */
+.offres { display: grid; gap: var(--space-4); margin-top: var(--space-8); }
+.offre { background: var(--sahel-800); border: 1px solid var(--on-brand-hover, var(--border)); border-radius: var(--radius-lg); padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2); color: var(--on-brand); }
+.offre h3 { color: var(--on-brand); }
+.offre .montant { margin-top: var(--space-2); font-size: 36px; line-height: 42px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+.offre .montant .devise { margin-left: var(--space-2); font-size: 18px; line-height: 24px; font-weight: 700; letter-spacing: 0; }
+.offre .periode { font-size: 15px; opacity: 0.85; }
+.offre-liste { margin: var(--space-4) 0; padding: 0; list-style: none; display: grid; gap: var(--space-3); }
+.offre-liste li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); padding-left: 32px; position: relative; }
+.offre-liste li::before { content: ""; position: absolute; left: 0; top: 2px; width: 20px; height: 20px; background-color: currentColor; -webkit-mask: var(--i-coche) center / contain no-repeat; mask: var(--i-coche) center / contain no-repeat; }
+.offre-liste li.non { opacity: 0.62; }
+.offre-liste li.non::before { -webkit-mask-image: var(--i-moins); mask-image: var(--i-moins); }
+.offre .btn { margin-top: auto; }
+.offre.vedette { background: var(--dakar-500); border-color: var(--dakar-500); color: var(--on-accent); }
+.offre.vedette h3 { color: var(--on-accent); }
+.offre.vedette .periode { opacity: 1; }
+.offre.vedette .badge-plus { align-self: flex-start; padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); background: var(--sahel-900); color: var(--on-brand); font-size: 13px; line-height: 18px; font-weight: 700; }
+.offre-lancement { margin: 0 0 var(--space-4); font-weight: 800; }
+.offre.vedette .btn { background: var(--sahel-900); color: var(--on-brand); border-color: var(--sahel-900); }
+.etiquette-bientot { display: inline-block; padding: 1px var(--space-2); border-radius: var(--radius-sm); background: var(--niayes-100); color: var(--ink); font-size: 12px; line-height: 18px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.section-sahel .etiquette-bientot { background: var(--sahel-900); color: var(--on-brand); }
+.aide-whatsapp { margin: var(--space-5) 0 0; }
+@media (min-width: 1024px) { .offres { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); } }
 
 /* ---------- FAQ ---------- */
 .faq { max-width: var(--texte-max); margin: var(--space-8) 0 0; }

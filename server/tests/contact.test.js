@@ -51,6 +51,7 @@ describe('contact — formulaire public massla.sn/decouvrir', () => {
             secteurs: [],
             nomFerme: '',
             ville: '',
+            source: 'demo',
         });
     });
 
@@ -67,6 +68,7 @@ describe('contact — formulaire public massla.sn/decouvrir', () => {
             secteurs: [],
             nomFerme: '',
             ville: '',
+            source: 'demo',
         });
     });
 
@@ -163,6 +165,22 @@ describe('contact — formulaire public massla.sn/decouvrir', () => {
         email.estConfigure.mockReturnValue(false);
         const res = await request(app).post('/api/contact').send(payloadValide());
         expect(res.status).toBe(503);
+        expect(email.envoyerNotificationContact).not.toHaveBeenCalled();
+    });
+
+    test("transmet le type de demande « essai » ; sans type (ancienne page en cache) c'est une démonstration", async () => {
+        const essai = await request(app).post('/api/contact').send(payloadValide({ source: 'essai' }));
+        expect(essai.status).toBe(201);
+        expect(email.envoyerNotificationContact).toHaveBeenLastCalledWith(expect.objectContaining({ source: 'essai' }));
+
+        const defaut = await request(app).post('/api/contact').send(payloadValide());
+        expect(defaut.status).toBe(201);
+        expect(email.envoyerNotificationContact).toHaveBeenLastCalledWith(expect.objectContaining({ source: 'demo' }));
+    });
+
+    test('refuse un type de demande inconnu', async () => {
+        const res = await request(app).post('/api/contact').send(payloadValide({ source: 'autre' }));
+        expect(res.status).toBe(400);
         expect(email.envoyerNotificationContact).not.toHaveBeenCalled();
     });
 

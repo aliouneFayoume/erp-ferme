@@ -164,7 +164,7 @@ const SECTEURS_CONTACT = { avicole: 'Aviculture', piscicole: 'Pisciculture', mar
 // Formulaire public massla.sn/decouvrir (routes/contact.js) : simple notification à l'équipe, pas
 // de compte ni de tenant à ce stade (visiteur pas encore client). reply_to pointe vers l'adresse du
 // visiteur pour que répondre depuis la boîte de réception aille directement à lui, sans copier-coller.
-async function envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp, preference = '', secteurs = [], nomFerme = '', ville = '' }) {
+async function envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp, preference = '', secteurs = [], nomFerme = '', ville = '', source = 'demo' }) {
     const { apiKey, from } = lireConfig();
     if (!apiKey || !from) {
         throw new Error("Intégration email non configurée (RESEND_API_KEY / RESEND_FROM_EMAIL manquants).");
@@ -178,9 +178,10 @@ async function envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp,
             from,
             to: [destinataire],
             reply_to: emailVisiteur,
-            subject: `Nouvelle demande de démonstration — ${echapperHtml(nom)}`,
+            subject: `${source === 'essai' ? "Nouvelle demande d'essai gratuit" : 'Nouvelle demande de démonstration'} — ${echapperHtml(nom)}`,
             html: `<p>Nouvelle demande depuis massla.sn/decouvrir :</p>
                    <ul>
+                     <li><strong>Type de demande :</strong> ${source === 'essai' ? 'Essai gratuit' : 'Démonstration'}</li>
                      <li><strong>Nom :</strong> ${echapperHtml(nom)}</li>
                      <li><strong>Email :</strong> ${echapperHtml(emailVisiteur)}</li>
                      <li><strong>WhatsApp :</strong> ${echapperHtml(whatsapp)} — <a href="https://wa.me/${encodeURIComponent(String(whatsapp).replace(/\D/g, ''))}">ouvrir la discussion WhatsApp</a></li>

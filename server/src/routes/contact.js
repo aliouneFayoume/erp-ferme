@@ -4,6 +4,9 @@ const email = require('../email');
 const { normaliserTelephone, emailFarfelue } = require('../validation');
 
 const PREFERENCES_VALIDES = ['whatsapp', 'telephone', 'email'];
+// D'où vient la demande : « Essayer gratuitement » ou « Demander ma démo ». Sert à mesurer quelle porte d'entrée amène
+// les fermes (voir Easystart/03-essai-gratuit.md). Absent (ancienne page en cache) = démonstration.
+const SOURCES_VALIDES = ['essai', 'demo'];
 // Mêmes valeurs que le formulaire de web/decouvrir.html (puces de secteur et liste de villes).
 const SECTEURS_VALIDES = ['avicole', 'piscicole', 'maraicher', 'elevage'];
 const VILLES_VALIDES = ['Thiès', 'Mbour', 'Petite Côte', 'Kaolack', 'Saint-Louis', 'Rufisque', 'Bambilor', 'Sangalkam', 'Dakar', 'Autre'];
@@ -33,6 +36,7 @@ module.exports = function contactRoutes(pool) {
         const emailVisiteur = String(req.body.email || '').trim();
         const whatsapp = normaliserTelephone(String(req.body.whatsapp || ''));
         const preference = String(req.body.preference || '').trim();
+        const source = String(req.body.source || 'demo').trim();
         // Secteur, ferme et ville aident à préparer la démonstration. Facultatifs côté serveur (une ancienne page en cache
         // ne les envoie pas — le formulaire actuel impose au moins un secteur) ; présents mais invalides = refusés.
         const secteursRecus = Array.isArray(req.body.secteurs) ? req.body.secteurs.map((s) => String(s).trim()) : [];
@@ -54,6 +58,9 @@ module.exports = function contactRoutes(pool) {
             return res.status(400).json({ erreur: 'Préférence de contact invalide.' });
         }
 
+        if (!SOURCES_VALIDES.includes(source)) {
+            return res.status(400).json({ erreur: 'Type de demande invalide.' });
+        }
         if (secteursRecus.some((s) => !SECTEURS_VALIDES.includes(s))) {
             return res.status(400).json({ erreur: 'Secteur invalide.' });
         }
@@ -70,7 +77,7 @@ module.exports = function contactRoutes(pool) {
         }
 
         try {
-            await email.envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp, preference, secteurs, nomFerme, ville });
+            await email.envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp, preference, secteurs, nomFerme, ville, source });
             res.status(201).json({ message: 'Demande envoyée. Nous vous recontactons rapidement.' });
         } catch (err) {
             console.error(err);

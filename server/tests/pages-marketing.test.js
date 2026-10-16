@@ -72,7 +72,10 @@ describe('pages marketing générées', () => {
     test("la page d'accueil décrit le hors-ligne du terrain, sans promettre « toutes les données »", () => {
         const html = lire('decouvrir.html');
         expect(html).not.toMatch(/toutes les données|fonctionne hors ligne|fonctionnement hors ligne|Fonctionne sans internet/);
-        expect(html).toContain("Le terrain n'attend pas le réseau");
+        // seuls les relevés se saisissent sans réseau : ni les stocks, ni les encaissements, ni les ventes
+        expect(html).not.toMatch(/encaissements\s*(—|-)\s*même sans réseau/);
+        expect(html).toContain('saisissez vos relevés dans le poulailler');
+        expect(html).toContain("Vos ventes s'enregistrent dès que vous avez du réseau");
         // la page d'accueil range ses données structurées dans un @graph (Organization, SoftwareApplication, FAQPage)
         const noeuds = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].flatMap((b) => {
             const j = JSON.parse(b[1]);
@@ -82,6 +85,69 @@ describe('pages marketing générées', () => {
         const reponse = faq.mainEntity.find((q) => q.name.includes('sans connexion internet')).acceptedAnswer.text;
         expect(reponse).toContain('demandent une connexion');
         expect(html).toContain(`<p>${reponse}</p>`);
+    });
+
+    // Offre Gratuit / Pro tout inclus (dossier Easystart). Rien d'inventé : seules les fonctions qui existent sont
+    // annoncées, les autres sont marquées « bientôt ». L'ancienne grille ne doit plus apparaître nulle part.
+    describe("nouvelle offre : Gratuit / Pro tout inclus", () => {
+        const accueil = () => lire('decouvrir.html');
+        const noeuds = () =>
+            [...accueil().matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].flatMap((b) => {
+                const j = JSON.parse(b[1]);
+                return j['@graph'] || [j];
+            });
+
+        test('titre, sous-titre et deux portes d\'entrée : essai gratuit et démo', () => {
+            const html = accueil();
+            expect(html).toContain('Sachez exactement ce que chaque lot de poulets <em>vous rapporte.</em>');
+            expect(html).toContain('Essayez gratuitement, sans carte bancaire.');
+            expect(html).toMatch(/data-source="essai"[^>]*>Essayer gratuitement<\/a>/);
+            expect(html).toMatch(/data-source="demo"[^>]*>Demander ma démo<\/a>/);
+        });
+
+        test('grille : Gratuit à 0, Pro tout inclus à 10 000 FCFA par mois, mise en place offerte, sans carte bancaire', () => {
+            const html = accueil();
+            expect(html).toContain('<h3>Gratuit</h3>');
+            expect(html).toContain('<h3>Pro tout inclus</h3>');
+            expect(html).toContain('10&nbsp;000<span class="devise">FCFA</span>');
+            expect(html).toContain('Offre de lancement : installation + formation offertes.');
+            expect(html).toContain('Sans carte bancaire. Sans engagement.');
+            const offres = noeuds().find((n) => n['@type'] === 'SoftwareApplication').offers;
+            expect(offres.map((o) => [o.price, o.priceCurrency])).toEqual([['0', 'XOF'], ['10000', 'XOF']]);
+        });
+
+        test("l'ancienne grille et son vocabulaire ont disparu de TOUTES les pages publiques", () => {
+            for (const nom of TOUTES) {
+                expect(lire(`${nom}.html`)).not.toMatch(/Socle Essentiel|Pack tout compris|à la carte|modules additionnels|(25|75|85)(\s|&nbsp;)000(\s|&nbsp;)FCFA/);
+            }
+        });
+
+        test("pas de promesse sur ce qui n'existe pas : quittances, relances avant échéance, bilan chiffré du lot", () => {
+            const html = accueil();
+            expect(html).not.toMatch(/quittance/i);
+            expect(html).not.toMatch(/avant échéance/i);
+            expect(html).not.toMatch(/alerte avant la rupture/i);
+            // le coût, les ventes et la marge du lot ne sont pas encore calculés : annoncés « bientôt », jamais comme acquis
+            expect(html).toMatch(/Coût, ventes et marge du lot : <span class="etiquette-bientot">bientôt<\/span>/);
+            expect(html).toContain('Export PDF / historique complet <span class="etiquette-bientot">bientôt</span>');
+        });
+
+        test("la section Résultats reste un emplacement sans chiffre ni témoignage inventé", () => {
+            const html = accueil();
+            expect(html).toContain('Premiers résultats terrain en cours — chiffres réels de fermes pilotes publiés ici dès le premier cycle terminé.');
+            expect(html).not.toMatch(/\+\s?\d+\s?%|\d+\s?%\s+de (marge|mortalité)/);
+        });
+
+        test('un lien WhatsApp « réponse vocale acceptée » dans chaque section, et le lien /decouvrir reste fonctionnel', () => {
+            const html = accueil();
+            expect((html.match(/class="aide-whatsapp"/g) || []).length).toBeGreaterThanOrEqual(6);
+            expect(html).toContain('Questions ? Écrivez-nous sur WhatsApp — réponse vocale acceptée');
+            expect(html).toContain('<link rel="canonical" href="https://massla.sn/decouvrir" />');
+        });
+
+        test("l'emplacement vidéo n'est affiché que lorsqu'une vraie vidéo existe : aucun lecteur vide", () => {
+            expect(accueil()).not.toMatch(/<video|<iframe/);
+        });
     });
 
     // Aucune table ne relie un animal à une ligne de commande : la vente (module Commandes, produit « tête » rattaché à

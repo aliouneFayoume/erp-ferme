@@ -7,6 +7,30 @@
   const submitBtn = document.getElementById('contact-submit');
   if (!overlay || !form) return;
 
+  // Deux portes d'entrée, un seul formulaire : « Essayer gratuitement » (data-source="essai") et « Demander ma démo ».
+  // Le type de demande part avec le formulaire (voir routes/contact.js) pour mesurer ce qui amène les fermes.
+  const TEXTES = {
+    demo: {
+      titre: 'Demander ma démo gratuite',
+      lede: 'Laissez vos coordonnées, nous vous recontactons rapidement pour organiser votre démonstration gratuite.',
+      envoi: 'Envoyer ma demande',
+    },
+    essai: {
+      titre: 'Essayer gratuitement',
+      lede: 'Laissez vos coordonnées : nous ouvrons votre essai gratuit avec vous sur WhatsApp. Sans carte bancaire, sans engagement.',
+      envoi: 'Demander mon essai',
+    },
+  };
+  let source = 'demo';
+  function appliquerTextes() {
+    const t = TEXTES[source];
+    const titre = document.getElementById('modal-contact-title');
+    const lede = overlay.querySelector('.modal-lede');
+    if (titre) titre.textContent = t.titre;
+    if (lede) lede.textContent = t.lede;
+    submitBtn.textContent = t.envoi;
+  }
+
   // Même règle que server/src/validation.js (normaliserTelephone) : le serveur reste l'autorité, ceci
   // évite seulement un aller-retour et corrige le numéro pendant la saisie.
   function normaliserTelephone(saisie) {
@@ -45,7 +69,9 @@
     if (normalise) champWhatsapp.value = formaterTelephone(normalise);
   });
 
-  function ouvrir() {
+  function ouvrir(mode) {
+    source = mode === 'essai' ? 'essai' : 'demo';
+    appliquerTextes();
     form.hidden = false;
     successEl.hidden = true;
     errEl.hidden = true;
@@ -62,7 +88,7 @@
   document.querySelectorAll('[data-open-contact]').forEach((el) => {
     el.addEventListener('click', (e) => {
       e.preventDefault();
-      ouvrir();
+      ouvrir(el.dataset.source);
     });
   });
   closeBtn?.addEventListener('click', fermer);
@@ -98,6 +124,7 @@
       secteurs,
       nomFerme: data.get('nomFerme') || '',
       ville: data.get('ville') || '',
+      source,
     };
 
     submitBtn.disabled = true;
@@ -110,7 +137,7 @@
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.erreur || "Erreur lors de l'envoi.");
-      window.MassiaAnalytics?.track('contact_form_envoye');
+      window.MassiaAnalytics?.track('contact_form_envoye', { source });
       form.reset();
       form.hidden = true;
       successEl.hidden = false;
@@ -119,7 +146,7 @@
       errEl.hidden = false;
     } finally {
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Envoyer ma demande';
+      submitBtn.textContent = TEXTES[source].envoi;
     }
   });
 })();

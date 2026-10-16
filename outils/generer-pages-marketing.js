@@ -138,7 +138,7 @@ function pageSecteur(s) {
         <h1>${s.h1}</h1>
         <p class="chapeau">${echapper(s.intro)}</p>
         <div class="cta-row" id="hero-cta">
-          <a class="btn btn-principal" href="#contact" data-open-contact data-track="clic_cta_secteur_${s.slug}">Demander ma démo gratuite</a>
+          <a class="btn btn-principal" href="#contact" data-open-contact data-source="essai" data-track="clic_cta_secteur_${s.slug}">Essayer gratuitement</a>
           <a class="btn btn-contour" href="/decouvrir#tarifs">Voir les tarifs</a>
         </div>
       </div>
@@ -198,9 +198,10 @@ ${faq}
   <section id="contact" class="section-sahel final">
     <div class="wrap">
       <h2>Voyez Massla sur votre propre téléphone</h2>
-      <p class="intro">Une démonstration gratuite de 15 minutes, sans engagement, avec un exemple adapté à votre ${echapper(s.nom.toLowerCase())}.</p>
+      <p class="intro">Essayez gratuitement, sans carte bancaire — ou demandez une démonstration de 15 minutes avec un exemple adapté à votre ${echapper(s.nom.toLowerCase())}.</p>
       <div class="cta-row">
-        <button type="button" class="btn btn-accent" data-open-contact data-track="clic_ouvrir_modal_contact_${s.slug}">Demander ma démo gratuite</button>
+        <button type="button" class="btn btn-accent" data-open-contact data-source="essai" data-track="clic_ouvrir_modal_contact_${s.slug}">Essayer gratuitement</button>
+        <button type="button" class="btn btn-contour-clair" data-open-contact data-source="demo" data-track="clic_cta_demo_${s.slug}">Demander ma démo</button>
         ${BOUTON_WHATSAPP}
       </div>
     </div>
