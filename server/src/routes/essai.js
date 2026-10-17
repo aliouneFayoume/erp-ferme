@@ -84,7 +84,7 @@ module.exports = function essaiRoutes(pool) {
     async function trouverParTelephone(telephone) {
         const r = await queryPreTenant(
             pool,
-            `SELECT u.id, u.tenant_id, u.actif, u.token_version, u.login_code_envoye_le, o.deleted_at AS organisation_supprimee_le
+            `SELECT u.id, u.tenant_id, u.actif, u.token_version, u.telephone_verifie, u.login_code_envoye_le, o.deleted_at AS organisation_supprimee_le
              FROM utilisateurs u LEFT JOIN organisations o ON o.id = u.tenant_id
              WHERE u.telephone = $1 AND u.deleted_at IS NULL`,
             [telephone]
@@ -97,9 +97,10 @@ module.exports = function essaiRoutes(pool) {
     async function envoyerNouveauCode(utilisateur, telephone) {
         const dernier = utilisateur.login_code_envoye_le ? new Date(utilisateur.login_code_envoye_le).getTime() : 0;
         if (Date.now() - dernier < DELAI_RENVOI_SECONDES * 1000) return; // trop tôt : on ne renvoie pas, sans le dire
-        // Plafond par numéro : même réponse que d'habitude (rien n'est révélé), simplement aucun message de plus aujourd'hui.
-        if ((await nombreCodesAujourdhui(utilisateur.id)) >= plafondsCodes().parNumero) {
-            console.warn(`Essai autonome : plafond quotidien de codes atteint pour le compte ${utilisateur.id}.`);
+        // Numéro jamais confirmé : 1 code par jour. Même réponse que d'habitude (rien n'est révélé), simplement aucun message de plus
+        // aujourd'hui. Une fois confirmé, plus aucun plafond par numéro.
+        if (!utilisateur.telephone_verifie && (await nombreCodesAujourdhui(utilisateur.id)) >= plafondsCodes().nonConfirmeParNumero) {
+            console.warn(`Essai autonome : plafond quotidien atteint pour le numéro non confirmé du compte ${utilisateur.id}.`);
             return;
         }
         const { code, hash, expireLe } = genererCodeConnexion();

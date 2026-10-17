@@ -13,10 +13,12 @@ const DELAI_RENVOI_SECONDES = 60;
 // Plafonds quotidiens de codes WhatsApp (coût et harcèlement) : chaque code envoyé est un message facturé par Meta, et la page
 // d'essai est publique. Les limites par adresse IP (routes/essai.js) ne suffisent pas contre quelqu'un qui change d'adresse.
 //   - global : au-delà, plus aucune inscription ni demande de code jusqu'au lendemain (UTC) — c'est un plafond de BUDGET ;
-//   - par numéro : borne le nombre de messages reçus par une même personne dans la journée (harcèlement).
-// Réglables par ESSAI_PLAFOND_CODES_JOUR / ESSAI_PLAFOND_CODES_NUMERO_JOUR sans redéployer.
+//   - par numéro NON CONFIRMÉ : 1 code par jour (une inscription = un code). Un numéro saisi mais jamais confirmé ne peut pas être
+//     inondé de messages. Une fois le numéro confirmé (premier code saisi), le compte peut demander autant de codes qu'il veut :
+//     il n'y a plus de plafond par numéro (restent le délai d'une minute entre deux envois et le plafond global).
+// Réglables par ESSAI_PLAFOND_CODES_JOUR / ESSAI_PLAFOND_CODES_NON_CONFIRME_JOUR sans redéployer.
 const PLAFOND_CODES_JOUR_DEFAUT = 300;
-const PLAFOND_CODES_NUMERO_JOUR_DEFAUT = 8;
+const PLAFOND_CODES_NON_CONFIRME_JOUR_DEFAUT = 1;
 function entierPositif(valeur, defaut) {
     const n = Number(valeur);
     return Number.isInteger(n) && n > 0 ? n : defaut;
@@ -24,7 +26,7 @@ function entierPositif(valeur, defaut) {
 function plafondsCodes() {
     return {
         global: entierPositif(process.env.ESSAI_PLAFOND_CODES_JOUR, PLAFOND_CODES_JOUR_DEFAUT),
-        parNumero: entierPositif(process.env.ESSAI_PLAFOND_CODES_NUMERO_JOUR, PLAFOND_CODES_NUMERO_JOUR_DEFAUT),
+        nonConfirmeParNumero: entierPositif(process.env.ESSAI_PLAFOND_CODES_NON_CONFIRME_JOUR, PLAFOND_CODES_NON_CONFIRME_JOUR_DEFAUT),
     };
 }
 /** Début de la journée en cours, en UTC (Sénégal = UTC+0) : les compteurs repartent à zéro chaque jour. */

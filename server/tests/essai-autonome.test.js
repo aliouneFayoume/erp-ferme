@@ -196,7 +196,9 @@ describe('essai autonome — inscription par téléphone et connexion par code W
         expect(res.status).toBe(202);
         expect(envoyerMessageWhatsapp).toHaveBeenCalledTimes(1);
 
-        // Après le délai de renvoi, un nouveau code part
+        // Numéro confirmé (premier code saisi) : après le délai de renvoi d'une minute, un nouveau code part. Tant qu'il n'est pas
+        // confirmé, le plafond d'un code par jour s'applique (voir essai-plafonds.test.js).
+        await connecter();
         await pool.query(`UPDATE utilisateurs SET login_code_envoye_le = now() - interval '2 minutes'`);
         await request(app).post('/api/essai/code').send({ telephone: TEL });
         expect(envoyerMessageWhatsapp).toHaveBeenCalledTimes(2);
