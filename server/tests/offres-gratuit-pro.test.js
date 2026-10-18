@@ -20,7 +20,8 @@ jest.mock('../src/email', () => ({
 }));
 
 const JOUR_MS = 24 * 3600 * 1000;
-const MAINTENANT = new Date('2026-10-15T12:00:00Z');
+// Horloge réelle : une date figée finirait par être dépassée et ferait échouer le test (c'est arrivé le 18/10, le déploiement a été bloqué).
+const MAINTENANT = new Date();
 const dans = (jours) => new Date(MAINTENANT.getTime() + jours * JOUR_MS);
 
 // ---------------------------------------------------------------------------------------------------------------------
