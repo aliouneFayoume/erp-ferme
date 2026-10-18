@@ -6,8 +6,10 @@ window.Views['mon-compte'] = {
   async render(container) {
     const { utilisateur } = await Api.get('/auth/me');
 
-    container.innerHTML = `
-      <div class="panel">
+    // Compte d'essai autonome : ouvert avec un simple numéro WhatsApp, sans e-mail ni mot de passe. Tant qu'il n'est pas
+    // sécurisé, la carte « Mot de passe » n'aurait aucun sens (il n'y en a pas) : on propose d'en créer un.
+    const carteIdentifiants = utilisateur.compteSecurise
+      ? `<div class="panel">
         <h2>Mot de passe</h2>
         <form id="form-mdp" class="form-grid" autocomplete="off">
           <label>Mot de passe actuel<input type="password" name="currentPassword" required autocomplete="current-password" /></label>
@@ -16,7 +18,25 @@ window.Views['mon-compte'] = {
           </label>
           <button type="submit">Mettre à jour le mot de passe</button>
         </form>
-      </div>
+      </div>`
+      : `<div class="panel">
+        <h2>Sécuriser mon compte</h2>
+        ${
+          utilisateur.emailEnAttente
+            ? `<p><span class="badge warn">E-mail à confirmer</span> Un lien a été envoyé à <strong>${esc(utilisateur.email)}</strong>. Cliquez dessus pour terminer. Une faute de frappe ? Corrigez l'adresse ci-dessous.</p>`
+            : `<p class="sub">Aujourd'hui vous vous connectez avec un code reçu sur WhatsApp${utilisateur.telephone ? ` (${esc(utilisateur.telephone)})` : ''}. Ajoutez une adresse e-mail et un mot de passe : vous pourrez aussi vous connecter ainsi, et c'est nécessaire avant de passer en Pro (équipe, double authentification). Le code WhatsApp reste utilisable.</p>`
+        }
+        <form id="form-securiser" class="form-grid" autocomplete="off">
+          <label>Adresse e-mail<input type="email" name="email" required maxlength="100" autocomplete="email" value="${esc(utilisateur.email || '')}" /></label>
+          <label>Mot de passe (10 caractères min., avec majuscule, minuscule, chiffre et caractère spécial)
+            <input type="password" name="password" required minlength="10" autocomplete="new-password" />
+          </label>
+          <button type="submit">${utilisateur.emailEnAttente ? "Renvoyer le lien" : 'Sécuriser mon compte'}</button>
+        </form>
+      </div>`;
+
+    container.innerHTML = `
+      ${carteIdentifiants}
 
       <div class="panel">
         <h2>Authentification à deux facteurs (MFA)</h2>
@@ -32,7 +52,9 @@ window.Views['mon-compte'] = {
         </p>
 
         ${
-          utilisateur.mfaActif
+          !utilisateur.compteSecurise
+            ? `<p class="sub">Sécurisez d'abord votre compte (carte ci-dessus) : la double authentification se configure avec votre mot de passe.</p>`
+            : utilisateur.mfaActif
             ? `<button class="danger" id="btn-mfa-desactiver">Désactiver le MFA</button>`
             : `
           <div class="form-grid">
@@ -52,7 +74,21 @@ window.Views['mon-compte'] = {
       </div>
     `;
 
-    container.querySelector('#form-mdp').addEventListener('submit', async (e) => {
+    container.querySelector('#form-securiser')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      try {
+        const data = await Api.post('/auth/securiser-compte', { email: fd.get('email'), password: fd.get('password') });
+        // Le mot de passe vient d'être posé : la session change de version, l'identité affichée reste la même.
+        Api.setSession(data.token, Api.getUser());
+        showToast(data.message, 'success');
+        window.Views['mon-compte'].render(container);
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    container.querySelector('#form-mdp')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       try {
@@ -84,7 +120,7 @@ window.Views['mon-compte'] = {
       return;
     }
 
-    container.querySelector('#btn-totp-init').addEventListener('click', async () => {
+    container.querySelector('#btn-totp-init')?.addEventListener('click', async () => {
       // Le serveur exige une reconfirmation du mot de passe pour brancher un nouveau second
       // facteur (audit sécurité 2026-08-27) — un jeton de session seul ne suffit plus.
       const values = await Modal.open('Configurer le MFA', [{ name: 'currentPassword', label: 'Mot de passe actuel', type: 'password', value: '' }]);

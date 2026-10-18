@@ -6,7 +6,7 @@ const rateLimit = require('express-rate-limit');
 const { signToken, requireAuth, attachTenantConnection, queryPreTenant, queryAvecTenant, JWT_SECRET } = require('../auth');
 const { logAudit } = require('../audit');
 const { ongletsAutorises } = require('../modulesSaas');
-const { motDePasseValide, motDePasseErreurs } = require('../validation');
+const { motDePasseValide, motDePasseErreurs, emailFarfelue } = require('../validation');
 const mfa = require('../mfa');
 const { chiffrer } = require('../credentials');
 // Nommé `emailService` (pas `email`) : plusieurs routes ci-dessous destructurent `email` du body.
@@ -329,6 +329,84 @@ module.exports = function authRoutes(pool) {
         }
     });
 
+    /**
+     * Sécurisation d'un compte d'essai autonome (migration-35) : le compte s'est ouvert avec un simple numéro WhatsApp (code à
+     * chaque connexion, aucun e-mail ni mot de passe). Ici le gérant ajoute une adresse e-mail et un vrai mot de passe pour se
+     * connecter aussi à la façon classique — indispensable avant de passer en Pro (inviter une équipe, double authentification).
+     * Le code WhatsApp reste utilisable. L'adresse n'est utilisable pour se connecter qu'après clic sur le lien reçu par e-mail
+     * (même règle que tout compte) : tant qu'elle n'est pas vérifiée, on peut la corriger en renvoyant le formulaire.
+     * Réservé aux comptes sans adresse vérifiée : un compte déjà sécurisé passe par « Mot de passe » (PUT /mot-de-passe).
+     */
+    router.post('/securiser-compte', limiteurCompteSensible, requireAuth(pool), async (req, res) => {
+        const emailSaisi = String(req.body.email || '').trim().toLowerCase();
+        const { password } = req.body;
+        if (!emailSaisi || !password) {
+            return res.status(400).json({ erreur: 'Adresse e-mail et mot de passe requis.' });
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailSaisi) || emailSaisi.length > 100 || emailFarfelue(emailSaisi)) {
+            return res.status(400).json({ erreur: 'Adresse e-mail invalide. Utilisez une adresse que vous consultez vraiment.' });
+        }
+        if (!motDePasseValide(password)) {
+            return res.status(400).json({ erreur: `Le mot de passe doit contenir ${motDePasseErreurs(password).join(', ')}.` });
+        }
+        // Comme à la création d'un utilisateur : sans service d'e-mail, l'adresse ne pourrait jamais être vérifiée.
+        if (!emailService.estConfigure()) {
+            return res.status(503).json({ erreur: 'Vérification e-mail indisponible pour le moment. Réessayez plus tard.' });
+        }
+
+        try {
+            const actuel = await req.db.query(`SELECT nom_complet, email, email_verifie FROM utilisateurs WHERE id = $1 AND deleted_at IS NULL`, [req.user.id]);
+            const compte = actuel.rows[0];
+            if (!compte) return res.status(404).json({ erreur: 'Utilisateur introuvable.' });
+            if (compte.email && compte.email_verifie) {
+                return res.status(409).json({ erreur: 'Votre compte est déjà sécurisé. Modifiez votre mot de passe depuis « Mot de passe ».' });
+            }
+
+            // Envoi AVANT d'écrire : si l'e-mail ne part pas, rien n'a changé et la personne peut réessayer proprement.
+            const jeton = crypto.randomBytes(32).toString('hex');
+            try {
+                await emailService.envoyerEmailVerification(emailSaisi, compte.nom_complet, jeton);
+            } catch (err) {
+                console.error("Échec de l'envoi de l'e-mail de vérification (sécurisation du compte) :", err);
+                return res.status(502).json({ erreur: "Impossible d'envoyer l'e-mail de vérification. Vérifiez l'adresse et réessayez." });
+            }
+
+            const hash = await bcrypt.hash(password, 10);
+            let mise;
+            try {
+                mise = await req.db.query(
+                    `UPDATE utilisateurs SET email = $1, mot_de_passe_hash = $2, email_verifie = FALSE,
+                            email_verification_token_hash = $3, email_verification_expire_le = now() + interval '24 hours',
+                            token_version = token_version + 1
+                     WHERE id = $4 RETURNING token_version`,
+                    [emailSaisi, hash, hashToken(jeton), req.user.id]
+                );
+            } catch (err) {
+                // 23505 : l'adresse est unique sur toute la plateforme (toutes fermes confondues).
+                if (err.code === '23505') {
+                    return res.status(409).json({ erreur: 'Cette adresse e-mail est déjà utilisée sur Massla. Utilisez-en une autre.' });
+                }
+                throw err;
+            }
+            await logAudit(req.db, { req, table: 'utilisateurs', rowId: req.user.id, action: 'UPDATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { securisation_compte: true, email: emailSaisi } });
+
+            // Nouvelle version de session (le mot de passe vient d'être posé) : l'appelant garde sa propre session.
+            const token = signToken({
+                id: req.user.id,
+                role_nom: req.user.role,
+                nom_complet: req.user.nom,
+                secteur_id: req.user.secteur_id,
+                tenant_id: req.user.tenant_id,
+                est_superviseur_plateforme: req.user.superviseurPlateforme,
+                token_version: mise.rows[0].token_version,
+            });
+            res.json({ message: `Un e-mail de vérification a été envoyé à ${emailSaisi}. Cliquez sur le lien qu'il contient pour terminer.`, email: emailSaisi, token });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la sécurisation du compte.' });
+        }
+    });
+
     router.get('/verifier-email', limiteurVerifierEmail, async (req, res) => {
         const token = String(req.query.token || '');
         if (!token) return res.status(400).json({ erreur: 'Lien de vérification invalide.' });
@@ -639,7 +717,7 @@ module.exports = function authRoutes(pool) {
     });
 
     router.get('/me', requireAuth(pool), async (req, res) => {
-        const result = await req.db.query(`SELECT mfa_actif, mfa_methode, mfa_obligatoire FROM utilisateurs WHERE id = $1`, [req.user.id]);
+        const result = await req.db.query(`SELECT mfa_actif, mfa_methode, mfa_obligatoire, email, email_verifie, telephone FROM utilisateurs WHERE id = $1`, [req.user.id]);
         const row = result.rows[0] || {};
         // onglets/modules : null = aucune restriction (voir modulesSaas.js). Le frontend les relit à
         // chaque chargement (app.js, rafraichirAcces) pour qu'un changement d'abonnement fait par le
@@ -650,6 +728,11 @@ module.exports = function authRoutes(pool) {
                 mfaActif: !!row.mfa_actif,
                 mfaMethode: row.mfa_methode,
                 mfaObligatoire: !!row.mfa_obligatoire,
+                // Compte d'essai autonome (téléphone seul) : l'écran « Mon compte » propose alors de le sécuriser (POST /securiser-compte).
+                email: row.email || null,
+                emailEnAttente: !!row.email && !row.email_verifie,
+                telephone: row.telephone || null,
+                compteSecurise: !!row.email && !!row.email_verifie,
                 onglets: ongletsAutorises(req.acces),
                 modules: req.acces === null ? null : req.acces.souscrits,
                 // Offre (migration-34) : null = ferme sur mesure ; sinon { plan, joursRestants } pour le bandeau « Passer en Pro ».
