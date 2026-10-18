@@ -65,6 +65,20 @@ const DUREE_ESSAI_JOURS = 30;
 const MODULES_OFFRE = ['clients_abonnements', 'commandes_fournisseurs', 'finance'];
 const LIMITES_ESSAI = { lotsEnCours: 1, utilisateurs: 1 };
 
+// Prix mensuel du Pro (grille publique : 10 000 FCFA) — réglable par PRO_PRIX_MENSUEL sans redéployer.
+function prixProMensuel() {
+    const n = Number(process.env.PRO_PRIX_MENSUEL);
+    return Number.isInteger(n) && n > 0 ? n : 10000;
+}
+
+/**
+ * Interrupteur du paiement en ligne du passage en Pro (fail-closed, comme ESSAI_AUTONOME_ACTIF) : tant que PASSAGE_PRO_EN_LIGNE_ACTIF
+ * n'est pas « true », le bouton « Passer en Pro » reste le message WhatsApp + demande enregistrée.
+ */
+function passageProEnLigneActif() {
+    return process.env.PASSAGE_PRO_EN_LIGNE_ACTIF === 'true';
+}
+
 /**
  * Offre EFFECTIVE d'une ferme à un instant donné : null (sur mesure / pas d'abonnement), 'ESSAI', 'EXPIRE' (essai
  * terminé : consultation seule) ou 'PRO'. Calculée à chaque requête à partir de la date de fin : aucune tâche
@@ -141,6 +155,8 @@ module.exports = {
     LIMITES_ESSAI,
     planEffectif,
     joursRestantsEssai,
+    prixProMensuel,
+    passageProEnLigneActif,
     resoudreAcces,
     moduleAutorise,
     ongletsAutorises,

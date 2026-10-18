@@ -886,8 +886,9 @@ CREATE TABLE avis_publics (
 CREATE TABLE demandes_contact (
     id SERIAL PRIMARY KEY,
     nom VARCHAR(100) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    whatsapp VARCHAR(30) NOT NULL,
+    email VARCHAR(255), -- facultatif depuis migration-39 (une demande « pro » vient d'un compte d'essai sans e-mail)
+    whatsapp VARCHAR(30),
+    tenant_id INT REFERENCES organisations(id), -- migration-39 : ferme d'origine d'une demande « pro » (NULL pour un visiteur)
     preference VARCHAR(20),
     secteurs VARCHAR(100),
     nom_ferme VARCHAR(100),

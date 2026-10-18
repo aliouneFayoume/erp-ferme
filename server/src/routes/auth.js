@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const { signToken, requireAuth, attachTenantConnection, queryPreTenant, queryAvecTenant, JWT_SECRET } = require('../auth');
 const { logAudit } = require('../audit');
-const { ongletsAutorises } = require('../modulesSaas');
+const { ongletsAutorises, prixProMensuel, passageProEnLigneActif } = require('../modulesSaas');
 const { motDePasseValide, motDePasseErreurs, emailFarfelue } = require('../validation');
 const mfa = require('../mfa');
 const { chiffrer } = require('../credentials');
@@ -719,6 +719,7 @@ module.exports = function authRoutes(pool) {
     router.get('/me', requireAuth(pool), async (req, res) => {
         const result = await req.db.query(`SELECT mfa_actif, mfa_methode, mfa_obligatoire, email, email_verifie, telephone FROM utilisateurs WHERE id = $1`, [req.user.id]);
         const row = result.rows[0] || {};
+        const orga = await req.db.query(`SELECT nom FROM organisations WHERE id = $1`, [req.user.tenant_id]);
         // onglets/modules : null = aucune restriction (voir modulesSaas.js). Le frontend les relit à
         // chaque chargement (app.js, rafraichirAcces) pour qu'un changement d'abonnement fait par le
         // superviseur s'applique sans reconnexion ; l'API refuse de toute façon un module non souscrit.
@@ -736,7 +737,9 @@ module.exports = function authRoutes(pool) {
                 onglets: ongletsAutorises(req.acces),
                 modules: req.acces === null ? null : req.acces.souscrits,
                 // Offre (migration-34) : null = ferme sur mesure ; sinon { plan, joursRestants } pour le bandeau « Passer en Pro ».
-                offre: req.offre ? { plan: req.offre, joursRestants: req.joursEssaiRestants } : null,
+                // enLigne : le paiement en ligne du Pro est ouvert (sinon le bouton reste « message WhatsApp + demande enregistrée »).
+                offre: req.offre ? { plan: req.offre, joursRestants: req.joursEssaiRestants, enLigne: passageProEnLigneActif(), prixMensuel: prixProMensuel() } : null,
+                organisationNom: (orga.rows[0] && orga.rows[0].nom) || null,
             },
         });
     });

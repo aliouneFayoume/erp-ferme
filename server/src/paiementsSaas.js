@@ -14,8 +14,11 @@ const { attachTenantConnection, queryPreTenantPlateforme, JWT_SECRET } = require
 const { logAudit } = require('./audit');
 const { creerFacture, confirmerFacture } = require('./paydunya');
 const { getPaydunyaConfig } = require('./paymentConfig');
+const { prixProMensuel } = require('./modulesSaas');
 
 const STATUTS_PAYABLES = ['A_PAYER', 'EN_RETARD'];
+// Note posée sur la facture créée par « Passer en Pro » (routes/abonnement.js) : seule une facture qui la porte active le Pro à son paiement.
+const NOTE_PASSAGE_PRO = 'PASSAGE_PRO';
 const LIBELLES_TYPE_FACTURE = { CONFIGURATION: 'Mise en route', ABONNEMENT: 'Abonnement' };
 
 // Un checkout PayDunya expire ~30 minutes après sa création (constaté en production, 2026-09-24 : le compteur
@@ -223,7 +226,7 @@ async function traiterIpnSaas(req, res, pool, token) {
             return true;
         }
 
-        const factureRes = await client.query(`SELECT id, statut FROM factures_saas WHERE id = $1 FOR UPDATE`, [paiement.facture_saas_id]);
+        const factureRes = await client.query(`SELECT id, statut, notes FROM factures_saas WHERE id = $1 FOR UPDATE`, [paiement.facture_saas_id]);
         const facture = factureRes.rows[0];
 
         if (!facture || !STATUTS_PAYABLES.includes(facture.statut)) {
@@ -249,7 +252,22 @@ async function traiterIpnSaas(req, res, pool, token) {
             `UPDATE factures_saas SET statut = 'PAYEE', date_paiement = CURRENT_TIMESTAMP, methode_paiement = 'PAYDUNYA' WHERE id = $1`,
             [paiement.facture_saas_id]
         );
+        // Passage en Pro en libre-service : dans la MÊME transaction que le paiement (jamais payé sans activé, jamais activé sans payé).
+        // Ne touche qu'une ferme en offre ESSAI/PRO (plan non nul) : une ferme « sur mesure » (plan NULL) n'est jamais modifiée ici.
+        let proActive = false;
+        if (facture.notes === NOTE_PASSAGE_PRO) {
+            const maj = await client.query(
+                `UPDATE organisation_abonnement_saas
+                 SET plan = 'PRO', actif = TRUE, montant_mensuel = $2, converti_pro_le = COALESCE(converti_pro_le, CURRENT_TIMESTAMP)
+                 WHERE tenant_id = $1 AND plan IS NOT NULL RETURNING tenant_id`,
+                [paiement.tenant_id, prixProMensuel()]
+            );
+            proActive = maj.rows.length > 0;
+        }
         await client.query('COMMIT');
+        if (proActive) {
+            await logAudit(req.db, { req, table: 'organisation_abonnement_saas', rowId: paiement.tenant_id, action: 'UPDATE', tenantId: paiement.tenant_id, details: { plan: 'PRO', via: 'paiement_en_ligne', facture_saas_id: paiement.facture_saas_id } });
+        }
 
         await logAudit(req.db, {
             req,
@@ -272,6 +290,7 @@ async function traiterIpnSaas(req, res, pool, token) {
 module.exports = {
     traiterIpnSaas,
     STATUTS_PAYABLES,
+    NOTE_PASSAGE_PRO,
     creerJeton,
     lireJeton,
     avecContexteEmetteur,

@@ -294,10 +294,10 @@ function renderLignesDemandes(demandes) {
       return `<tr>
         <td>${fmtDate(d.cree_le)}</td>
         <td>${esc(d.nom)}</td>
-        <td>${esc(d.whatsapp)}</td>
-        <td>${esc(d.email)}</td>
+        <td>${d.whatsapp ? esc(d.whatsapp) : '<span class="desc">—</span>'}</td>
+        <td>${d.email ? esc(d.email) : '<span class="desc">—</span>'}</td>
         <td>${detail ? esc(detail) : '<span class="desc">—</span>'}</td>
-        <td>${d.source === 'essai' ? 'Essai gratuit' : 'Démonstration'}</td>
+        <td>${d.source === 'pro' ? '<strong>Passer en Pro</strong>' : d.source === 'essai' ? 'Essai gratuit' : 'Démonstration'}</td>
         <td><span class="badge ${d.traitee ? 'ok' : 'warn'}">${d.traitee ? 'Traitée' : 'À rappeler'}</span></td>
         <td><button class="secondary" data-demande="${d.id}" data-traitee="${d.traitee ? 'false' : 'true'}">${d.traitee ? 'Rouvrir' : 'Marquer traitée'}</button></td>
       </tr>`;

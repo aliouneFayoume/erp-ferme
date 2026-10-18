@@ -877,7 +877,7 @@ module.exports = function plateformeRoutes(pool) {
     router.get('/demandes-contact', ...garde, async (req, res) => {
         try {
             const result = await req.db.query(
-                `SELECT id, nom, email, whatsapp, preference, secteurs, nom_ferme, ville, source, traitee, cree_le
+                `SELECT id, nom, email, whatsapp, preference, secteurs, nom_ferme, ville, source, tenant_id, traitee, cree_le
                  FROM demandes_contact ORDER BY traitee ASC, cree_le DESC, id DESC LIMIT 200`
             );
             res.json(result.rows);

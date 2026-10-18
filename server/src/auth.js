@@ -284,7 +284,8 @@ function requireAuth(pool, { module: moduleRequis = null } = {}) {
             // une session d'impersonation du support (qui doit pouvoir dépanner la ferme).
             if (req.offre === 'EXPIRE' && !req.user.impersonation && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
                 const chemin = req.originalUrl.split('?')[0];
-                if (!chemin.startsWith('/api/auth/')) {
+                // /api/abonnement/ : c'est précisément ce que fait une ferme dont l'essai est terminé (payer le Pro, demander un rappel).
+                if (!chemin.startsWith('/api/auth/') && !chemin.startsWith('/api/abonnement/')) {
                     return res.status(402).json({
                         erreur: 'Votre essai gratuit est terminé : vos données restent consultables. Passez en Pro pour continuer à saisir.',
                         code: 'ESSAI_TERMINE',

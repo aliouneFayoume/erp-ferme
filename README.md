@@ -77,6 +77,13 @@ RAPPEL_FIN_ESSAI_ACTIF=false
 WHATSAPP_TEMPLATE_J3_NOM=
 WHATSAPP_TEMPLATE_J3_LANGUE=fr
 
+# Passage en Pro en libre-service (server/src/routes/abonnement.js) : le bouton « Passer en Pro » crée la facture du premier mois
+# (PRO_PRIX_MENSUEL, 10000 par défaut) et mène au paiement PayDunya de Massla ; le Pro s'active quand l'IPN confirme le paiement.
+# FERMÉ tant que PASSAGE_PRO_EN_LIGNE_ACTIF n'est pas « true » (le bouton reste alors un message WhatsApp + une demande enregistrée,
+# migration-39). Nécessite un compte PayDunya configuré pour Massla (Réglages > Paiement) — vérifier d'abord en mode test.
+PASSAGE_PRO_EN_LIGNE_ACTIF=false
+PRO_PRIX_MENSUEL=10000
+
 # Vérification d'adresse email à l'inscription/création d'utilisateur (obligatoire — sans ces
 # clés, la création de tout nouveau compte échoue proprement en 503 plutôt que de créer un compte
 # invérifiable). Nécessite un domaine vérifié côté Resend (DNS SPF/DKIM sur massla.sn).

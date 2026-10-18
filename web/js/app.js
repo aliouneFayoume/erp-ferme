@@ -503,7 +503,7 @@ window.aModule = function aModule(cle) {
 // expirée) laisse l'état connu en place : l'API reste la vraie barrière.
 // Bandeau d'offre (migration-34) : visible seulement en essai gratuit ou une fois l'essai terminé (consultation seule), jamais
 // pour une ferme sur mesure ni en Pro. Le bouton ouvre WhatsApp avec un message prêt : le passage en Pro est confirmé à la main.
-function afficherBandeauOffre(offre, user) {
+function afficherBandeauOffre(offre, utilisateur) {
   let bandeau = document.getElementById('bandeau-offre');
   const montrer = offre && (offre.plan === 'ESSAI' || offre.plan === 'EXPIRE');
   if (!montrer) {
@@ -526,19 +526,54 @@ function afficherBandeauOffre(offre, user) {
         ? `Votre essai se termine dans ${jours} jour${pluriel} — passez en Pro pour garder vos lots illimités. Vos données restent consultables dans tous les cas.`
         : `Essai gratuit : ${jours} jour${pluriel} restant${pluriel}.`
       : 'Essai terminé : vos données restent consultables. Passez en Pro pour continuer à saisir.';
-  const message = `Bonjour, je souhaite passer en Pro pour ma ferme. (${(user && user.nom) || (user && user.nom_complet) || 'compte Massla'})`;
+
+  // Message WhatsApp prêt à envoyer : assez de détails pour qu'on sache tout de suite de quelle ferme il s'agit.
+  const u = utilisateur || {};
+  const ferme = u.organisationNom || 'ma ferme';
+  const nom = u.nom || u.nom_complet || 'compte Massla';
+  const etat = offre.plan === 'ESSAI' ? `essai en cours (${jours} jour${pluriel} restant${pluriel})` : 'essai terminé';
+  const message = `Bonjour, je souhaite passer en Pro pour ma ferme « ${ferme} ». Compte : ${nom}${u.telephone ? ` (${u.telephone})` : ''}. Situation : ${etat}.`;
+
   bandeau.className = `offline-banner bandeau-offre${offre.plan === 'EXPIRE' ? ' expire' : ''}`;
   bandeau.setAttribute('role', 'status');
   bandeau.innerHTML = '';
   const span = document.createElement('span');
   span.textContent = texte;
-  const lien = document.createElement('a');
-  lien.className = 'btn-lien-offre';
-  lien.href = `https://wa.me/14165266293?text=${encodeURIComponent(message)}`;
-  lien.target = '_blank';
-  lien.rel = 'noopener';
-  lien.textContent = 'Passer en Pro';
-  bandeau.append(span, lien);
+  bandeau.append(span);
+
+  // Lien WhatsApp : la demande est enregistrée (liste « à rappeler » de Support plateforme) sans attendre la réponse, pour ne pas
+  // retarder l'ouverture de WhatsApp (un navigateur peut bloquer une fenêtre ouverte après une attente).
+  const lienWhatsapp = document.createElement('a');
+  lienWhatsapp.className = offre.enLigne ? 'btn-lien-offre secondaire' : 'btn-lien-offre';
+  lienWhatsapp.href = `https://wa.me/14165266293?text=${encodeURIComponent(message)}`;
+  lienWhatsapp.target = '_blank';
+  lienWhatsapp.rel = 'noopener';
+  lienWhatsapp.textContent = offre.enLigne ? 'Parler à un conseiller' : 'Passer en Pro';
+  lienWhatsapp.addEventListener('click', () => {
+    Api.post('/abonnement/demande-pro', {}).catch(() => {});
+  });
+
+  if (offre.enLigne) {
+    // Paiement en ligne : le Pro s'active tout seul dès que PayDunya confirme (jamais sur la foi du clic).
+    const bouton = document.createElement('button');
+    bouton.type = 'button';
+    bouton.className = 'btn-lien-offre';
+    const prix = Number(offre.prixMensuel || 10000).toLocaleString('fr-FR').replace(/ | /g, ' ');
+    bouton.textContent = `Passer en Pro — ${prix} FCFA/mois`;
+    bouton.addEventListener('click', async () => {
+      if (!window.confirm(`Passer en Pro pour ${prix} FCFA par mois ? Vous serez redirigé vers la page de paiement sécurisée (Wave, Orange Money, carte).`)) return;
+      bouton.disabled = true;
+      try {
+        const data = await Api.post('/abonnement/passer-pro', {});
+        window.location.href = data.url;
+      } catch (err) {
+        bouton.disabled = false;
+        showToast(err.message, 'error');
+      }
+    });
+    bandeau.append(bouton);
+  }
+  bandeau.append(lienWhatsapp);
 }
 
 async function rafraichirAcces() {
@@ -547,7 +582,7 @@ async function rafraichirAcces() {
     const user = Api.getUser();
     if (!user || !data || !data.utilisateur) return;
     Api.setSession(Api.getToken(), { ...user, onglets: data.utilisateur.onglets ?? null, modules: data.utilisateur.modules ?? null });
-    afficherBandeauOffre(data.utilisateur.offre, user);
+    afficherBandeauOffre(data.utilisateur.offre, { ...user, ...data.utilisateur });
   } catch (err) {
     /* état connu conservé */
   }

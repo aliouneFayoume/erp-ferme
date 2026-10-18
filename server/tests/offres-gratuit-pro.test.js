@@ -218,7 +218,7 @@ describe('offres — application par le serveur', () => {
 
         const me = await get('/api/auth/me'); // /api/auth reste accessible : on garde la main sur son compte
         expect(me.status).toBe(200);
-        expect(me.body.utilisateur.offre).toEqual({ plan: 'EXPIRE', joursRestants: null });
+        expect(me.body.utilisateur.offre).toEqual({ plan: 'EXPIRE', joursRestants: null, enLigne: false, prixMensuel: 10000 });
     });
 
     test('ESSAI TERMINÉ : une session de support (impersonation) peut toujours dépanner la ferme', async () => {
