@@ -28,8 +28,8 @@ module.exports = function contactRoutes(pool) {
 
     /**
      * Formulaire de contact public (massla.sn/decouvrir, boutons "Démonstration gratuite") — se contente de
-     * notifier l'équipe par email, aucune donnée persistée en base (pas de table dédiée, volume de
-     * demandes bien trop faible pour le justifier ; voir email.envoyerNotificationContact).
+     * enregistrer dans demandes_contact (migration-38, listée dans Support plateforme) PUIS notifier
+     * l'équipe par email (voir email.envoyerNotificationContact).
      */
     router.post('/', limiteurContact, async (req, res) => {
         const nom = String(req.body.nom || '').trim();
@@ -72,15 +72,32 @@ module.exports = function contactRoutes(pool) {
             return res.status(400).json({ erreur: 'Ville invalide.' });
         }
 
+        // Enregistrement d'abord : la demande ne dépend plus de l'email (boîte mail pleine, Resend en panne...). Un échec
+        // d'enregistrement n'empêche pas l'envoi de l'email, qui reste alors le seul filet.
+        let enregistree = false;
+        try {
+            await pool.query(
+                `INSERT INTO demandes_contact (nom, email, whatsapp, preference, secteurs, nom_ferme, ville, source)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                [nom, emailVisiteur, whatsapp, preference || null, secteurs.join(',') || null, nomFerme || null, ville || null, source]
+            );
+            enregistree = true;
+        } catch (err) {
+            console.error("Échec de l'enregistrement de la demande de contact :", err);
+        }
+
+        const succes = { message: 'Demande envoyée. Nous vous recontactons rapidement.' };
         if (!email.estConfigure()) {
+            if (enregistree) return res.status(201).json(succes);
             return res.status(503).json({ erreur: 'Service de contact indisponible pour le moment. Écrivez-nous directement sur WhatsApp.' });
         }
 
         try {
             await email.envoyerNotificationContact({ nom, email: emailVisiteur, whatsapp, preference, secteurs, nomFerme, ville, source });
-            res.status(201).json({ message: 'Demande envoyée. Nous vous recontactons rapidement.' });
+            res.status(201).json(succes);
         } catch (err) {
             console.error(err);
+            if (enregistree) return res.status(201).json(succes);
             res.status(502).json({ erreur: "Échec de l'envoi. Écrivez-nous directement sur WhatsApp." });
         }
     });

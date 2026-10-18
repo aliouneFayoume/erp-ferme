@@ -871,6 +871,38 @@ module.exports = function plateformeRoutes(pool) {
     });
 
     /**
+     * Demandes du formulaire public « Essayer gratuitement / Demander ma démo » (routes/contact.js, migration-38) :
+     * d'abord celles à rappeler (non traitées), puis les plus récentes.
+     */
+    router.get('/demandes-contact', ...garde, async (req, res) => {
+        try {
+            const result = await req.db.query(
+                `SELECT id, nom, email, whatsapp, preference, secteurs, nom_ferme, ville, source, traitee, cree_le
+                 FROM demandes_contact ORDER BY traitee ASC, cree_le DESC, id DESC LIMIT 200`
+            );
+            res.json(result.rows);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la récupération des demandes.' });
+        }
+    });
+
+    router.put('/demandes-contact/:id', ...garde, async (req, res) => {
+        try {
+            const result = await req.db.query(
+                `UPDATE demandes_contact SET traitee = $1 WHERE id = $2 RETURNING id, traitee`,
+                [!!req.body.traitee, req.params.id]
+            );
+            if (result.rows.length === 0) return res.status(404).json({ erreur: 'Demande introuvable.' });
+            await logAudit(req.db, { req, table: 'demandes_contact', rowId: req.params.id, action: 'UPDATE', userId: req.user.id, tenantId: null, details: { traitee: !!req.body.traitee, superviseur: req.user.nom } });
+            res.json(result.rows[0]);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la mise à jour de la demande.' });
+        }
+    });
+
+    /**
      * Modération des avis publics (site vitrine massla.sn/decouvrir, section "Avis clients") — un
      * visiteur peut soumettre un avis (routes/avis.js, public) mais seul le superviseur peut le
      * publier. Tous les avis (approuvés et en attente) sont renvoyés ici, contrairement à

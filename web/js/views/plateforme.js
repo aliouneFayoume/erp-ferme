@@ -9,7 +9,7 @@ const FACTURE_SAAS_STATUT_BADGE = { A_PAYER: 'warn', PAYEE: 'ok', EN_RETARD: 'da
 
 window.Views.plateforme = {
   async render(container) {
-    const [organisations, tickets, catalogue, facturesSaas, avis, activite, essaisNonConfirmes] = await Promise.all([
+    const [organisations, tickets, catalogue, facturesSaas, avis, activite, essaisNonConfirmes, demandes] = await Promise.all([
       Api.get('/plateforme/organisations'),
       Api.get('/plateforme/tickets'),
       Api.get('/plateforme/modules-saas'),
@@ -18,6 +18,8 @@ window.Views.plateforme = {
       Api.get('/plateforme/activite'),
       // Essais autonomes jamais confirmés : une erreur ici ne doit jamais empêcher d'afficher le reste de la vue.
       Api.get('/plateforme/essais-non-confirmes').catch(() => ({ jours: 7, fermes: [] })),
+      // Demandes du formulaire public : même précaution (table migration-38 pas encore collée = liste vide, pas de vue cassée).
+      Api.get('/plateforme/demandes-contact').catch(() => []),
     ]);
 
     container.innerHTML = `
@@ -73,6 +75,15 @@ window.Views.plateforme = {
           <tbody id="factures-saas-body">
             ${renderLignesFacturesSaas(facturesSaas)}
           </tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h2>Demandes de démo et d'essai (${demandes.filter((d) => !d.traitee).length} à rappeler)</h2>
+        <p class="desc">Chaque demande envoyée depuis massla.sn/decouvrir est enregistrée ici (en plus de l'email). Rappelez la personne sur WhatsApp, puis cochez « Traitée ».</p>
+        <table>
+          <thead><tr><th>Reçue le</th><th>Nom</th><th>WhatsApp</th><th>Email</th><th>Ferme</th><th>Demande</th><th>Statut</th><th></th></tr></thead>
+          <tbody id="demandes-body">${renderLignesDemandes(demandes)}</tbody>
         </table>
       </div>
 
@@ -170,6 +181,16 @@ window.Views.plateforme = {
     attacherOuvrirTicket(container.querySelector('#plateforme-tickets-body'), tickets);
     attacherActionsFactures(container.querySelector('#factures-saas-body'), facturesSaas, container);
     attacherActionsAvis(container.querySelector('#avis-body'), container);
+    container.querySelectorAll('#demandes-body button[data-demande]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          await Api.put(`/plateforme/demandes-contact/${btn.dataset.demande}`, { traitee: btn.dataset.traitee === 'true' });
+          window.Views.plateforme.render(container);
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+    });
   },
 };
 
@@ -260,6 +281,25 @@ function renderLignesActivite(fermes) {
         <td>${f.connexions_7j} connexion(s) · ${f.saisies_7j} saisie(s)<div class="desc" style="margin:2px 0 0">${f.jours_actifs_7j} jour(s) actif(s) · ${f.utilisateurs_connectes_7j} utilisateur(s)</div></td>
         <td>${f.saisies_30j}${f.derniere_saisie ? `<div class="desc" style="margin:2px 0 0">dernière ${esc(activiteIlYa(f.derniere_saisie))}</div>` : ''}</td>
         <td>${principales}</td>
+      </tr>`;
+    })
+    .join('');
+}
+
+function renderLignesDemandes(demandes) {
+  if (demandes.length === 0) return '<tr><td colspan="8" class="empty">Aucune demande pour le moment.</td></tr>';
+  return demandes
+    .map((d) => {
+      const detail = [d.nom_ferme, d.ville, d.secteurs].filter(Boolean).join(' · ');
+      return `<tr>
+        <td>${fmtDate(d.cree_le)}</td>
+        <td>${esc(d.nom)}</td>
+        <td>${esc(d.whatsapp)}</td>
+        <td>${esc(d.email)}</td>
+        <td>${detail ? esc(detail) : '<span class="desc">—</span>'}</td>
+        <td>${d.source === 'essai' ? 'Essai gratuit' : 'Démonstration'}</td>
+        <td><span class="badge ${d.traitee ? 'ok' : 'warn'}">${d.traitee ? 'Traitée' : 'À rappeler'}</span></td>
+        <td><button class="secondary" data-demande="${d.id}" data-traitee="${d.traitee ? 'false' : 'true'}">${d.traitee ? 'Rouvrir' : 'Marquer traitée'}</button></td>
       </tr>`;
     })
     .join('');

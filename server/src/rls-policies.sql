@@ -315,3 +315,14 @@ CREATE POLICY avis_lecture ON avis_publics FOR SELECT TO erp_app
     USING (true);
 CREATE POLICY avis_moderation ON avis_publics FOR UPDATE TO erp_app
     USING (true) WITH CHECK (true);
+
+-- Demandes du formulaire de contact public (migration-38) : globale SANS tenant_id, mêmes règles que avis_publics.
+DROP POLICY IF EXISTS demandes_depot_public ON demandes_contact;
+DROP POLICY IF EXISTS demandes_lecture ON demandes_contact;
+DROP POLICY IF EXISTS demandes_traitement ON demandes_contact;
+CREATE POLICY demandes_depot_public ON demandes_contact FOR INSERT TO erp_app
+    WITH CHECK (traitee = FALSE);
+CREATE POLICY demandes_lecture ON demandes_contact FOR SELECT TO erp_app
+    USING (true);
+CREATE POLICY demandes_traitement ON demandes_contact FOR UPDATE TO erp_app
+    USING (true) WITH CHECK (true);

@@ -161,11 +161,34 @@ describe('contact — formulaire public massla.sn/decouvrir', () => {
         expect(res.status).toBe(400);
     });
 
-    test("répond 503 si l'intégration email n'est pas configurée, sans jamais appeler l'envoi", async () => {
+    test("sans intégration email, la demande est quand même enregistrée (201) et visible en base, sans appeler l'envoi", async () => {
         email.estConfigure.mockReturnValue(false);
         const res = await request(app).post('/api/contact').send(payloadValide());
-        expect(res.status).toBe(503);
+        expect(res.status).toBe(201);
         expect(email.envoyerNotificationContact).not.toHaveBeenCalled();
+        expect((await pool.query('SELECT COUNT(*)::int AS n FROM demandes_contact')).rows[0].n).toBe(1);
+    });
+
+    test("si la base est inaccessible ET l'email non configuré : 503 (rien n'a pu être conservé)", async () => {
+        email.estConfigure.mockReturnValue(false);
+        await pool.query('DROP TABLE demandes_contact');
+        const res = await request(app).post('/api/contact').send(payloadValide());
+        expect(res.status).toBe(503);
+    });
+
+    test("enregistre chaque demande en base avec ses détails (secteurs, ferme, ville, source)", async () => {
+        const res = await request(app)
+            .post('/api/contact')
+            .send(payloadValide({ secteurs: ['elevage', 'avicole'], nomFerme: 'Ferme Ndiaye', ville: 'Thiès', source: 'essai' }));
+        expect(res.status).toBe(201);
+        const { rows } = await pool.query('SELECT * FROM demandes_contact');
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ nom: 'Clovis Test', email: 'clovis@test.sn', whatsapp: '+22670000000', secteurs: 'avicole,elevage', nom_ferme: 'Ferme Ndiaye', ville: 'Thiès', source: 'essai', traitee: false });
+    });
+
+    test("une demande invalide n'est jamais enregistrée", async () => {
+        await request(app).post('/api/contact').send(payloadValide({ email: 'pas-un-email' }));
+        expect((await pool.query('SELECT COUNT(*)::int AS n FROM demandes_contact')).rows[0].n).toBe(0);
     });
 
     test("transmet le type de demande « essai » ; sans type (ancienne page en cache) c'est une démonstration", async () => {
@@ -184,8 +207,16 @@ describe('contact — formulaire public massla.sn/decouvrir', () => {
         expect(email.envoyerNotificationContact).not.toHaveBeenCalled();
     });
 
-    test("répond 502 si l'envoi échoue côté Resend", async () => {
+    test("si l'envoi échoue côté Resend, la demande enregistrée reste un succès (201) : l'équipe la voit dans Support plateforme", async () => {
         email.envoyerNotificationContact.mockRejectedValueOnce(new Error('Resend indisponible'));
+        const res = await request(app).post('/api/contact').send(payloadValide());
+        expect(res.status).toBe(201);
+        expect((await pool.query('SELECT COUNT(*)::int AS n FROM demandes_contact')).rows[0].n).toBe(1);
+    });
+
+    test("répond 502 si l'envoi échoue ET que rien n'a pu être enregistré", async () => {
+        email.envoyerNotificationContact.mockRejectedValueOnce(new Error('Resend indisponible'));
+        await pool.query('DROP TABLE demandes_contact');
         const res = await request(app).post('/api/contact').send(payloadValide());
         expect(res.status).toBe(502);
     });

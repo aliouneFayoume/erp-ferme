@@ -879,6 +879,24 @@ CREATE TABLE avis_publics (
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- --------------------------------------------------------
+-- DEMANDES DE CONTACT (formulaire public massla.sn/decouvrir, migration-38)
+-- --------------------------------------------------------
+-- Globale, SANS tenant_id (le visiteur n'a pas encore de ferme) ; policies dédiées réservées à erp_app (rls-policies.sql).
+CREATE TABLE demandes_contact (
+    id SERIAL PRIMARY KEY,
+    nom VARCHAR(100) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    whatsapp VARCHAR(30) NOT NULL,
+    preference VARCHAR(20),
+    secteurs VARCHAR(100),
+    nom_ferme VARCHAR(100),
+    ville VARCHAR(50),
+    source VARCHAR(10) NOT NULL DEFAULT 'demo',
+    traitee BOOLEAN NOT NULL DEFAULT FALSE,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ==============================================================================
 -- INDEX POUR OPTIMISER LES PERFORMANCES DES REQUÊTES DU DASHBOARD
 -- ==============================================================================
