@@ -1,5 +1,5 @@
 const express = require('express');
-const { requireAuth, requireSuperviseurPlateforme, signToken } = require('../auth');
+const { requireAuth, requireSuperviseurPlateforme, signToken, queryAvecTenant } = require('../auth');
 const { logAudit } = require('../audit');
 const { SOCLE_ESSENTIEL, MODULES_SAAS, PACK_TOUT_COMPRIS, FRAIS_CONFIGURATION_DEFAUT, MODULES_OFFRE, DUREE_ESSAI_JOURS, planEffectif, joursRestantsEssai } = require('../modulesSaas');
 const { creerNouvelleFerme } = require('../creerFerme');
@@ -260,6 +260,13 @@ module.exports = function plateformeRoutes(pool) {
      * (requireAuth, auth.js) — sans jamais toucher à ses données historiques, même logique que le
      * reste du schéma (deleted_at partout, aucune suppression physique). Réversible en base au besoin
      * (pas de bouton "restaurer" pour l'instant, non demandé).
+     *
+     * « Proprement » : l'e-mail (et le numéro WhatsApp) d'un utilisateur sont uniques sur TOUTE la plateforme, y compris pour un
+     * compte supprimé. Sans libération, la même personne ne pourrait jamais se réinscrire avec son adresse (cas constaté : une ferme
+     * supprimée pour lui proposer la nouvelle offre). On libère donc, pour chaque utilisateur de la ferme : l'e-mail (remplacé par une
+     * adresse factice « supprime-<id>@supprime.invalid »), le numéro de téléphone, et le sous-domaine de la ferme ; les comptes sont
+     * désactivés et leurs sessions coupées ; les factures SaaS encore à payer sont annulées. Les valeurs d'origine sont conservées dans
+     * le journal d'audit (details), pour pouvoir tout rétablir à la main si la suppression était une erreur.
      */
     router.delete('/organisations/:id', ...garde, async (req, res) => {
         try {
@@ -267,12 +274,48 @@ module.exports = function plateformeRoutes(pool) {
             if (tenantId === req.user.tenant_id) {
                 return res.status(400).json({ erreur: 'Impossible de supprimer votre propre organisation.' });
             }
-            const result = await req.db.query(
-                `UPDATE organisations SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted_at IS NULL RETURNING id`,
+            const avant = await req.db.query(`SELECT slug FROM organisations WHERE id = $1 AND deleted_at IS NULL`, [tenantId]);
+            if (avant.rows.length === 0) return res.status(404).json({ erreur: 'Organisation introuvable.' });
+
+            // Les comptes de la ferme ne sont modifiables que sous le contexte de CETTE ferme (RLS : le superviseur n'a pas
+            // d'échappatoire en écriture sur utilisateurs) — même schéma que la vérification d'e-mail (auth.js).
+            const comptes = await queryAvecTenant(
+                pool,
+                tenantId,
+                `SELECT id, email, telephone FROM utilisateurs WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY id`,
                 [tenantId]
             );
-            if (result.rows.length === 0) return res.status(404).json({ erreur: 'Organisation introuvable.' });
-            await logAudit(req.db, { req, table: 'organisations', rowId: tenantId, action: 'DELETE', userId: req.user.id, tenantId, details: { superviseur: req.user.nom } });
+            for (const c of comptes.rows) {
+                await queryAvecTenant(
+                    pool,
+                    tenantId,
+                    `UPDATE utilisateurs SET deleted_at = CURRENT_TIMESTAMP, actif = FALSE, email = $2, telephone = NULL,
+                            login_code_hash = NULL, token_version = token_version + 1
+                     WHERE id = $1`,
+                    [c.id, `supprime-${c.id}@supprime.invalid`]
+                );
+            }
+
+            await req.db.query(`UPDATE organisations SET deleted_at = CURRENT_TIMESTAMP, slug = NULL WHERE id = $1`, [tenantId]);
+            await req.db.query(`UPDATE organisation_abonnement_saas SET actif = FALSE WHERE tenant_id = $1`, [tenantId]);
+            const annulees = await req.db.query(
+                `UPDATE factures_saas SET statut = 'ANNULEE' WHERE tenant_id = $1 AND statut IN ('A_PAYER', 'EN_RETARD') RETURNING id`,
+                [tenantId]
+            );
+            await logAudit(req.db, {
+                req,
+                table: 'organisations',
+                rowId: tenantId,
+                action: 'DELETE',
+                userId: req.user.id,
+                tenantId,
+                details: {
+                    superviseur: req.user.nom,
+                    slug_libere: avant.rows[0].slug,
+                    comptes_liberes: comptes.rows.map((c) => ({ id: c.id, email: c.email, telephone: c.telephone })),
+                    factures_annulees: annulees.rows.map((f) => f.id),
+                },
+            });
             res.status(204).end();
         } catch (err) {
             console.error(err);
