@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+const { LIMITES_ESSAI } = require('../modulesSaas');
 
 const ESPECES_VALIDES = ['BOVIN', 'OVIN', 'CAPRIN'];
 const SEXES_VALIDES = ['M', 'F'];
@@ -16,6 +17,25 @@ async function verifierAccesAnimal(db, animalId, user) {
         return Number(animal.rows[0].secteur_id) === Number(user.secteur_id);
     }
     return true;
+}
+
+/**
+ * Essai gratuit : le troupeau suivi est plafonné à LIMITES_ESSAI.animaux têtes vivantes (20). Ne compte que les animaux réels : le
+ * troupeau de démonstration (est_demo) et les animaux sortis (vendus, abattus, morts) ne prennent pas de place. Renvoie null si
+ * l'ajout est permis, sinon la réponse 402 à envoyer. Hors essai (Pro, ferme sur mesure) : aucune limite.
+ */
+async function limiteAnimauxEssai(req, ajouts = 1) {
+    if (req.offre !== 'ESSAI') return null;
+    const r = await req.db.query(
+        `SELECT COUNT(*)::int AS n FROM animaux WHERE tenant_id = $1 AND statut = 'VIVANT' AND est_demo = FALSE AND deleted_at IS NULL`,
+        [req.user.tenant_id]
+    );
+    const present = r.rows[0].n;
+    if (present + ajouts <= LIMITES_ESSAI.animaux) return null;
+    return {
+        erreur: `Essai gratuit : ${LIMITES_ESSAI.animaux} têtes au maximum dans votre troupeau (vous en avez ${present}). Passez en Pro pour suivre un troupeau sans limite.`,
+        code: 'ESSAI_LIMITE_ANIMAUX',
+    };
 }
 
 // Identifiant unique d'un relevé, créé UNE seule fois par le navigateur et conservé jusqu'au succès (y compris dans la
@@ -116,6 +136,8 @@ module.exports = function elevageRoutes(pool) {
         }
 
         try {
+            const limite = await limiteAnimauxEssai(req);
+            if (limite) return res.status(402).json(limite);
             const secteurRes = await req.db.query(
                 `SELECT id FROM secteurs WHERE id = $1 AND tenant_id = $2 AND suivi_individuel = TRUE`,
                 [secteur_id, tenantId]
@@ -328,6 +350,9 @@ module.exports = function elevageRoutes(pool) {
         }
         const client = req.db;
         try {
+            // Les petits d'une mise-bas entrent dans le troupeau : même plafond d'essai que l'ajout d'un animal.
+            const limite = await limiteAnimauxEssai(req, petits.length);
+            if (limite) return res.status(402).json(limite);
             await client.query('BEGIN');
 
             const reproRes = await client.query(

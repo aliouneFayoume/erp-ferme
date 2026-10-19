@@ -63,7 +63,8 @@ const CLES_MODULES = MODULES_SAAS.map((m) => m.cle);
 // ferme cliente peut en recevoir à la demande, module par module, via modules_actifs (ajoutés aux modules de l'offre).
 const DUREE_ESSAI_JOURS = 30;
 const MODULES_OFFRE = ['clients_abonnements', 'commandes_fournisseurs', 'finance'];
-const LIMITES_ESSAI = { lotsEnCours: 1, utilisateurs: 1 };
+// animaux : plafond de têtes VIVANTES du troupeau réel pendant l'essai d'une ferme d'élevage (le troupeau de démo n'est pas compté).
+const LIMITES_ESSAI = { lotsEnCours: 1, utilisateurs: 1, animaux: 20 };
 
 // Prix mensuel du Pro (grille publique : 10 000 FCFA) — réglable par PRO_PRIX_MENSUEL sans redéployer.
 function prixProMensuel() {

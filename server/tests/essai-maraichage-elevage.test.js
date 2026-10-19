@@ -152,6 +152,63 @@ describe('essai autonome — maraîchage et élevage (30 jours puis Pro, comme l
         });
     });
 
+    describe('élevage — plafond de 20 têtes pendant l’essai', () => {
+        let token;
+        let tenant;
+        let bovins;
+        const ajouter = (identifiant, sexe = 'F') =>
+            request(app).post('/api/elevage/animaux').set('Authorization', `Bearer ${token}`).send({ secteur_id: bovins, identifiant, espece: 'BOVIN', sexe, race: 'Gobra' });
+
+        beforeEach(async () => {
+            token = await ouvrir(TEL_ELEVEUR, 'elevage');
+            tenant = await tenantDe(TEL_ELEVEUR);
+            bovins = (await pool.query(`SELECT id FROM secteurs WHERE tenant_id = $1 AND nom = 'Bovins'`, [tenant])).rows[0].id;
+        });
+
+        test('20 têtes réelles sont acceptées (le troupeau de démo ne compte pas), la 21e est refusée avec un message clair', async () => {
+            for (let i = 1; i <= 20; i += 1) {
+                expect((await ajouter(`R-${i}`)).status).toBe(201);
+            }
+            const refus = await ajouter('R-21');
+            expect(refus.status).toBe(402);
+            expect(refus.body.code).toBe('ESSAI_LIMITE_ANIMAUX');
+            expect(refus.body.erreur).toMatch(/20 têtes/);
+            expect(refus.body.erreur).toMatch(/Pro/);
+            expect((await pool.query(`SELECT COUNT(*)::int AS n FROM animaux WHERE tenant_id = $1 AND est_demo = FALSE`, [tenant])).rows[0].n).toBe(20);
+        });
+
+        test('un animal vendu libère une place', async () => {
+            const premier = (await ajouter('R-1')).body;
+            for (let i = 2; i <= 20; i += 1) await ajouter(`R-${i}`);
+            expect((await ajouter('R-21')).status).toBe(402);
+            const vente = await request(app).put(`/api/elevage/animaux/${premier.id}/statut`).set('Authorization', `Bearer ${token}`).send({ statut: 'VENDU' });
+            expect(vente.status).toBe(200);
+            expect((await ajouter('R-21')).status).toBe(201);
+        });
+
+        test('les petits d’une mise-bas comptent aussi : une portée qui dépasse 20 est refusée en entier', async () => {
+            const mere = (await ajouter('MERE-1', 'F')).body;
+            for (let i = 2; i <= 19; i += 1) await ajouter(`R-${i}`); // 19 réels
+            const repro = (await pool.query(`INSERT INTO reproductions (tenant_id, mere_id, date_saillie, statut) VALUES ($1, $2, '2026-01-01', 'EN_COURS') RETURNING id`, [tenant, mere.id])).rows[0].id;
+            const portee = (n) => request(app).put(`/api/elevage/reproductions/${repro}/mise-bas`).set('Authorization', `Bearer ${token}`).send({
+                date_mise_bas_reelle: '2026-10-19',
+                petits: Array.from({ length: n }, (_, i) => ({ identifiant: `PETIT-${i}`, sexe: 'F' })),
+            });
+            const trop = await portee(2); // 19 + 2 = 21
+            expect(trop.status).toBe(402);
+            expect(trop.body.code).toBe('ESSAI_LIMITE_ANIMAUX');
+            expect((await pool.query(`SELECT COUNT(*)::int AS n FROM animaux WHERE identifiant LIKE 'PETIT-%'`)).rows[0].n).toBe(0);
+            expect((await portee(1)).status).toBe(200); // 19 + 1 = 20
+        });
+
+        test('en Pro : plus aucune limite', async () => {
+            for (let i = 1; i <= 20; i += 1) await ajouter(`R-${i}`);
+            await pool.query(`UPDATE organisation_abonnement_saas SET plan = 'PRO', montant_mensuel = 10000 WHERE tenant_id = $1`, [tenant]);
+            expect((await ajouter('R-21')).status).toBe(201);
+            expect((await ajouter('R-22')).status).toBe(201);
+        });
+    });
+
     test('les autres filières ne reçoivent aucun module supplémentaire', async () => {
         await ouvrir('+221771240003', 'avicole', 'Poulets');
         await ouvrir('+221771240004', 'piscicole', 'Poissons');
