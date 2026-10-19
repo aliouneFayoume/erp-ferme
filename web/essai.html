@@ -28,6 +28,11 @@
         <h1>Essayez Massla gratuitement</h1>
         <p class="sub">30 jours, sans carte bancaire, sans engagement. Votre numéro WhatsApp et le nom de votre ferme suffisent.</p>
         <form id="essai-form-numero">
+          <fieldset class="essai-filiere">
+            <legend>Votre élevage</legend>
+            <label class="essai-choix"><input type="radio" name="filiere" value="avicole" checked /><span>Aviculture (poulets)</span></label>
+            <label class="essai-choix"><input type="radio" name="filiere" value="piscicole" /><span>Pisciculture (bassins)</span></label>
+          </fieldset>
           <label>Nom de votre ferme
             <input type="text" name="nomFerme" required maxlength="100" autocomplete="organization" />
           </label>

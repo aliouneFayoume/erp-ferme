@@ -102,7 +102,9 @@
     el.addEventListener('click', (e) => {
       e.preventDefault();
       if (essaiOuvert && el.dataset.source === 'essai') {
-        window.location.href = '/essai.html?source=essai';
+        // Depuis la page Pisciculture, l'inscription arrive avec « Pisciculture » déjà cochée.
+        const filiere = el.dataset.filiere || (window.location.pathname.startsWith('/pisciculture') ? 'piscicole' : '');
+        window.location.href = `/essai.html?source=essai${filiere ? `&filiere=${filiere}` : ''}`;
         return;
       }
       ouvrir(el.dataset.source);

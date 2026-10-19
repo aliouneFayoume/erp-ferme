@@ -100,8 +100,111 @@ async function semerFermeDemo(client, { tenantId, secteurId, utilisateurId, main
     return lotId;
 }
 
+
+// ---- Filière piscicole : « Bassin n°3 (démo) », un cycle de tilapia de 120 jours -------------------------------------------------
+// Même principe que le lot de poulets (déterministe, TERMINÉ pour ne pas compter dans la limite « 1 lot en cours »), mais avec les
+// mesures d'un pisciculteur : mortalité, aliment, poids et taille pesés tous les 15 jours, température et pH de l'eau.
+const DUREE_BASSIN_DEMO_JOURS = 120;
+const EFFECTIF_BASSIN_DEMO = 3000;
+const POIDS_PESEES_POISSON_G = { 1: 5, 15: 15, 30: 40, 45: 80, 60: 130, 75: 190, 90: 250, 105: 310, 120: 370 };
+const PRIX_ALIMENT_POISSON_KG_DEMO = 650;
+
+/** Poids moyen (g) d'un jour donné, interpolé entre deux pesées : sert à calculer la ration, pas à être affiché. */
+function poidsPoissonJour(jour) {
+    const jours = Object.keys(POIDS_PESEES_POISSON_G).map(Number).sort((a, b) => a - b);
+    const apres = jours.find((j) => j >= jour) || jours[jours.length - 1];
+    const avant = [...jours].reverse().find((j) => j <= jour) || jours[0];
+    if (avant === apres) return POIDS_PESEES_POISSON_G[avant];
+    const part = (jour - avant) / (apres - avant);
+    return POIDS_PESEES_POISSON_G[avant] + part * (POIDS_PESEES_POISSON_G[apres] - POIDS_PESEES_POISSON_G[avant]);
+}
+
+/** Taille moyenne (cm) d'un tilapia d'un poids donné (relation poids-longueur usuelle), arrondie au dixième. */
+function taillePoissonCm(poidsG) {
+    return Math.round(3.2 * Math.cbrt(poidsG) * 10) / 10;
+}
+
+/** Ration du jour : de 6 % de la biomasse (alevins) à 2 % (poissons de 370 g) — donne un indice de consommation d'environ 1,5. */
+function tauxAlimentJour(jour) {
+    return 0.06 - ((jour - 1) * (0.06 - 0.02)) / (DUREE_BASSIN_DEMO_JOURS - 1);
+}
+
+async function semerBassinDemo(client, { tenantId, secteurId, utilisateurId, maintenant = new Date() }) {
+    const debutIlYa = DUREE_BASSIN_DEMO_JOURS + 7; // cycle terminé depuis une semaine
+    // Comme dans l'application, quantite_initiale porte l'effectif ACTUEL du bassin : la mortalité y est déduite.
+    const mortalites = [];
+    for (let jour = 1; jour <= DUREE_BASSIN_DEMO_JOURS; jour += 1) mortalites.push(jour <= 10 ? 6 : jour % 3 === 0 ? 2 : 1);
+    const effectifFinal = EFFECTIF_BASSIN_DEMO - mortalites.reduce((a, b) => a + b, 0);
+
+    const lotRes = await client.query(
+        `INSERT INTO lots_production (tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, statut, est_demo, prix_aliment_kg, espece, cree_par)
+         VALUES ($1, $2, $3, $4, $5, 'TERMINE', TRUE, $6, 'Tilapia', $7) RETURNING id`,
+        [tenantId, secteurId, 'Bassin n°3 (démo)', effectifFinal, dateIlYa(debutIlYa, maintenant), PRIX_ALIMENT_POISSON_KG_DEMO, utilisateurId]
+    );
+    const lotId = lotRes.rows[0].id;
+
+    let vivants = EFFECTIF_BASSIN_DEMO;
+    for (let jour = 1; jour <= DUREE_BASSIN_DEMO_JOURS; jour += 1) {
+        const mortalite = mortalites[jour - 1];
+        vivants -= mortalite;
+        const biomasseKg = (vivants * poidsPoissonJour(jour)) / 1000;
+        const alimentKg = Math.round(biomasseKg * tauxAlimentJour(jour) * 10) / 10;
+        const pesee = POIDS_PESEES_POISSON_G[jour];
+        await client.query(
+            `INSERT INTO releves_journaliers (lot_id, utilisateur_id, date_releve, mortalite, conso_aliment_kg, poids_moyen_g, taille_moyenne_cm, temperature_eau, ph_eau, est_synchronise)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE)`,
+            [
+                lotId,
+                utilisateurId,
+                dateIlYa(debutIlYa - (jour - 1), maintenant),
+                mortalite,
+                alimentKg,
+                pesee || 0,
+                pesee ? taillePoissonCm(pesee) : null,
+                27 + (jour % 5) * 0.5,
+                Math.round((7.2 + (jour % 4) * 0.1) * 10) / 10,
+            ]
+        );
+    }
+
+    // Récolte vendue : un client et un produit « (démo) » marqués est_demo (supprimés avec le bassin), deux commandes livrées.
+    const clientRes = await client.query(
+        `INSERT INTO clients (tenant_id, nom, type_client, telephone, est_demo) VALUES ($1, 'Client démo', 'B2C', $2, TRUE) RETURNING id`,
+        [tenantId, `DEMO-${tenantId}`]
+    );
+    const produitRes = await client.query(
+        `INSERT INTO produits (tenant_id, secteur_id, nom, unite_mesure, prix_unitaire_b2b, prix_unitaire_b2c, est_demo)
+         VALUES ($1, $2, 'Tilapia frais (démo)', 'KG', 2300, 2300, TRUE) RETURNING id`,
+        [tenantId, secteurId]
+    );
+    await client.query(`INSERT INTO stocks (produit_id, quantite_disponible) VALUES ($1, 0)`, [produitRes.rows[0].id]);
+    const ventesDemo = [
+        ['CMD-DEMO-1', 620, 2300, 6],
+        ['CMD-DEMO-2', 400, 2400, 3],
+    ];
+    for (const [numero, quantite, prix, ilYa] of ventesDemo) {
+        const total = quantite * prix;
+        const cmd = await client.query(
+            `INSERT INTO commandes (tenant_id, numero_commande, client_id, statut, montant_total, est_demo, cree_le)
+             VALUES ($1, $2, $3, 'LIVREE', $4, TRUE, $5) RETURNING id`,
+            [tenantId, numero, clientRes.rows[0].id, total, dateIlYa(ilYa, maintenant)]
+        );
+        await client.query(
+            `INSERT INTO lignes_commande (commande_id, produit_id, quantite, prix_unitaire_applique, sous_total, lot_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [cmd.rows[0].id, produitRes.rows[0].id, quantite, prix, total, lotId]
+        );
+    }
+    return lotId;
+}
+
+/** Filières proposées à l'inscription : le secteur créé et la démo suivent le choix. */
+const FILIERES_ESSAI = { avicole: 'Avicole', piscicole: 'Piscicole' };
+function filiereValide(valeur) {
+    return Object.prototype.hasOwnProperty.call(FILIERES_ESSAI, valeur) ? valeur : 'avicole';
+}
+
 /**
- * Crée une ferme d'ESSAI : organisation + abonnement ESSAI de 30 jours + secteur Avicole + un seul compte (le gérant, qui
+ * Crée une ferme d'ESSAI : organisation + abonnement ESSAI de 30 jours + secteur Avicole ou Piscicole (au choix) + un seul compte (le gérant, qui
  * s'identifie par son numéro WhatsApp : pas d'e-mail, mot de passe inutilisable) + la ferme démo. Une transaction.
  *
  * Choix de sécurité assumés (voir aussi migration-35) :
@@ -112,7 +215,8 @@ async function semerFermeDemo(client, { tenantId, secteurId, utilisateurId, main
  * - email_verifie reste FALSE : il n'y a pas d'e-mail à vérifier, et aucun parcours ne permet d'en ajouter un sans vérification ;
  * - le numéro est enregistré non vérifié (telephone_verifie = FALSE) tant que le premier code n'a pas été saisi.
  */
-async function creerFermeEssai(pool, { nomFerme, telephone, source }) {
+async function creerFermeEssai(pool, { nomFerme, telephone, source, filiere: filiereDemandee }) {
+    const filiere = filiereValide(filiereDemandee);
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -126,8 +230,8 @@ async function creerFermeEssai(pool, { nomFerme, telephone, source }) {
         await client.query('SELECT set_config($1, $2, false)', ['app.current_tenant_id', String(tenantId)]);
 
         const secteurRes = await client.query(
-            `INSERT INTO secteurs (tenant_id, nom, suivi_recolte, suivi_individuel) VALUES ($1, 'Avicole', FALSE, FALSE) RETURNING id`,
-            [tenantId]
+            `INSERT INTO secteurs (tenant_id, nom, suivi_recolte, suivi_individuel) VALUES ($1, $2, FALSE, FALSE) RETURNING id`,
+            [tenantId, FILIERES_ESSAI[filiere]]
         );
         const secteurId = secteurRes.rows[0].id;
 
@@ -152,7 +256,8 @@ async function creerFermeEssai(pool, { nomFerme, telephone, source }) {
             [tenantId, telephone, maintenant, new Date(maintenant.getTime() + DUREE_ESSAI_JOURS * JOUR_MS), source === 'demo' ? 'demo' : 'essai']
         );
 
-        await semerFermeDemo(client, { tenantId, secteurId, utilisateurId: admin.id, maintenant });
+        const semer = filiere === 'piscicole' ? semerBassinDemo : semerFermeDemo;
+        await semer(client, { tenantId, secteurId, utilisateurId: admin.id, maintenant });
 
         await logAudit(client, {
             table: 'organisations',
@@ -160,7 +265,7 @@ async function creerFermeEssai(pool, { nomFerme, telephone, source }) {
             action: 'CREATE',
             userId: admin.id,
             tenantId,
-            details: { nomFerme, origine: 'essai_autonome', source: source === 'demo' ? 'demo' : 'essai' },
+            details: { nomFerme, origine: 'essai_autonome', source: source === 'demo' ? 'demo' : 'essai', filiere },
         });
 
         await client.query('COMMIT');
@@ -174,4 +279,4 @@ async function creerFermeEssai(pool, { nomFerme, telephone, source }) {
     }
 }
 
-module.exports = { creerFermeEssai, semerFermeDemo, DUREE_LOT_DEMO_JOURS };
+module.exports = { creerFermeEssai, semerFermeDemo, semerBassinDemo, filiereValide, FILIERES_ESSAI, DUREE_LOT_DEMO_JOURS, DUREE_BASSIN_DEMO_JOURS };

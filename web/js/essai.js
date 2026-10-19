@@ -38,6 +38,11 @@
 
   // Source du suivi (« Essayer gratuitement » ou « Demander ma démo ») : ?source=demo dans le lien, sinon essai.
   const source = new URLSearchParams(window.location.search).get('source') === 'demo' ? 'demo' : 'essai';
+  // Filière : ?filiere=piscicole dans le lien (page Pisciculture) pré-coche « Pisciculture » ; le visiteur peut toujours changer.
+  if (new URLSearchParams(window.location.search).get('filiere') === 'piscicole') {
+    const radio = document.querySelector('input[name="filiere"][value="piscicole"]');
+    if (radio) radio.checked = true;
+  }
 
   document.getElementById('essai-form-numero').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -47,7 +52,7 @@
     bouton.disabled = true;
     try {
       telephone = String(form.get('telephone') || '').trim();
-      const data = await appeler('/inscription', { nomFerme: form.get('nomFerme'), telephone, source });
+      const data = await appeler('/inscription', { nomFerme: form.get('nomFerme'), telephone, source, filiere: form.get('filiere') === 'piscicole' ? 'piscicole' : 'avicole' });
       window.MassiaAnalytics?.track('essai_demarre');
       document.getElementById('essai-message-code').textContent = data.message;
       montrer('code');

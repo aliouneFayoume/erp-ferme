@@ -6,7 +6,7 @@ const rateLimit = require('express-rate-limit');
 const { signToken, requireAuth, checkRole, queryPreTenant, queryPreTenantPlateforme, queryAvecTenant, attachTenantConnection } = require('../auth');
 const { logAudit } = require('../audit');
 const { normaliserTelephone } = require('../validation');
-const { creerFermeEssai } = require('../creerFermeEssai');
+const { creerFermeEssai, filiereValide } = require('../creerFermeEssai');
 const {
     MAX_TENTATIVES_CODE,
     DELAI_RENVOI_SECONDES,
@@ -133,6 +133,8 @@ module.exports = function essaiRoutes(pool) {
         const nomFerme = typeof req.body.nomFerme === 'string' ? req.body.nomFerme.trim() : '';
         const telephone = normaliserTelephone(req.body.telephone);
         const source = req.body.source === 'demo' ? 'demo' : 'essai';
+        // Filière choisie : aviculture (défaut, anciennes pages en cache) ou pisciculture — détermine le secteur et la démo.
+        const filiere = filiereValide(req.body.filiere);
         if (!NOM_FERME_REGEX.test(nomFerme)) {
             return res.status(400).json({ erreur: 'Le nom de la ferme est requis (2 à 100 caractères).' });
         }
@@ -143,7 +145,7 @@ module.exports = function essaiRoutes(pool) {
             let utilisateur = await trouverParTelephone(telephone);
             if (!utilisateur) {
                 try {
-                    await creerFermeEssai(pool, { nomFerme, telephone, source });
+                    await creerFermeEssai(pool, { nomFerme, telephone, source, filiere });
                 } catch (err) {
                     // Deux inscriptions simultanées avec le même numéro : la base tranche (téléphone UNIQUE) ; la perdante
                     // continue simplement comme une connexion. Toute autre erreur remonte.
