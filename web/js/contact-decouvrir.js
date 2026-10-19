@@ -103,7 +103,8 @@
       e.preventDefault();
       if (essaiOuvert && el.dataset.source === 'essai') {
         // Depuis la page Pisciculture, l'inscription arrive avec « Pisciculture » déjà cochée.
-        const filiere = el.dataset.filiere || (window.location.pathname.startsWith('/pisciculture') ? 'piscicole' : '');
+        const parPage = { '/pisciculture': 'piscicole', '/maraichage': 'maraicher', '/elevage': 'elevage', '/aviculture': 'avicole' };
+        const filiere = el.dataset.filiere || parPage[Object.keys(parPage).find((p) => window.location.pathname.startsWith(p))] || '';
         window.location.href = `/essai.html?source=essai${filiere ? `&filiere=${filiere}` : ''}`;
         return;
       }

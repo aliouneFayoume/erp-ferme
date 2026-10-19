@@ -197,10 +197,158 @@ async function semerBassinDemo(client, { tenantId, secteurId, utilisateurId, mai
     return lotId;
 }
 
-/** Filières proposées à l'inscription : le secteur créé et la démo suivent le choix. */
-const FILIERES_ESSAI = { avicole: 'Avicole', piscicole: 'Piscicole' };
+// ---- Filière maraîchère : « Tomate — parcelle A (démo) », un cycle de 90 jours ---------------------------------------------------
+const DUREE_PARCELLE_DEMO_JOURS = 90;
+const PLANTS_PARCELLE_DEMO = 400;
+
+async function semerParcelleDemo(client, { tenantId, secteurId, utilisateurId, maintenant = new Date() }) {
+    const debutIlYa = DUREE_PARCELLE_DEMO_JOURS + 7; // cycle terminé depuis une semaine
+    // jour du cycle -> ce qui s'y est passé (intrants, plants perdus, récolte en kg)
+    const evenements = {
+        3: { mortalite: 8, notes: 'Plants morts après repiquage' },
+        4: { mortalite: 5 },
+        7: { mortalite: 4 },
+        5: { intrants: 'Engrais NPK 15-15-15 (4 kg)' },
+        14: { notes: 'Arrosage et sarclage' },
+        20: { intrants: "Traitement bio : huile de neem (2 L)" },
+        28: { notes: 'Arrosage et sarclage' },
+        35: { intrants: 'Engrais urée (3 kg)' },
+        42: { notes: 'Tuteurage des plants' },
+        50: { intrants: 'Désherbage manuel' },
+        60: { notes: 'Premiers fruits mûrs' },
+    };
+    const recoltes = [40, 60, 80, 95, 100, 95, 85, 70, 50, 35, 25]; // kg, un jour sur deux à partir du jour 70
+    recoltes.forEach((kg, i) => {
+        evenements[70 + i * 2] = { ...(evenements[70 + i * 2] || {}), recolte: kg };
+    });
+    const mortsTotal = Object.values(evenements).reduce((s, e) => s + (e.mortalite || 0), 0);
+
+    const lotRes = await client.query(
+        `INSERT INTO lots_production (tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, statut, culture, duree_maturite_jours, est_demo, cree_par)
+         VALUES ($1, $2, $3, $4, $5, 'TERMINE', 'Tomate', 75, TRUE, $6) RETURNING id`,
+        [tenantId, secteurId, 'Tomate — parcelle A (démo)', PLANTS_PARCELLE_DEMO - mortsTotal, dateIlYa(debutIlYa, maintenant), utilisateurId]
+    );
+    const lotId = lotRes.rows[0].id;
+
+    for (const [jour, e] of Object.entries(evenements).map(([j, v]) => [Number(j), v]).sort((a, b) => a[0] - b[0])) {
+        await client.query(
+            `INSERT INTO releves_journaliers (lot_id, utilisateur_id, date_releve, mortalite, intrants_utilises, quantite_recoltee_kg, notes, est_synchronise)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)`,
+            [lotId, utilisateurId, dateIlYa(debutIlYa - (jour - 1), maintenant), e.mortalite || 0, e.intrants || null, e.recolte || null, e.notes || null]
+        );
+    }
+
+    const clientRes = await client.query(
+        `INSERT INTO clients (tenant_id, nom, type_client, telephone, est_demo) VALUES ($1, 'Client démo', 'B2C', $2, TRUE) RETURNING id`,
+        [tenantId, `DEMO-${tenantId}`]
+    );
+    const produitRes = await client.query(
+        `INSERT INTO produits (tenant_id, secteur_id, nom, unite_mesure, prix_unitaire_b2b, prix_unitaire_b2c, est_demo)
+         VALUES ($1, $2, 'Tomate (démo)', 'KG', 450, 500, TRUE) RETURNING id`,
+        [tenantId, secteurId]
+    );
+    await client.query(`INSERT INTO stocks (produit_id, quantite_disponible) VALUES ($1, 0)`, [produitRes.rows[0].id]);
+    const ventesDemo = [
+        ['CMD-DEMO-1', 400, 450, 6],
+        ['CMD-DEMO-2', 300, 480, 3],
+    ];
+    for (const [numero, quantite, prix, ilYa] of ventesDemo) {
+        const total = quantite * prix;
+        const cmd = await client.query(
+            `INSERT INTO commandes (tenant_id, numero_commande, client_id, statut, montant_total, est_demo, cree_le)
+             VALUES ($1, $2, $3, 'LIVREE', $4, TRUE, $5) RETURNING id`,
+            [tenantId, numero, clientRes.rows[0].id, total, dateIlYa(ilYa, maintenant)]
+        );
+        await client.query(
+            `INSERT INTO lignes_commande (commande_id, produit_id, quantite, prix_unitaire_applique, sous_total, lot_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [cmd.rows[0].id, produitRes.rows[0].id, quantite, prix, total, lotId]
+        );
+    }
+    return lotId;
+}
+
+// ---- Filière élevage : un petit troupeau de bovins suivi animal par animal ----------------------------------------------------------
+// [identifiant, sexe, race, âge en jours, poids à la première pesée (kg), gain quotidien (kg/j), jours depuis la 1re pesée, mère, sortie (jours)]
+const TROUPEAU_DEMO = [
+    ['BOV-D01', 'M', 'Gobra', 1460, 430, 0.15, 180, null, null],
+    ['BOV-D02', 'F', 'Gobra', 1825, 300, 0.1, 180, null, null],
+    ['BOV-D03', 'F', 'Gobra', 1460, 285, 0.1, 180, null, null],
+    ['BOV-D04', 'F', 'Zébu Peul', 2190, 310, 0.08, 180, null, null],
+    ['BOV-D05', 'F', 'Gobra', 730, 200, 0.4, 180, null, null],
+    ['BOV-D06', 'M', 'Gobra', 540, 190, 0.5, 180, null, 10], // vendu il y a 10 jours
+    ['BOV-D07', 'F', 'Gobra', 120, 70, 0.7, 120, 'BOV-D02', null], // veau né à la ferme, mère BOV-D02
+];
+
+async function semerTroupeauDemo(client, { tenantId, secteurId, utilisateurId, maintenant = new Date() }) {
+    const ids = {};
+    for (const [identifiant, sexe, race, ageJours, poids0, gain, joursPesees, mere, sortie] of TROUPEAU_DEMO) {
+        const res = await client.query(
+            `INSERT INTO animaux (tenant_id, secteur_id, identifiant, espece, race, sexe, date_naissance, mere_id, origine, statut, date_sortie, poids_initial_kg, est_demo, cree_par)
+             VALUES ($1, $2, $3, 'BOVIN', $4, $5, $6, $7, 'NE_FERME', $8, $9, $10, TRUE, $11) RETURNING id`,
+            [
+                tenantId, secteurId, identifiant, race, sexe, dateIlYa(ageJours, maintenant), mere ? ids[mere] : null,
+                sortie ? 'VENDU' : 'VIVANT', sortie ? dateIlYa(sortie, maintenant) : null, poids0, utilisateurId,
+            ]
+        );
+        ids[identifiant] = res.rows[0].id;
+        // une pesée par mois, jusqu'à la vente éventuelle
+        for (let j = joursPesees; j >= 0; j -= 30) {
+            if (sortie && j < sortie) break;
+            const poids = Math.round((poids0 + gain * (joursPesees - j)) * 10) / 10;
+            await client.query(
+                `INSERT INTO releves_animal (animal_id, utilisateur_id, date_releve, type_evenement, poids_kg) VALUES ($1, $2, $3, 'PESEE', $4)`,
+                [ids[identifiant], utilisateurId, dateIlYa(j, maintenant), poids]
+            );
+        }
+        if (!sortie) {
+            await client.query(
+                `INSERT INTO releves_animal (animal_id, utilisateur_id, date_releve, type_evenement, produit_utilise, notes) VALUES ($1, $2, $3, 'VACCINATION', 'Vaccin charbon symptomatique', 'Campagne annuelle')`,
+                [ids[identifiant], utilisateurId, dateIlYa(90, maintenant)]
+            );
+        }
+    }
+    for (const identifiant of ['BOV-D05', 'BOV-D07']) {
+        await client.query(
+            `INSERT INTO releves_animal (animal_id, utilisateur_id, date_releve, type_evenement, produit_utilise, notes) VALUES ($1, $2, $3, 'TRAITEMENT', 'Déparasitage (ivermectine)', 'Traitement préventif')`,
+            [ids[identifiant], utilisateurId, dateIlYa(45, maintenant)]
+        );
+    }
+    return Object.values(ids)[0];
+}
+
+/**
+ * Filières proposées à l'inscription : le secteur créé, la démo et les modules suivent le choix. L'élevage individuel est un module
+ * à part de l'offre (modulesSaas.js : « à la demande, module par module ») : l'essai ET le Pro d'une ferme d'élevage l'incluent
+ * d'office via modules_actifs (le passage en Pro ne touche pas modules_actifs, voir paiementsSaas.js).
+ */
+const FILIERES_ESSAI = {
+    avicole: { secteur: 'Avicole', suiviRecolte: false, modules: [], semer: semerFermeDemo },
+    piscicole: { secteur: 'Piscicole', suiviRecolte: false, modules: [], semer: semerBassinDemo },
+    maraicher: { secteur: 'Maraîcher', suiviRecolte: true, modules: [], semer: semerParcelleDemo },
+    elevage: { secteur: 'Élevage', suiviRecolte: false, modules: ['elevage'], semer: semerTroupeauDemo },
+};
 function filiereValide(valeur) {
     return Object.prototype.hasOwnProperty.call(FILIERES_ESSAI, valeur) ? valeur : 'avicole';
+}
+
+/** Crée le(s) secteur(s) de la filière et renvoie celui qui porte la démo (pour l'élevage : « Bovins », enfant de « Élevage »). */
+async function creerSecteursEssai(client, tenantId, filiere) {
+    const f = FILIERES_ESSAI[filiere];
+    const parent = await client.query(
+        `INSERT INTO secteurs (tenant_id, nom, suivi_recolte, suivi_individuel) VALUES ($1, $2, $3, FALSE) RETURNING id`,
+        [tenantId, f.secteur, f.suiviRecolte]
+    );
+    if (filiere !== 'elevage') return parent.rows[0].id;
+    // Suivi individuel : les animaux se rattachent à un sous-secteur (Bovins/Ovins/Caprins), jamais au secteur parent.
+    let bovins = null;
+    for (const nom of ['Bovins', 'Ovins', 'Caprins']) {
+        const enfant = await client.query(
+            `INSERT INTO secteurs (tenant_id, nom, suivi_recolte, parent_secteur_id, suivi_individuel) VALUES ($1, $2, FALSE, $3, TRUE) RETURNING id`,
+            [tenantId, nom, parent.rows[0].id]
+        );
+        if (nom === 'Bovins') bovins = enfant.rows[0].id;
+    }
+    return bovins;
 }
 
 /**
@@ -229,11 +377,7 @@ async function creerFermeEssai(pool, { nomFerme, telephone, source, filiere: fil
         const tenantId = orgRes.rows[0].id;
         await client.query('SELECT set_config($1, $2, false)', ['app.current_tenant_id', String(tenantId)]);
 
-        const secteurRes = await client.query(
-            `INSERT INTO secteurs (tenant_id, nom, suivi_recolte, suivi_individuel) VALUES ($1, $2, FALSE, FALSE) RETURNING id`,
-            [tenantId, FILIERES_ESSAI[filiere]]
-        );
-        const secteurId = secteurRes.rows[0].id;
+        const secteurId = await creerSecteursEssai(client, tenantId, filiere);
 
         const roleRes = await client.query(`SELECT id FROM roles WHERE nom = 'admin'`);
         if (roleRes.rows.length === 0) throw new Error("Rôle 'admin' introuvable — la base n'est pas correctement initialisée.");
@@ -252,12 +396,11 @@ async function creerFermeEssai(pool, { nomFerme, telephone, source, filiere: fil
         await client.query(
             `INSERT INTO organisation_abonnement_saas
                (tenant_id, modules_actifs, montant_mensuel, actif, telephone_contact, plan, essai_debut_le, essai_fin_le, source_inscription)
-             VALUES ($1, '{}', 0, TRUE, $2, 'ESSAI', $3, $4, $5)`,
-            [tenantId, telephone, maintenant, new Date(maintenant.getTime() + DUREE_ESSAI_JOURS * JOUR_MS), source === 'demo' ? 'demo' : 'essai']
+             VALUES ($1, $6, 0, TRUE, $2, 'ESSAI', $3, $4, $5)`,
+            [tenantId, telephone, maintenant, new Date(maintenant.getTime() + DUREE_ESSAI_JOURS * JOUR_MS), source === 'demo' ? 'demo' : 'essai', FILIERES_ESSAI[filiere].modules]
         );
 
-        const semer = filiere === 'piscicole' ? semerBassinDemo : semerFermeDemo;
-        await semer(client, { tenantId, secteurId, utilisateurId: admin.id, maintenant });
+        await FILIERES_ESSAI[filiere].semer(client, { tenantId, secteurId, utilisateurId: admin.id, maintenant });
 
         await logAudit(client, {
             table: 'organisations',
@@ -279,4 +422,4 @@ async function creerFermeEssai(pool, { nomFerme, telephone, source, filiere: fil
     }
 }
 
-module.exports = { creerFermeEssai, semerFermeDemo, semerBassinDemo, filiereValide, FILIERES_ESSAI, DUREE_LOT_DEMO_JOURS, DUREE_BASSIN_DEMO_JOURS };
+module.exports = { creerFermeEssai, semerFermeDemo, semerBassinDemo, semerParcelleDemo, semerTroupeauDemo, filiereValide, FILIERES_ESSAI, DUREE_LOT_DEMO_JOURS, DUREE_BASSIN_DEMO_JOURS };

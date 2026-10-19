@@ -317,6 +317,7 @@ CREATE TABLE animaux (
     statut VARCHAR(10) CHECK (statut IN ('VIVANT', 'VENDU', 'ABATTU', 'MORT')) NOT NULL DEFAULT 'VIVANT',
     date_sortie DATE, -- posée avec le statut à la sortie du troupeau (vente/abattage/mort)
     poids_initial_kg NUMERIC,
+    est_demo BOOLEAN NOT NULL DEFAULT FALSE, -- animal du troupeau de démonstration d'un essai (migration-40) : supprimé avec la démo
     cree_par INT REFERENCES utilisateurs(id),
     deleted_at TIMESTAMP,
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

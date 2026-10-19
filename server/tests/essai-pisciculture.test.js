@@ -120,7 +120,7 @@ describe('essai autonome — filière pisciculture (30 jours puis Pro, comme l�
         expect((await pool.query(`SELECT nom FROM secteurs WHERE tenant_id = $1`, [tenant])).rows.map((s) => s.nom)).toEqual(['Avicole']);
         expect((await pool.query(`SELECT code_lot FROM lots_production WHERE tenant_id = $1`, [tenant])).rows[0].code_lot).toBe('Lot n°12 (démo)');
 
-        await ouvrir('+221771230003', 'maraicher', 'Ferme Inconnue');
+        await ouvrir('+221771230003', 'apiculture', 'Ferme Inconnue');
         const t2 = await tenantDe('+221771230003');
         expect((await pool.query(`SELECT nom FROM secteurs WHERE tenant_id = $1`, [t2])).rows.map((s) => s.nom)).toEqual(['Avicole']);
     });

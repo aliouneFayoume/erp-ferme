@@ -264,12 +264,20 @@ module.exports = function essaiRoutes(pool) {
             await req.db.query(`UPDATE commandes SET deleted_at = now() WHERE tenant_id = $1 AND est_demo = TRUE AND deleted_at IS NULL`, [tenantId]);
             await req.db.query(`UPDATE clients SET deleted_at = now() WHERE tenant_id = $1 AND est_demo = TRUE AND deleted_at IS NULL`, [tenantId]);
             await req.db.query(`UPDATE produits SET deleted_at = now() WHERE tenant_id = $1 AND est_demo = TRUE AND deleted_at IS NULL`, [tenantId]);
+            // Troupeau de démonstration d'un essai « Élevage » (migration-40). Tolérant si la colonne n'existe pas encore : la
+            // suppression de la démo des autres filières ne doit jamais dépendre d'une migration qui ne les concerne pas.
+            let animauxDemo = 0;
+            try {
+                animauxDemo = (await req.db.query(`UPDATE animaux SET deleted_at = now() WHERE tenant_id = $1 AND est_demo = TRUE AND deleted_at IS NULL RETURNING id`, [tenantId])).rows.length;
+            } catch (err) {
+                if (err.code !== '42703') throw err;
+            }
             // Journalisé sur `organisations` (table de configuration, hors « saisie » dans la vue plateforme) et non sur le lot :
             // supprimer la démo n'est pas de la saisie, et ne doit pas faire passer un essai pour « activé » (activité plateforme).
-            if (r.rows.length > 0) {
-                await logAudit(req.db, { req, table: 'organisations', rowId: tenantId, action: 'UPDATE', userId: req.user.id, tenantId, details: { action: 'suppression_demo', lots: r.rows.map((l) => l.id) } });
+            if (r.rows.length > 0 || animauxDemo > 0) {
+                await logAudit(req.db, { req, table: 'organisations', rowId: tenantId, action: 'UPDATE', userId: req.user.id, tenantId, details: { action: 'suppression_demo', lots: r.rows.map((l) => l.id), animaux: animauxDemo } });
             }
-            res.json({ supprimes: r.rows.length });
+            res.json({ supprimes: r.rows.length + animauxDemo });
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: 'Erreur lors de la suppression de la démo.' });

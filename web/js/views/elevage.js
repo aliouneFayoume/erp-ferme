@@ -63,6 +63,15 @@ window.Views.elevage = {
 
     container.innerHTML = `
       ${offlineBanner()}
+      ${
+        animaux.some((x) => x.est_demo)
+          ? `<div class="panel">
+        <h2>Troupeau de démonstration <span class="badge muted">Démo</span></h2>
+        <p class="desc">Ces animaux sont là pour vous montrer l'application. Supprimez-les en un clic quand vous voulez : vos propres animaux ne sont pas touchés.</p>
+        <button class="secondary" id="btn-supprimer-demo-elevage">Supprimer la démo</button>
+      </div>`
+          : ''
+      }
       <div class="panel">
         <h2>Nouvel animal</h2>
         <p class="desc" style="margin-bottom:0">Enregistrer un animal acheté ou né sur la ferme</p>
@@ -135,6 +144,20 @@ window.Views.elevage = {
 
     renderAnimauxList(container, animaux);
     if (gestations.length) renderGestationsList(container, gestations);
+
+    container.querySelector('#btn-supprimer-demo-elevage')?.addEventListener('click', async () => {
+      const values = await Modal.open('Supprimer le troupeau de démonstration ?', [
+        { name: 'confirmer', label: 'Tapez "OUI" pour confirmer (vos propres animaux ne sont pas touchés)', type: 'text', value: '' },
+      ]);
+      if (!values || values.confirmer.trim().toUpperCase() !== 'OUI') return;
+      try {
+        await Api.del('/essai/demo');
+        showToast('Démo supprimée.', 'success');
+        window.Views.elevage.render(container);
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
 
     const selectSecteurForm = container.querySelector('#select-secteur-animal');
     const selectEspeceForm = container.querySelector('#select-espece-animal');
@@ -210,7 +233,7 @@ function renderAnimauxList(container, animaux) {
       <div class="lot-card">
         <span class="tag-secteur">${esc(ESPECE_LABEL[a.espece] || a.espece)}</span>
         <span class="badge ${ANIMAL_STATUT_BADGE[a.statut] || 'muted'}" style="float:right">${ANIMAL_STATUT_LABEL[a.statut] || esc(a.statut)}</span>
-        <div class="code" style="margin-top:8px">${esc(a.identifiant)}${a.race ? ` — ${esc(a.race)}` : ''}</div>
+        <div class="code" style="margin-top:8px">${esc(a.identifiant)}${a.race ? ` — ${esc(a.race)}` : ''}${a.est_demo ? ' <span class="badge muted">Démo</span>' : ''}</div>
         <div class="meta">${a.sexe === 'F' ? 'Femelle' : 'Mâle'} · ${esc(a.secteur_nom)} · ${ageLabel(a.date_naissance)}</div>
         <button class="secondary" style="margin-top:10px;width:100%" data-animal-id="${a.id}">Voir la fiche</button>
       </div>
