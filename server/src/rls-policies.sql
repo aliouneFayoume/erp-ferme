@@ -326,3 +326,9 @@ CREATE POLICY demandes_lecture ON demandes_contact FOR SELECT TO erp_app
     USING (true);
 CREATE POLICY demandes_traitement ON demandes_contact FOR UPDATE TO erp_app
     USING (true) WITH CHECK (true);
+
+-- Récoltes ostréicoles (migration-41) : table de tenant, mêmes règles que les autres tables de production.
+DROP POLICY IF EXISTS tenant_isolation ON recoltes_ostreicoles;
+CREATE POLICY tenant_isolation ON recoltes_ostreicoles
+    USING (tenant_id = current_tenant_id())
+    WITH CHECK (tenant_id = current_tenant_id());

@@ -581,3 +581,6 @@ td.num, th.num { text-align: right; font-family: var(--font-num); font-variant-n
 .essai-filiere legend { padding: 0; margin-bottom: 4px; font-weight: 600; font-size: 15px; color: var(--on-brand); }
 .essai-choix { flex-direction: row; align-items: center; gap: 10px; min-height: var(--tap-min, 44px); margin: 0; cursor: pointer; }
 .essai-choix span { font-weight: 500; font-size: 16px; }
+/* Groupe de cases à cocher dans un relevé (ex. entretien d'une structure ostréicole). */
+.groupe-cases { border: 0; padding: 0; margin: 0; }
+.groupe-cases legend { padding: 0; margin-bottom: 4px; font-weight: 600; font-size: 15px; color: var(--text); }

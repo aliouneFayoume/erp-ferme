@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { logAudit } = require('./audit');
 const { genererSlugUnique } = require('./slug');
 const { DUREE_ESSAI_JOURS } = require('./modulesSaas');
+const { ostreiculturePermise } = require('./ostreiculture');
 
 const JOUR_MS = 24 * 3600 * 1000;
 
@@ -316,6 +317,85 @@ async function semerTroupeauDemo(client, { tenantId, secteurId, utilisateurId, m
     return Object.values(ids)[0];
 }
 
+// ---- Filière ostréicole : « Poches du bolong A (démo) », une structure de grossissement suivie pendant 14 mois ------------------
+// Naissain capté à 1,0 cm, huîtres de 6,7 cm à la fin ; forte mortalité du naissain les deux premiers mois (le rapport FAO cite 30 à
+// 50 % de pertes) ; salinité et température qui suivent les saisons (saison des pluies : salinité basse). Valeurs d'EXEMPLE.
+const SALINITE_PAR_MOIS = { 1: 35, 2: 37, 3: 38, 4: 39, 5: 40, 6: 38, 7: 32, 8: 27, 9: 25, 10: 26, 11: 29, 12: 32 };
+const TEMPERATURE_PAR_MOIS = { 1: 26, 2: 27, 3: 28, 4: 29, 5: 30, 6: 30, 7: 30, 8: 29, 9: 29, 10: 29, 11: 28, 12: 27 };
+const MORTALITE_RELEVES_OSTREICOLE = [180, 150, 120, 75, 20, 15, 12, 10, 8, 6, 5, 5, 4, 4, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2];
+const NAISSAIN_DEPART_DEMO = 1500;
+const INTERVALLE_RELEVES_JOURS = 15;
+
+async function semerStructureOstreicole(client, { tenantId, secteurId, utilisateurId, maintenant = new Date() }) {
+    const nbReleves = MORTALITE_RELEVES_OSTREICOLE.length;
+    const debutIlYa = nbReleves * INTERVALLE_RELEVES_JOURS + 7; // structure récoltée depuis une semaine
+    const mortaliteTotale = MORTALITE_RELEVES_OSTREICOLE.reduce((a, b) => a + b, 0);
+    // [jours après la mise à l'eau, douzaines, destination] : une récolte fraîche, puis une seconde dont une partie va à la transformation.
+    const recoltesDemo = [
+        [360, 30, 'FRAIS'],
+        [405, 16, 'FRAIS'],
+        [405, 20, 'TRANSFORMATION'],
+    ];
+    const recolteTotale = recoltesDemo.reduce((s, r) => s + r[1] * 12, 0);
+    const effectifFinal = Math.max(0, NAISSAIN_DEPART_DEMO - mortaliteTotale - recolteTotale);
+
+    const lotRes = await client.query(
+        `INSERT INTO lots_production (tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, statut, est_demo, espece, site, type_structure, origine_lot, cree_par)
+         VALUES ($1, $2, $3, $4, $5, 'TERMINE', TRUE, 'Crassostrea gasar', 'Bolong de démonstration', 'POCHE', 'CAPTAGE', $6) RETURNING id`,
+        [tenantId, secteurId, 'Poches du bolong A (démo)', effectifFinal, dateIlYa(debutIlYa, maintenant), utilisateurId]
+    );
+    const lotId = lotRes.rows[0].id;
+
+    for (let i = 0; i < nbReleves; i += 1) {
+        const jours = (i + 1) * INTERVALLE_RELEVES_JOURS;
+        const date = dateIlYa(debutIlYa - jours, maintenant);
+        const mois = Number(date.slice(5, 7));
+        const taille = Math.round((1.0 + 6.2 * (1 - Math.exp(-jours / 170))) * 10) / 10;
+        const poids = Math.round(0.12 * taille ** 3 * 10) / 10;
+        const entretien = i === 11 ? 'DEDOUBLAGE,NETTOYAGE' : i === 7 ? 'HAUTEUR' : i % 3 === 2 ? 'NETTOYAGE' : null;
+        await client.query(
+            `INSERT INTO releves_journaliers (lot_id, utilisateur_id, date_releve, mortalite, conso_aliment_kg, poids_moyen_g, taille_moyenne_cm, temperature_eau, salinite_ppt, nb_mesures, entretien, est_synchronise)
+             VALUES ($1, $2, $3, $4, 0, $5, $6, $7, $8, 30, $9, TRUE)`,
+            [lotId, utilisateurId, date, MORTALITE_RELEVES_OSTREICOLE[i], poids, taille, TEMPERATURE_PAR_MOIS[mois], SALINITE_PAR_MOIS[mois], entretien]
+        );
+    }
+
+    for (const [jours, douzaines, destination] of recoltesDemo) {
+        await client.query(
+            `INSERT INTO recoltes_ostreicoles (tenant_id, lot_id, date_recolte, douzaines, nombre, destination, cree_par) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [tenantId, lotId, dateIlYa(debutIlYa - jours, maintenant), douzaines, douzaines * 12, destination, utilisateurId]
+        );
+    }
+
+    const clientRes = await client.query(
+        `INSERT INTO clients (tenant_id, nom, type_client, telephone, est_demo) VALUES ($1, 'Client démo', 'B2C', $2, TRUE) RETURNING id`,
+        [tenantId, `DEMO-${tenantId}`]
+    );
+    const produitRes = await client.query(
+        `INSERT INTO produits (tenant_id, secteur_id, nom, unite_mesure, prix_unitaire_b2b, prix_unitaire_b2c, est_demo)
+         VALUES ($1, $2, 'Huîtres fraîches (démo)', 'DOUZAINE', 1400, 1500, TRUE) RETURNING id`,
+        [tenantId, secteurId]
+    );
+    await client.query(`INSERT INTO stocks (produit_id, quantite_disponible) VALUES ($1, 0)`, [produitRes.rows[0].id]);
+    const ventesDemo = [
+        ['CMD-DEMO-1', 30, 1500, debutIlYa - 360 - 2],
+        ['CMD-DEMO-2', 16, 1500, debutIlYa - 405 - 2],
+    ];
+    for (const [numero, quantite, prix, ilYa] of ventesDemo) {
+        const total = quantite * prix;
+        const cmd = await client.query(
+            `INSERT INTO commandes (tenant_id, numero_commande, client_id, statut, montant_total, est_demo, cree_le)
+             VALUES ($1, $2, $3, 'LIVREE', $4, TRUE, $5) RETURNING id`,
+            [tenantId, numero, clientRes.rows[0].id, total, dateIlYa(Math.max(ilYa, 1), maintenant)]
+        );
+        await client.query(
+            `INSERT INTO lignes_commande (commande_id, produit_id, quantite, prix_unitaire_applique, sous_total, lot_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [cmd.rows[0].id, produitRes.rows[0].id, quantite, prix, total, lotId]
+        );
+    }
+    return lotId;
+}
+
 /**
  * Filières proposées à l'inscription : le secteur créé, la démo et les modules suivent le choix. L'élevage individuel est un module
  * à part de l'offre (modulesSaas.js : « à la demande, module par module ») : l'essai ET le Pro d'une ferme d'élevage l'incluent
@@ -326,8 +406,11 @@ const FILIERES_ESSAI = {
     piscicole: { secteur: 'Piscicole', suiviRecolte: false, modules: [], semer: semerBassinDemo },
     maraicher: { secteur: 'Maraîcher', suiviRecolte: true, modules: [], semer: semerParcelleDemo },
     elevage: { secteur: 'Élevage', suiviRecolte: false, modules: ['elevage'], semer: semerTroupeauDemo },
+    // Ostréiculture (V1) : filière FERMÉE tant que OSTREICULTURE_ACTIF n'est pas défini (voir ostreiculture.js et filiereValide).
+    ostreiculture: { secteur: 'Ostréiculture', suiviRecolte: false, modules: [], semer: semerStructureOstreicole },
 };
 function filiereValide(valeur) {
+    if (valeur === 'ostreiculture' && !ostreiculturePermise()) return 'avicole';
     return Object.prototype.hasOwnProperty.call(FILIERES_ESSAI, valeur) ? valeur : 'avicole';
 }
 
@@ -422,4 +505,4 @@ async function creerFermeEssai(pool, { nomFerme, telephone, source, filiere: fil
     }
 }
 
-module.exports = { creerFermeEssai, semerFermeDemo, semerBassinDemo, semerParcelleDemo, semerTroupeauDemo, filiereValide, FILIERES_ESSAI, DUREE_LOT_DEMO_JOURS, DUREE_BASSIN_DEMO_JOURS };
+module.exports = { creerFermeEssai, semerFermeDemo, semerBassinDemo, semerParcelleDemo, semerTroupeauDemo, semerStructureOstreicole, filiereValide, FILIERES_ESSAI, DUREE_LOT_DEMO_JOURS, DUREE_BASSIN_DEMO_JOURS };

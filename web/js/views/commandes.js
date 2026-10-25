@@ -9,7 +9,7 @@ window.Views.commandes = {
       // Lots avicoles proposés pour rattacher une vente (bilan par lot) — facultatif : une erreur ne bloque jamais la commande.
       Api.get('/production/lots').catch(() => []),
     ]);
-    const lotsVendables = tousLots.filter((l) => l.secteur_nom === 'Avicole');
+    const lotsVendables = tousLots.filter((l) => l.secteur_nom === 'Avicole' || l.secteur_nom === 'Ostréiculture');
     const lotOptions = `<option value="">Lot : aucun</option>${lotsVendables
       .map((l) => `<option value="${l.id}">${esc(l.code_lot)} (${esc(({ EN_COURS: 'en cours', ABATTAGE: 'abattage', TERMINE: 'terminé', PERDU: 'perdu' })[l.statut] || l.statut)})</option>`)
       .join('')}`;

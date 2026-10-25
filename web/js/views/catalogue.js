@@ -1,7 +1,7 @@
 window.Views = window.Views || {};
 
 // Unité d'un produit (« 12 caisses ») : un nombre n'est jamais affiché seul.
-const UNITES_PRODUIT = { TETE: ['tête', 'têtes'], KG: ['kg', 'kg'], CAISSE: ['caisse', 'caisses'], BOTTES: ['botte', 'bottes'] };
+const UNITES_PRODUIT = { TETE: ['tête', 'têtes'], KG: ['kg', 'kg'], CAISSE: ['caisse', 'caisses'], BOTTES: ['botte', 'bottes'], DOUZAINE: ['douzaine', 'douzaines'] };
 function quantiteAvecUnite(quantite, unite) {
   const libelles = UNITES_PRODUIT[unite];
   const n = Number(quantite) || 0;
@@ -80,6 +80,7 @@ window.Views.catalogue = {
                     <option value="KG">Kg</option>
                     <option value="CAISSE">Caisse</option>
                     <option value="BOTTES">Bottes</option>
+                    <option value="DOUZAINE">Douzaine</option>
                   </select>
                 </label>
                 <label>Prix standard / B2C (FCFA)<input type="number" name="prix_unitaire_b2c" required /></label>

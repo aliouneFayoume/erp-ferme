@@ -221,6 +221,9 @@ CREATE TABLE lots_production (
     espece VARCHAR(100), -- Piscicole : espèce actuellement dans ce bassin (voir migration-28) ; change quand des poissons y sont déplacés
     est_demo BOOLEAN NOT NULL DEFAULT FALSE, -- lot de la « Ferme démo » d'un essai (migration-35) : créé TERMINÉ, supprimable en un clic
     prix_aliment_kg NUMERIC, -- prix moyen du kg d'aliment de ce lot, saisi une fois : sert au bilan par lot (migration-36)
+    site VARCHAR(100), -- Ostréiculture : zone, bolong ou lagune (migration-41)
+    type_structure VARCHAR(20), -- Ostréiculture : GUIRLANDE, POCHE, TABLE, LIGNE, COLLECTEUR, AUTRE
+    origine_lot VARCHAR(20), -- Ostréiculture : CAPTAGE, ACHAT, CUEILLETTE
     cree_par INT REFERENCES utilisateurs(id),
     deleted_at TIMESTAMP,
     UNIQUE (tenant_id, code_lot)
@@ -263,6 +266,12 @@ CREATE TABLE releves_journaliers (
 );
 CREATE UNIQUE INDEX uq_releves_lot_client ON releves_journaliers (lot_id, client_id);
 
+-- Ostréiculture (migration-41) : mesures propres aux huîtres, saisies dans les relevés d'une structure suivie.
+ALTER TABLE releves_journaliers ADD COLUMN salinite_ppt NUMERIC; -- salinité de l'eau, en ‰
+ALTER TABLE releves_journaliers ADD COLUMN naissain_capte INT; -- naissain capté (structures de captage)
+ALTER TABLE releves_journaliers ADD COLUMN nb_mesures INT; -- nombre d'huîtres mesurées pour la taille moyenne (échantillon)
+ALTER TABLE releves_journaliers ADD COLUMN entretien VARCHAR(60); -- NETTOYAGE, DEDOUBLAGE, HAUTEUR (séparés par des virgules)
+
 -- Autres coûts d'un lot (migration-36) : poussins, vaccins/vétérinaire, main-d'œuvre, transport, autre. L'aliment n'y est pas :
 -- il se calcule depuis les relevés (kg consommés) × lots_production.prix_aliment_kg. Sert au bilan par lot (routes/production.js).
 CREATE TABLE couts_lot (
@@ -278,6 +287,27 @@ CREATE TABLE couts_lot (
     cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_couts_lot_lot ON couts_lot (lot_id);
+
+-- Récoltes d'une structure ostréicole (migration-41) : vente fraîche à la douzaine, calibres facultatifs, destination.
+CREATE TABLE recoltes_ostreicoles (
+    id SERIAL PRIMARY KEY,
+    tenant_id INT REFERENCES organisations(id),
+    lot_id INT NOT NULL REFERENCES lots_production(id),
+    date_recolte DATE NOT NULL DEFAULT CURRENT_DATE,
+    douzaines NUMERIC NOT NULL CHECK (douzaines >= 0),
+    nombre INT NOT NULL CHECK (nombre >= 0),
+    kg NUMERIC,
+    calibre_0 INT,
+    calibre_1 INT,
+    calibre_2 INT,
+    calibre_3 INT,
+    destination VARCHAR(20) NOT NULL DEFAULT 'FRAIS' CHECK (destination IN ('FRAIS', 'TRANSFORMATION', 'FAMILLE')),
+    notes TEXT,
+    cree_par INT REFERENCES utilisateurs(id),
+    deleted_at TIMESTAMP,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_recoltes_ostreicoles_lot ON recoltes_ostreicoles (lot_id);
 
 -- --------------------------------------------------------
 -- 3bis. ÉLEVAGE INDIVIDUEL (bovins/ovins/caprins) — suivi animal par animal, pas par lot
@@ -358,7 +388,7 @@ CREATE TABLE produits (
     tenant_id INT REFERENCES organisations(id),
     secteur_id INT REFERENCES secteurs(id),
     nom VARCHAR(100) NOT NULL,
-    unite_mesure VARCHAR(20) CHECK (unite_mesure IN ('TETE', 'KG', 'CAISSE', 'BOTTES')),
+    unite_mesure VARCHAR(20) CHECK (unite_mesure IN ('TETE', 'KG', 'CAISSE', 'BOTTES', 'DOUZAINE')), -- DOUZAINE : huître fraîche (migration-41)
     prix_unitaire_b2b NUMERIC NOT NULL, -- Tarif "restaurant" (B2B standard)
     prix_unitaire_b2c NUMERIC NOT NULL, -- Tarif "standard" (particuliers)
     prix_unitaire_grossiste NUMERIC, -- Tarif préférentiel gros volumes (catégorie B2B "grossiste") ; NULL = retombe sur le tarif B2B standard

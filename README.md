@@ -77,6 +77,10 @@ RAPPEL_FIN_ESSAI_ACTIF=false
 WHATSAPP_TEMPLATE_J3_NOM=
 WHATSAPP_TEMPLATE_J3_LANGUE=fr
 
+# Module Ostréiculture (V1, server/src/ostreiculture.js) : FERMÉ par défaut. OSTREICULTURE_ACTIF=lien l'accepte à l'essai sans la lister
+# (inscription par le lien /essai.html?filiere=ostreiculture, pour tester) ; OSTREICULTURE_ACTIF=true la propose à tous. Nécessite migration-41.
+OSTREICULTURE_ACTIF=
+
 # Passage en Pro en libre-service (server/src/routes/abonnement.js) : le bouton « Passer en Pro » crée la facture du premier mois
 # (PRO_PRIX_MENSUEL, 10000 par défaut) et mène au paiement PayDunya de Massla ; le Pro s'active quand l'IPN confirme le paiement.
 # FERMÉ tant que PASSAGE_PRO_EN_LIGNE_ACTIF n'est pas « true » (le bouton reste alors un message WhatsApp + une demande enregistrée,

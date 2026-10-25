@@ -39,9 +39,19 @@
   // Source du suivi (« Essayer gratuitement » ou « Demander ma démo ») : ?source=demo dans le lien, sinon essai.
   const source = new URLSearchParams(window.location.search).get('source') === 'demo' ? 'demo' : 'essai';
   // Filière : ?filiere=piscicole dans le lien (page Pisciculture) pré-coche « Pisciculture » ; le visiteur peut toujours changer.
-  const FILIERES = ['avicole', 'piscicole', 'maraicher', 'elevage'];
+  const FILIERES = ['avicole', 'piscicole', 'maraicher', 'elevage', 'ostreiculture'];
   const filiereDuLien = new URLSearchParams(window.location.search).get('filiere');
-  if (FILIERES.includes(filiereDuLien)) {
+  // Filière « cachée » (ostréiculture, version de test) : affichée seulement si le serveur la propose, ou si le lien la nomme ET que
+  // le serveur l'accepte. Les quatre filières habituelles restent toujours affichées, même si cette requête échoue.
+  fetch('/api/essai/filieres')
+    .then((r) => r.json())
+    .then((f) => {
+      const visible = (f.publiques || []).includes('ostreiculture') || (filiereDuLien === 'ostreiculture' && (f.acceptees || []).includes('ostreiculture'));
+      document.getElementById('choix-ostreiculture').classList.toggle('hidden', !visible);
+      if (visible && filiereDuLien === 'ostreiculture') document.querySelector('input[name="filiere"][value="ostreiculture"]').checked = true;
+    })
+    .catch(() => {});
+  if (FILIERES.includes(filiereDuLien) && filiereDuLien !== 'ostreiculture') {
     const radio = document.querySelector(`input[name="filiere"][value="${filiereDuLien}"]`);
     if (radio) radio.checked = true;
   }

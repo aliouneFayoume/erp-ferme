@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+const ostreiculture = require('../ostreiculture');
 const { calculerBilanLot, CATEGORIES_COUT } = require('../bilanLot');
 
 // Un utilisateur ne doit jamais accéder à un lot d'une autre organisation, quel que soit son rôle ;
@@ -139,9 +140,15 @@ module.exports = function productionRoutes(pool) {
             const secteurRes = await req.db.query(`SELECT id FROM secteurs WHERE id = $1 AND tenant_id = $2`, [secteur_id, req.user.tenant_id]);
             if (secteurRes.rows.length === 0) return res.status(400).json({ erreur: 'Secteur invalide.' });
             const result = await req.db.query(
-                `INSERT INTO lots_production (tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, statut, culture, duree_maturite_jours, espece, cree_par)
-                 VALUES ($1, $2, $3, $4, $5, 'EN_COURS', $6, $7, $8, $9) RETURNING *`,
-                [req.user.tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, culture || null, duree_maturite_jours || null, espece, req.user.id]
+                `INSERT INTO lots_production (tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, statut, culture, duree_maturite_jours, espece, cree_par, site, type_structure, origine_lot)
+                 VALUES ($1, $2, $3, $4, $5, 'EN_COURS', $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+                [
+                    req.user.tenant_id, secteur_id, code_lot, quantite_initiale, date_demarrage, culture || null, duree_maturite_jours || null, espece, req.user.id,
+                    // Ostréiculture (migration-41) : facultatifs, ignorés s'ils sont hors liste.
+                    String(req.body.site || '').trim().slice(0, 100) || null,
+                    ostreiculture.dansListeOuNull(req.body.type_structure, ostreiculture.TYPES_STRUCTURE),
+                    ostreiculture.dansListeOuNull(req.body.origine_lot, ostreiculture.ORIGINES_LOT),
+                ]
             );
             await logAudit(req.db, { req, table: 'lots_production', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
             res.status(201).json(result.rows[0]);
@@ -431,8 +438,8 @@ module.exports = function productionRoutes(pool) {
                 }
                 const insertion = await client.query(
                     `INSERT INTO releves_journaliers
-                     (lot_id, utilisateur_id, date_releve, mortalite, conso_aliment_kg, poids_moyen_g, taille_moyenne_cm, temperature_eau, ph_eau, intrants_utilises, quantite_recoltee_kg, oeufs_collectes, notes, est_synchronise, client_id)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE, $14)
+                     (lot_id, utilisateur_id, date_releve, mortalite, conso_aliment_kg, poids_moyen_g, taille_moyenne_cm, temperature_eau, ph_eau, intrants_utilises, quantite_recoltee_kg, oeufs_collectes, notes, est_synchronise, client_id, salinite_ppt, naissain_capte, nb_mesures, entretien)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE, $14, $15, $16, $17, $18)
                      ON CONFLICT (lot_id, client_id) DO NOTHING
                      RETURNING id`,
                     [
@@ -450,6 +457,11 @@ module.exports = function productionRoutes(pool) {
                         oeufsCollectes || null,
                         releve.notes || null,
                         clientId,
+                        // Ostréiculture (migration-41)
+                        ostreiculture.nombreOuNull(releve.salinite_ppt),
+                        ostreiculture.entierOuNull(releve.naissain_capte),
+                        ostreiculture.entierOuNull(releve.nb_mesures),
+                        ostreiculture.normaliserEntretien(releve.entretien),
                     ]
                 );
                 if (insertion.rows.length === 0) {
@@ -537,6 +549,158 @@ module.exports = function productionRoutes(pool) {
             if (err.statut) return res.status(err.statut).json({ erreur: err.message });
             console.error('Erreur de synchronisation:', err);
             res.status(500).json({ erreur: 'Échec de la synchronisation des données de production.' });
+        }
+    });
+
+    // ---- Module Ostréiculture (migration-41) : récoltes à la douzaine et synthèse d'une structure suivie ----------------------
+    // Le lot doit appartenir au secteur « Ostréiculture » ; une récolte retire les huîtres de l'effectif de la structure
+    // (comme la mortalité), et sa suppression les y remet.
+    async function chargerLotOstreicole(db, lotId, tenantId) {
+        const r = await db.query(
+            `SELECT l.id, l.code_lot, l.statut, l.quantite_initiale, l.date_demarrage, s.nom AS secteur_nom
+             FROM lots_production l JOIN secteurs s ON s.id = l.secteur_id
+             WHERE l.id = $1 AND l.tenant_id = $2 AND l.deleted_at IS NULL`,
+            [lotId, tenantId]
+        );
+        return r.rows[0] || null;
+    }
+
+    router.get('/lots/:id/recoltes', requireAuth(pool), async (req, res) => {
+        try {
+            if (!(await verifierAccesLot(req.db, req.params.id, req.user))) {
+                return res.status(403).json({ erreur: 'Ce lot ne relève pas de votre secteur.' });
+            }
+            const r = await req.db.query(
+                `SELECT * FROM recoltes_ostreicoles WHERE lot_id = $1 AND tenant_id = $2 AND deleted_at IS NULL ORDER BY date_recolte DESC, id DESC`,
+                [req.params.id, req.user.tenant_id]
+            );
+            res.json(r.rows);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la récupération des récoltes.' });
+        }
+    });
+
+    router.post('/lots/:id/recoltes', requireAuth(pool), checkRole(['chef_prod']), async (req, res) => {
+        const lotId = Number(req.params.id);
+        if (!(await verifierAccesLot(req.db, lotId, req.user))) {
+            return res.status(403).json({ erreur: 'Ce lot ne relève pas de votre secteur.' });
+        }
+        try {
+            const lot = await chargerLotOstreicole(req.db, lotId, req.user.tenant_id);
+            if (!lot) return res.status(404).json({ erreur: 'Lot introuvable.' });
+            if (lot.secteur_nom !== ostreiculture.SECTEUR_OSTREICULTURE) {
+                return res.status(400).json({ erreur: "Les récoltes à la douzaine concernent les structures d'ostréiculture." });
+            }
+            if (lot.statut !== 'EN_COURS') {
+                return res.status(400).json({ erreur: 'Cette structure est clôturée : aucune récolte ne peut y être ajoutée.' });
+            }
+
+            let douzaines = ostreiculture.nombreOuNull(req.body.douzaines);
+            let nombre = ostreiculture.entierOuNull(req.body.nombre);
+            if (douzaines === null && nombre === null) {
+                return res.status(400).json({ erreur: 'Indiquez la quantité récoltée (en douzaines ou en nombre).' });
+            }
+            if (nombre === null) nombre = Math.round(douzaines * 12);
+            if (douzaines === null) douzaines = Math.round((nombre / 12) * 100) / 100;
+            if (!(nombre > 0)) return res.status(400).json({ erreur: 'La quantité récoltée doit être supérieure à zéro.' });
+
+            const dateRecolte = String(req.body.date_recolte || new Date().toISOString().slice(0, 10)).slice(0, 10);
+            const destination = ostreiculture.dansListeOuNull(req.body.destination, ostreiculture.DESTINATIONS_RECOLTE) || 'FRAIS';
+            const kg = ostreiculture.nombreOuNull(req.body.kg);
+            const calibres = [0, 1, 2, 3].map((i) => ostreiculture.entierOuNull(req.body[`calibre_${i}`]));
+            const notes = req.body.notes ? String(req.body.notes).slice(0, 300) : null;
+
+            const ins = await req.db.query(
+                `INSERT INTO recoltes_ostreicoles (tenant_id, lot_id, date_recolte, douzaines, nombre, kg, calibre_0, calibre_1, calibre_2, calibre_3, destination, notes, cree_par)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+                [req.user.tenant_id, lotId, dateRecolte, douzaines, nombre, kg, ...calibres, destination, notes, req.user.id]
+            );
+            // Les huîtres récoltées quittent la structure ; jamais sous zéro (une estimation trop haute ne doit rien bloquer).
+            await req.db.query(`UPDATE lots_production SET quantite_initiale = GREATEST(quantite_initiale + $1, 0) WHERE id = $2`, [-nombre, lotId]);
+            await logAudit(req.db, { req, table: 'recoltes_ostreicoles', rowId: ins.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: { lot_id: lotId, douzaines, nombre, destination } });
+            const reponse = { ...ins.rows[0] };
+            if (nombre > Number(lot.quantite_initiale)) {
+                reponse.avertissement = `Vous avez récolté plus d'huîtres (${nombre}) qu'il n'en restait dans la structure (${lot.quantite_initiale}) : l'effectif est ramené à zéro.`;
+            }
+            res.status(201).json(reponse);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: "Erreur lors de l'enregistrement de la récolte." });
+        }
+    });
+
+    router.delete('/lots/:id/recoltes/:recolteId', requireAuth(pool), checkRole(['chef_prod']), async (req, res) => {
+        const lotId = Number(req.params.id);
+        if (!(await verifierAccesLot(req.db, lotId, req.user))) {
+            return res.status(403).json({ erreur: 'Ce lot ne relève pas de votre secteur.' });
+        }
+        try {
+            const r = await req.db.query(
+                `UPDATE recoltes_ostreicoles SET deleted_at = now() WHERE id = $1 AND lot_id = $2 AND tenant_id = $3 AND deleted_at IS NULL RETURNING id, nombre`,
+                [req.params.recolteId, lotId, req.user.tenant_id]
+            );
+            if (r.rows.length === 0) return res.status(404).json({ erreur: 'Récolte introuvable.' });
+            await req.db.query(`UPDATE lots_production SET quantite_initiale = quantite_initiale + $1 WHERE id = $2`, [r.rows[0].nombre, lotId]);
+            await logAudit(req.db, { req, table: 'recoltes_ostreicoles', rowId: r.rows[0].id, action: 'DELETE', userId: req.user.id, tenantId: req.user.tenant_id, details: { lot_id: lotId, nombre: r.rows[0].nombre } });
+            res.status(204).end();
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la suppression de la récolte.' });
+        }
+    });
+
+    // Synthèse d'une structure : effectif de départ reconstitué (actuel + mortalité + récolté), mortalité cumulée, rendement,
+    // dernières mesures. Calculée à la demande, rien n'est stocké en double.
+    router.get('/lots/:id/ostreiculture', requireAuth(pool), async (req, res) => {
+        const lotId = Number(req.params.id);
+        if (!(await verifierAccesLot(req.db, lotId, req.user))) {
+            return res.status(403).json({ erreur: 'Ce lot ne relève pas de votre secteur.' });
+        }
+        try {
+            const lot = await chargerLotOstreicole(req.db, lotId, req.user.tenant_id);
+            if (!lot) return res.status(404).json({ erreur: 'Lot introuvable.' });
+            if (lot.secteur_nom !== ostreiculture.SECTEUR_OSTREICULTURE) {
+                return res.status(400).json({ erreur: "Cette synthèse concerne les structures d'ostréiculture." });
+            }
+            const morts = await req.db.query(`SELECT COALESCE(SUM(mortalite), 0)::int AS n FROM releves_journaliers WHERE lot_id = $1`, [lotId]);
+            const recoltes = await req.db.query(
+                `SELECT COALESCE(SUM(nombre), 0)::int AS nombre, COALESCE(SUM(douzaines), 0) AS douzaines
+                 FROM recoltes_ostreicoles WHERE lot_id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+                [lotId, req.user.tenant_id]
+            );
+            const derniers = await req.db.query(
+                `SELECT taille_moyenne_cm, salinite_ppt, temperature_eau FROM releves_journaliers WHERE lot_id = $1 ORDER BY date_releve DESC, id DESC LIMIT 30`,
+                [lotId]
+            );
+            const premier = (champ) => {
+                const ligne = derniers.rows.find((r) => r[champ] !== null && r[champ] !== undefined && Number(r[champ]) > 0);
+                return ligne ? Number(ligne[champ]) : null;
+            };
+            const effectifActuel = Number(lot.quantite_initiale);
+            const mortaliteTotale = Number(morts.rows[0].n);
+            const recolteNombre = Number(recoltes.rows[0].nombre);
+            const effectifDepart = effectifActuel + mortaliteTotale + recolteNombre;
+            const pct = (n) => (effectifDepart > 0 ? Math.round((n / effectifDepart) * 1000) / 10 : null);
+            // DATE renvoyée par le pilote PostgreSQL : un objet Date (jamais une chaîne), d'où la conversion explicite.
+            const debut = new Date(lot.date_demarrage instanceof Date ? lot.date_demarrage.toISOString().slice(0, 10) : String(lot.date_demarrage).slice(0, 10));
+            res.json({
+                lot_id: lotId,
+                effectif_actuel: effectifActuel,
+                effectif_depart: effectifDepart,
+                mortalite_totale: mortaliteTotale,
+                mortalite_pct: pct(mortaliteTotale),
+                recolte_nombre: recolteNombre,
+                recolte_douzaines: Math.round(Number(recoltes.rows[0].douzaines) * 100) / 100,
+                rendement_pct: pct(recolteNombre),
+                jours_depuis_mise_a_l_eau: Math.max(0, Math.floor((Date.now() - debut.getTime()) / 86400000)),
+                taille_moyenne_cm: premier('taille_moyenne_cm'),
+                salinite_ppt: premier('salinite_ppt'),
+                temperature_eau: premier('temperature_eau'),
+            });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors du calcul de la synthèse.' });
         }
     });
 

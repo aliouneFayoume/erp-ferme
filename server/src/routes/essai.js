@@ -7,6 +7,7 @@ const { signToken, requireAuth, checkRole, queryPreTenant, queryPreTenantPlatefo
 const { logAudit } = require('../audit');
 const { normaliserTelephone } = require('../validation');
 const { creerFermeEssai, filiereValide } = require('../creerFermeEssai');
+const { modeOstreiculture } = require('../ostreiculture');
 const {
     MAX_TENTATIVES_CODE,
     DELAI_RENVOI_SECONDES,
@@ -126,6 +127,19 @@ module.exports = function essaiRoutes(pool) {
 
     router.get('/disponible', (req, res) => {
         res.json({ disponible: essaiAutonomeDisponible() });
+    });
+
+    /**
+     * Filières de l'essai : `publiques` = proposées sur la page d'inscription ; `acceptees` = acceptées par le serveur (inclut une
+     * filière « cachée », accessible seulement par son lien). L'ostréiculture suit OSTREICULTURE_ACTIF (voir ostreiculture.js).
+     */
+    router.get('/filieres', (req, res) => {
+        const base = ['avicole', 'piscicole', 'maraicher', 'elevage'];
+        const mode = modeOstreiculture();
+        res.json({
+            publiques: mode === 'public' ? [...base, 'ostreiculture'] : base,
+            acceptees: mode === 'ferme' ? base : [...base, 'ostreiculture'],
+        });
     });
 
     /** Ouvre un essai (ou, si le numéro a déjà un compte, envoie simplement un code de connexion). */

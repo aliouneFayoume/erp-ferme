@@ -6,7 +6,15 @@ function isOfflineMode() {
   return localStorage.getItem(OFFLINE_MODE_KEY) === '1';
 }
 
-const SECTEUR_UNITE = { Avicole: 'sujets', Piscicole: 'alevins/poissons', 'Maraîcher': 'plants' };
+const SECTEUR_UNITE = { Avicole: 'sujets', Piscicole: 'alevins/poissons', 'Maraîcher': 'plants', 'Ostréiculture': 'huîtres' };
+
+// Ostréiculture (V1) : vocabulaire du terrain. Les valeurs (clés) sont celles du serveur (server/src/ostreiculture.js).
+const SECTEUR_OSTREICULTURE = 'Ostréiculture';
+const TYPES_STRUCTURE_LABEL = { GUIRLANDE: 'Guirlande de coquilles', POCHE: 'Poche', TABLE: 'Table', LIGNE: 'Ligne', COLLECTEUR: 'Collecteur', AUTRE: 'Autre' };
+const ORIGINES_LOT_LABEL = { CAPTAGE: 'Captage', ACHAT: 'Achat de naissain', CUEILLETTE: 'Cueillette de jeunes huîtres' };
+const DESTINATIONS_RECOLTE_LABEL = { FRAIS: 'Vente fraîche', TRANSFORMATION: 'Transformation', FAMILLE: 'Consommation familiale' };
+const ENTRETIEN_LABEL = { NETTOYAGE: 'Nettoyage', DEDOUBLAGE: 'Dédoublage', HAUTEUR: 'Hauteur changée' };
+const optionsListe = (labels, vide = '—') => `<option value="">${vide}</option>${Object.entries(labels).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}`;
 
 function quantiteLabel(secteurNom) {
   return `Quantité initiale (nombre de ${SECTEUR_UNITE[secteurNom] || 'unités'})`;
@@ -56,7 +64,7 @@ window.Views.production = {
               ${secteursAutorises
                 .map((s) => {
                   const parent = secteurs.find((p) => p.id === s.parent_secteur_id);
-                  return `<option value="${s.id}" data-nom="${s.nom}" data-piscicole="${estPiscicole(s.nom, parent?.nom) ? '1' : ''}">${s.nom}</option>`;
+                  return `<option value="${s.id}" data-nom="${s.nom}" data-piscicole="${estPiscicole(s.nom, parent?.nom) ? '1' : ''}" data-ostreiculture="${s.nom === SECTEUR_OSTREICULTURE ? '1' : ''}">${s.nom}</option>`;
                 })
                 .join('')}
             </select>
@@ -76,9 +84,18 @@ window.Views.production = {
           <label id="champ-duree" class="${secteursAutorises[0]?.nom === 'Maraîcher' ? '' : 'hidden'}">Durée avant récolte (jours)
             <input type="number" name="duree_maturite_jours" min="1" placeholder="ex: 90" />
           </label>
-          <label id="champ-espece" class="${secteursAutorises[0] && estPiscicole(secteursAutorises[0].nom, secteurs.find((p) => p.id === secteursAutorises[0].parent_secteur_id)?.nom) ? '' : 'hidden'}">Espèce (facultatif)
+          <label id="champ-espece" class="${secteursAutorises[0] && (secteursAutorises[0].nom === SECTEUR_OSTREICULTURE || estPiscicole(secteursAutorises[0].nom, secteurs.find((p) => p.id === secteursAutorises[0].parent_secteur_id)?.nom)) ? '' : 'hidden'}">Espèce (facultatif)
             <input type="text" name="espece" list="liste-especes" maxlength="100" placeholder="ex: Tilapia, Clarias" />
-            <datalist id="liste-especes"><option value="Tilapia"></option><option value="Clarias (poisson-chat)"></option><option value="Silure"></option><option value="Carpe"></option></datalist>
+            <datalist id="liste-especes"><option value="Tilapia"></option><option value="Clarias (poisson-chat)"></option><option value="Silure"></option><option value="Carpe"></option><option value="Crassostrea gasar"></option></datalist>
+          </label>
+          <label id="champ-site" class="${secteursAutorises[0]?.nom === SECTEUR_OSTREICULTURE ? '' : 'hidden'}">Site (zone, bolong, lagune)
+            <input type="text" name="site" maxlength="100" placeholder="ex: Bolong de Toubacouta" />
+          </label>
+          <label id="champ-structure" class="${secteursAutorises[0]?.nom === SECTEUR_OSTREICULTURE ? '' : 'hidden'}">Type de structure
+            <select name="type_structure">${optionsListe(TYPES_STRUCTURE_LABEL)}</select>
+          </label>
+          <label id="champ-origine" class="${secteursAutorises[0]?.nom === SECTEUR_OSTREICULTURE ? '' : 'hidden'}">Origine des huîtres
+            <select name="origine_lot">${optionsListe(ORIGINES_LOT_LABEL)}</select>
           </label>
           <button type="submit">Créer le lot</button>
         </form>
@@ -107,7 +124,9 @@ window.Views.production = {
       container.querySelector('#label-quantite').textContent = quantiteLabel(nom);
       container.querySelector('#champ-culture').classList.toggle('hidden', nom !== 'Maraîcher');
       container.querySelector('#champ-duree').classList.toggle('hidden', nom !== 'Maraîcher');
-      container.querySelector('#champ-espece').classList.toggle('hidden', !e.target.selectedOptions[0]?.dataset.piscicole);
+      const optionChoisie = e.target.selectedOptions[0];
+      container.querySelector('#champ-espece').classList.toggle('hidden', !optionChoisie?.dataset.piscicole && !optionChoisie?.dataset.ostreiculture);
+      ['#champ-site', '#champ-structure', '#champ-origine'].forEach((id) => container.querySelector(id).classList.toggle('hidden', !optionChoisie?.dataset.ostreiculture));
     });
 
     container.querySelector('#form-lot').addEventListener('submit', async (e) => {
@@ -122,6 +141,9 @@ window.Views.production = {
           culture: fd.get('culture') || null,
           duree_maturite_jours: fd.get('duree_maturite_jours') ? Number(fd.get('duree_maturite_jours')) : null,
           espece: fd.get('espece') || null,
+          site: fd.get('site') || null,
+          type_structure: fd.get('type_structure') || null,
+          origine_lot: fd.get('origine_lot') || null,
         });
         showToast('Lot créé avec succès.', 'success');
         window.Views.production.render(container);
@@ -188,6 +210,8 @@ function renderLotsList(container, lots) {
           <div class="kpi kpi-grand"><span>${l.secteur_nom === 'Maraîcher' ? 'Nombre de plants' : 'Effectif actuel'}</span><b>${fmt(l.quantite_initiale)}${uniteLot(l) ? `<span class="unit">${uniteLot(l)}</span>` : ''}</b></div>
           ${estPiscicole(l.secteur_nom, l.secteur_parent_nom) && Number(l.quantite_initiale) === 0 ? '<div class="kpi"><span>État</span><b><span class="badge muted">Bassin vide</span></b></div>' : ''}
           ${l.espece ? `<div class="kpi"><span>Espèce</span><b>${esc(l.espece)}</b></div>` : ''}
+          ${l.site ? `<div class="kpi"><span>Site</span><b>${esc(l.site)}</b></div>` : ''}
+          ${l.type_structure ? `<div class="kpi"><span>Structure</span><b>${esc(TYPES_STRUCTURE_LABEL[l.type_structure] || l.type_structure)}</b></div>` : ''}
           ${badgeRecolte}
           <button class="lot-action" data-lot='${lotDataAttr(l)}'>
             Saisir un relevé
@@ -387,9 +411,12 @@ async function openRelevePanel(container, lot) {
   panel.innerHTML = '<div class="empty">Chargement…</div>';
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-  const [releves, fcr] = await Promise.all([
+  const estOstrei = lot.secteur_nom === SECTEUR_OSTREICULTURE;
+  const [releves, fcr, synthese, recoltes] = await Promise.all([
     Api.get(`/production/releves?lot_id=${lot.id}`),
-    lot.secteur_nom !== 'Maraîcher' ? Api.get(`/production/lots/${lot.id}/fcr`) : Promise.resolve(null),
+    lot.secteur_nom !== 'Maraîcher' && !estOstrei ? Api.get(`/production/lots/${lot.id}/fcr`) : Promise.resolve(null),
+    estOstrei ? Api.get(`/production/lots/${lot.id}/ostreiculture`).catch(() => null) : Promise.resolve(null),
+    estOstrei ? Api.get(`/production/lots/${lot.id}/recoltes`).catch(() => []) : Promise.resolve([]),
   ]);
 
   const courbePoints = releves
@@ -402,8 +429,18 @@ async function openRelevePanel(container, lot) {
     .map((r) => ({ date: r.date_releve, value: Number(r.taille_moyenne_cm) }))
     .reverse();
 
-  const champsSecteur =
-    lot.secteur_nom === 'Piscicole'
+  const champsSecteur = estOstrei
+    ? `
+        ${numberStepperHTML('Taille moyenne (cm)', 'taille_moyenne_cm', { step: 0.5, min: 0 })}
+        ${numberStepperHTML('Huîtres mesurées (échantillon)', 'nb_mesures', { step: 5, min: 0, entier: true })}
+        <label>Salinité de l'eau (‰)<input type="number" step="any" inputmode="decimal" name="salinite_ppt" /></label>
+        <label>Température eau (°C)<input type="number" step="any" inputmode="decimal" name="temperature_eau" /></label>
+        ${numberStepperHTML('Naissain capté', 'naissain_capte', { step: 10, min: 0, entier: true })}
+        <fieldset class="groupe-cases"><legend>Entretien effectué</legend>
+          ${Object.entries(ENTRETIEN_LABEL).map(([v, l]) => `<label class="essai-choix"><input type="checkbox" name="entretien" value="${v}" /><span>${l}</span></label>`).join('')}
+        </fieldset>
+      `
+    : lot.secteur_nom === 'Piscicole'
       ? `
         ${numberStepperHTML('Taille moyenne (cm)', 'taille_moyenne_cm', { step: 0.5, min: 0 })}
         <label>Température eau (°C)<input type="number" step="any" inputmode="decimal" name="temperature_eau" /></label>
@@ -424,6 +461,7 @@ async function openRelevePanel(container, lot) {
       <button class="secondary" id="close-releve">Fermer</button>
     </div>
 
+    ${estOstrei && synthese ? blocSyntheseOstreicole(synthese) : ''}
     ${
       fcr
         ? `<div class="pill-row">
@@ -444,7 +482,7 @@ async function openRelevePanel(container, lot) {
     }
 
     ${
-      lot.secteur_nom === 'Piscicole' && courbeTaille.length >= 2
+      (lot.secteur_nom === 'Piscicole' || estOstrei) && courbeTaille.length >= 2
         ? `<div style="margin-top:14px">
             <div class="desc" style="margin-bottom:4px">Courbe de croissance (taille moyenne, cm)</div>
             ${lineChartSvg(courbeTaille, { color: 'var(--sahel-900)', unit: 'cm' })}
@@ -454,6 +492,8 @@ async function openRelevePanel(container, lot) {
 
     <div id="bilan-lot" style="margin-top:16px"></div>
 
+    ${estOstrei ? blocRecoltesOstreicoles(lot, recoltes) : ''}
+
     ${
       lot.statut && lot.statut !== 'EN_COURS'
         ? `<p class="desc" style="margin-top:16px">Ce lot est clôturé (${esc(LOT_STATUT_LABEL[lot.statut] || lot.statut)}) : aucun nouveau relevé ne peut être ajouté.</p>`
@@ -462,8 +502,8 @@ async function openRelevePanel(container, lot) {
       ${
         lot.secteur_nom === 'Maraîcher'
           ? ''
-          : `${numberStepperHTML('Mortalité', 'mortalite', { step: 1, min: 0, entier: true, hint: `Déduite automatiquement de l'effectif ${lot.secteur_nom === 'Avicole' ? 'du lot' : 'du bassin'}.` })}
-      ${numberStepperHTML('Conso. aliment (kg)', 'conso_aliment_kg', { step: 0.5, min: 0 })}
+          : `${numberStepperHTML('Mortalité', 'mortalite', { step: 1, min: 0, entier: true, hint: `Déduite automatiquement de l'effectif ${lot.secteur_nom === 'Avicole' ? 'du lot' : estOstrei ? 'de la structure' : 'du bassin'}.` })}
+      ${estOstrei ? '' : numberStepperHTML('Conso. aliment (kg)', 'conso_aliment_kg', { step: 0.5, min: 0 })}
       ${numberStepperHTML('Poids moyen (g)', 'poids_moyen_g', { step: 10, min: 0 })}`
       }
       ${champsSecteur}
@@ -493,6 +533,27 @@ async function openRelevePanel(container, lot) {
         }
       </tbody>
     </table>`
+        : estOstrei
+        ? `<table style="margin-top:18px">
+      <thead><tr><th>Date</th><th>Mortalité</th><th>Taille (cm)</th><th>Salinité (‰)</th><th>Autres</th></tr></thead>
+      <tbody>
+        ${
+          releves.length
+            ? releves
+                .map(
+                  (r) => `<tr>
+                    <td>${fmtDate(r.date_releve)}</td>
+                    <td class="num">${fmt(r.mortalite)}</td>
+                    <td class="num">${r.taille_moyenne_cm ? fmt(r.taille_moyenne_cm) : '-'}</td>
+                    <td class="num">${r.salinite_ppt ? fmt(r.salinite_ppt) : '-'}</td>
+                    <td>${[r.temperature_eau ? `${r.temperature_eau}°C` : '', r.naissain_capte ? `${fmt(r.naissain_capte)} naissains` : '', r.entretien ? r.entretien.split(',').map((e) => ENTRETIEN_LABEL[e] || e).join(', ') : ''].filter(Boolean).join(' · ')}</td>
+                  </tr>`
+                )
+                .join('')
+            : '<tr><td colspan="5" class="empty">Aucun relevé.</td></tr>'
+        }
+      </tbody>
+    </table>`
         : `<table style="margin-top:18px">
       <thead><tr><th>Date</th><th>Mortalité</th><th>Aliment (kg)</th><th>Poids (g)</th><th>Taille (cm)</th><th>Autres</th></tr></thead>
       <tbody>
@@ -519,6 +580,7 @@ async function openRelevePanel(container, lot) {
 
   panel.querySelector('#close-releve').addEventListener('click', () => panel.classList.add('hidden'));
   chargerBilanLot(panel, lot);
+  if (estOstrei) attacherRecoltesOstreicoles(container, panel, lot);
 
   const formReleve = panel.querySelector('#form-releve');
   if (!formReleve) return;
@@ -544,6 +606,10 @@ async function openRelevePanel(container, lot) {
       intrants_utilises: fd.get('intrants_utilises') || null,
       quantite_recoltee_kg: fd.get('quantite_recoltee_kg') ? Number(fd.get('quantite_recoltee_kg')) : null,
       oeufs_collectes: fd.get('oeufs_collectes') ? Number(fd.get('oeufs_collectes')) : null,
+      salinite_ppt: fd.get('salinite_ppt') ? Number(fd.get('salinite_ppt')) : null,
+      naissain_capte: fd.get('naissain_capte') ? Number(fd.get('naissain_capte')) : null,
+      nb_mesures: fd.get('nb_mesures') ? Number(fd.get('nb_mesures')) : null,
+      entretien: fd.getAll('entretien'),
       notes: fd.get('notes') || null,
     };
 
@@ -749,4 +815,98 @@ async function chargerBilanLot(panel, lot) {
     });
   }
   afficher();
+}
+
+// ---- Ostréiculture (V1) : synthèse d'une structure et récoltes à la douzaine ---------------------------------------------
+function blocSyntheseOstreicole(s) {
+  const pilules = [
+    `Effectif actuel : <b>${fmt(s.effectif_actuel)}</b>`,
+    s.mortalite_pct !== null ? `Mortalité cumulée : <b>${s.mortalite_pct} %</b>` : '',
+    s.recolte_nombre > 0 ? `Récolté : <b>${fmt(s.recolte_douzaines)} douzaines</b>${s.rendement_pct !== null ? ` (${s.rendement_pct} % du départ)` : ''}` : '',
+    `Mise à l'eau il y a <b>${fmt(s.jours_depuis_mise_a_l_eau)} j</b>`,
+    s.taille_moyenne_cm ? `Taille : <b>${fmt(s.taille_moyenne_cm)} cm</b>` : '',
+    s.salinite_ppt ? `Salinité : <b>${fmt(s.salinite_ppt)} ‰</b>` : '',
+  ].filter(Boolean);
+  return `<div class="pill-row">${pilules.map((p) => `<span class="pill">${p}</span>`).join('')}</div>
+    <p class="desc" style="margin-top:6px">Taille commerciale indicative pour la vente fraîche : 6 à 7 cm ou plus ; 12 à 18 mois environ après la mise à l'eau (à confirmer pour votre zone).</p>`;
+}
+
+function blocRecoltesOstreicoles(lot, recoltes) {
+  const ouvert = !lot.statut || lot.statut === 'EN_COURS';
+  const lignes = recoltes.length
+    ? recoltes
+        .map(
+          (r) => `<tr>
+            <td>${fmtDate(r.date_recolte)}</td>
+            <td class="num">${fmt(r.douzaines)}</td>
+            <td class="num">${fmt(r.nombre)}</td>
+            <td>${esc(DESTINATIONS_RECOLTE_LABEL[r.destination] || r.destination)}</td>
+            <td>${ouvert ? `<button type="button" class="secondary btn-supprimer-recolte" data-recolte="${r.id}" title="Supprimer cette récolte">×</button>` : ''}</td>
+          </tr>`
+        )
+        .join('')
+    : '<tr><td colspan="5" class="empty">Aucune récolte.</td></tr>';
+  return `<div id="recoltes-ostrei" style="margin-top:16px">
+    <h3>Récoltes</h3>
+    <table><thead><tr><th>Date</th><th>Douzaines</th><th>Nombre</th><th>Destination</th><th></th></tr></thead><tbody>${lignes}</tbody></table>
+    ${
+      ouvert
+        ? `<form id="form-recolte" class="form-grid" autocomplete="off" style="margin-top:12px">
+      <label>Date<input type="date" name="date_recolte" required value="${new Date().toISOString().slice(0, 10)}" /></label>
+      ${numberStepperHTML('Douzaines récoltées', 'douzaines', { step: 1, min: 0 })}
+      <label>Destination<select name="destination">${optionsListe(DESTINATIONS_RECOLTE_LABEL, 'Vente fraîche')}</select></label>
+      <details><summary>Calibres (facultatif)</summary>
+        ${[0, 1, 2, 3].map((i) => `<label>Calibre ${i} (nombre)<input type="number" min="0" step="1" inputmode="numeric" name="calibre_${i}" /></label>`).join('')}
+      </details>
+      <button type="submit">Enregistrer la récolte</button>
+    </form>`
+        : '<p class="desc">Cette structure est clôturée : aucune récolte ne peut y être ajoutée.</p>'
+    }
+  </div>`;
+}
+
+function attacherRecoltesOstreicoles(container, panel, lot) {
+  const rafraichir = async () => {
+    try {
+      renderLotsList(container, await Api.get('/production/lots'));
+    } catch (err) {
+      /* les cartes se mettront à jour à la prochaine ouverture de l'écran */
+    }
+    openRelevePanel(container, lot);
+  };
+  const form = panel.querySelector('#form-recolte');
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const corps = { date_recolte: fd.get('date_recolte'), douzaines: fd.get('douzaines') ? Number(fd.get('douzaines')) : null, destination: fd.get('destination') || 'FRAIS' };
+      [0, 1, 2, 3].forEach((i) => { if (fd.get(`calibre_${i}`)) corps[`calibre_${i}`] = Number(fd.get(`calibre_${i}`)); });
+      if (isOfflineMode() || !navigator.onLine) {
+        await OfflineQueue.ajouter({ method: 'POST', path: `/production/lots/${lot.id}/recoltes`, body: corps, label: `Récolte ${lot.code_lot} — ${corps.date_recolte}` });
+        showToast('Hors ligne : récolte gardée sur cet appareil. Elle sera envoyée dès le retour du réseau.', 'warn');
+        await updateOfflineBanner(container);
+        e.target.reset();
+        return;
+      }
+      try {
+        const r = await Api.post(`/production/lots/${lot.id}/recoltes`, corps);
+        showToast(r.avertissement || 'Récolte enregistrée.', r.avertissement ? 'warn' : 'success');
+        await rafraichir();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  }
+  panel.querySelectorAll('.btn-supprimer-recolte').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!window.confirm('Supprimer cette récolte ? Les huîtres seront remises dans la structure.')) return;
+      try {
+        await Api.del(`/production/lots/${lot.id}/recoltes/${btn.dataset.recolte}`);
+        showToast('Récolte supprimée.', 'success');
+        await rafraichir();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  });
 }
