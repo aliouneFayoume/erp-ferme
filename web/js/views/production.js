@@ -51,7 +51,7 @@ window.Views.production = {
       ${offlineBanner()}
       <div class="panel">
         <h2>Lots en cours</h2>
-        <p class="desc">Touchez « Saisir un relevé » sur un lot pour noter la journée : mortalité, aliment, poids, taille…</p>
+        <p class="desc">${secteursAutorises.length > 0 && secteursAutorises.every((s) => s.nom === SECTEUR_OSTREICULTURE) ? "Touchez « Saisir un relevé » sur une structure pour noter la visite : mortalité, taille, salinité… ; « Historique des saisies » pour tout revoir." : 'Touchez « Saisir un relevé » sur un lot pour noter la journée : mortalité, aliment, poids, taille…'}</p>
         <div class="card-list" id="lots-list"></div>
       </div>
 
@@ -85,7 +85,7 @@ window.Views.production = {
             <input type="number" name="duree_maturite_jours" min="1" placeholder="ex: 90" />
           </label>
           <label id="champ-espece" class="${secteursAutorises[0] && (secteursAutorises[0].nom === SECTEUR_OSTREICULTURE || estPiscicole(secteursAutorises[0].nom, secteurs.find((p) => p.id === secteursAutorises[0].parent_secteur_id)?.nom)) ? '' : 'hidden'}">Espèce (facultatif)
-            <input type="text" name="espece" list="liste-especes" maxlength="100" placeholder="ex: Tilapia, Clarias" />
+            <input type="text" name="espece" list="liste-especes" maxlength="100" placeholder="ex: Tilapia, Clarias" value="${secteursAutorises[0]?.nom === SECTEUR_OSTREICULTURE ? 'Crassostrea gasar' : ''}" />
             <datalist id="liste-especes"><option value="Tilapia"></option><option value="Clarias (poisson-chat)"></option><option value="Silure"></option><option value="Carpe"></option><option value="Crassostrea gasar"></option></datalist>
           </label>
           <label id="champ-site" class="${secteursAutorises[0]?.nom === SECTEUR_OSTREICULTURE ? '' : 'hidden'}">Site (zone, bolong, lagune)
@@ -127,6 +127,8 @@ window.Views.production = {
       const optionChoisie = e.target.selectedOptions[0];
       container.querySelector('#champ-espece').classList.toggle('hidden', !optionChoisie?.dataset.piscicole && !optionChoisie?.dataset.ostreiculture);
       ['#champ-site', '#champ-structure', '#champ-origine'].forEach((id) => container.querySelector(id).classList.toggle('hidden', !optionChoisie?.dataset.ostreiculture));
+      const champEspece = container.querySelector('#champ-espece input[name="espece"]');
+      if (optionChoisie?.dataset.ostreiculture && champEspece && !champEspece.value) champEspece.value = 'Crassostrea gasar';
     });
 
     container.querySelector('#form-lot').addEventListener('submit', async (e) => {
@@ -216,6 +218,9 @@ function renderLotsList(container, lots) {
           <button class="lot-action" data-lot='${lotDataAttr(l)}'>
             Saisir un relevé
           </button>
+          <button class="secondary btn-historique-lot" style="margin-top:6px;width:100%" data-lot='${lotDataAttr(l)}'>
+            Historique des saisies
+          </button>
           <button class="secondary btn-modifier-lot" style="margin-top:6px;width:100%" data-lot-id="${l.id}" data-quantite="${l.quantite_initiale}" data-date="${l.date_demarrage ? String(l.date_demarrage).slice(0, 10) : ''}" data-espece="${esc(l.espece || '')}" data-piscicole="${estPiscicole(l.secteur_nom, l.secteur_parent_nom) ? '1' : ''}">
             Modifier
           </button>
@@ -276,7 +281,9 @@ function renderLotsList(container, lots) {
   });
 
   container.querySelectorAll('button[data-lot]').forEach((btn) => {
-    btn.addEventListener('click', () => openRelevePanel(container, JSON.parse(btn.dataset.lot)));
+    // « Historique des saisies » et « Voir l'historique » : le panneau s'ouvre directement sur le tableau des relevés.
+    const versHistorique = btn.classList.contains('btn-historique-lot') || btn.textContent.trim() === "Voir l'historique";
+    btn.addEventListener('click', () => openRelevePanel(container, JSON.parse(btn.dataset.lot), versHistorique ? { ancre: '#historique-releves' } : {}));
   });
 
   container.querySelectorAll('button.btn-modifier-lot').forEach((btn) => {
@@ -405,11 +412,11 @@ async function chargerMouvements(container, lots) {
     : '<div class="empty">Aucun déplacement enregistré.</div>';
 }
 
-async function openRelevePanel(container, lot) {
+async function openRelevePanel(container, lot, options = {}) {
   const panel = container.querySelector('#releve-panel');
   panel.classList.remove('hidden');
   panel.innerHTML = '<div class="empty">Chargement…</div>';
-  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   const estOstrei = lot.secteur_nom === SECTEUR_OSTREICULTURE;
   const [releves, fcr, synthese, recoltes] = await Promise.all([
@@ -514,7 +521,7 @@ async function openRelevePanel(container, lot) {
 
     ${
       lot.secteur_nom === 'Maraîcher'
-        ? `<table style="margin-top:18px">
+        ? `<table id="historique-releves" style="margin-top:18px">
       <thead><tr><th>Date</th><th>Intrants utilisés</th><th>Récolte (kg)</th><th>Notes</th></tr></thead>
       <tbody>
         ${
@@ -534,7 +541,7 @@ async function openRelevePanel(container, lot) {
       </tbody>
     </table>`
         : estOstrei
-        ? `<table style="margin-top:18px">
+        ? `<table id="historique-releves" style="margin-top:18px">
       <thead><tr><th>Date</th><th>Mortalité</th><th>Taille (cm)</th><th>Salinité (‰)</th><th>Autres</th></tr></thead>
       <tbody>
         ${
@@ -554,7 +561,7 @@ async function openRelevePanel(container, lot) {
         }
       </tbody>
     </table>`
-        : `<table style="margin-top:18px">
+        : `<table id="historique-releves" style="margin-top:18px">
       <thead><tr><th>Date</th><th>Mortalité</th><th>Aliment (kg)</th><th>Poids (g)</th><th>Taille (cm)</th><th>Autres</th></tr></thead>
       <tbody>
         ${
@@ -579,6 +586,8 @@ async function openRelevePanel(container, lot) {
   `;
 
   panel.querySelector('#close-releve').addEventListener('click', () => panel.classList.add('hidden'));
+  // Le panneau s'ouvre en bas de la page : on y amène l'écran, et directement sur le tableau (ou la section) demandé.
+  (options.ancre ? panel.querySelector(options.ancre) || panel : panel).scrollIntoView({ behavior: 'smooth', block: 'start' });
   chargerBilanLot(panel, lot);
   if (estOstrei) attacherRecoltesOstreicoles(container, panel, lot);
 
@@ -637,7 +646,7 @@ async function openRelevePanel(container, lot) {
       } catch (err) {
         /* les cartes se mettront à jour à la prochaine ouverture de l'écran */
       }
-      openRelevePanel(container, lot);
+      openRelevePanel(container, lot, { ancre: '#historique-releves' });
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -821,8 +830,8 @@ async function chargerBilanLot(panel, lot) {
 function blocSyntheseOstreicole(s) {
   const pilules = [
     `Effectif actuel : <b>${fmt(s.effectif_actuel)}</b>`,
-    s.mortalite_pct !== null ? `Mortalité cumulée : <b>${s.mortalite_pct} %</b>` : '',
-    s.recolte_nombre > 0 ? `Récolté : <b>${fmt(s.recolte_douzaines)} douzaines</b>${s.rendement_pct !== null ? ` (${s.rendement_pct} % du départ)` : ''}` : '',
+    s.mortalite_pct !== null ? `Mortalité cumulée : <b>${fmt(s.mortalite_pct)} %</b>` : '',
+    s.recolte_nombre > 0 ? `Récolté : <b>${fmt(s.recolte_douzaines)} douzaines</b>${s.rendement_pct !== null ? ` (${fmt(s.rendement_pct)} % du départ)` : ''}` : '',
     `Mise à l'eau il y a <b>${fmt(s.jours_depuis_mise_a_l_eau)} j</b>`,
     s.taille_moyenne_cm ? `Taille : <b>${fmt(s.taille_moyenne_cm)} cm</b>` : '',
     s.salinite_ppt ? `Salinité : <b>${fmt(s.salinite_ppt)} ‰</b>` : '',
@@ -872,7 +881,7 @@ function attacherRecoltesOstreicoles(container, panel, lot) {
     } catch (err) {
       /* les cartes se mettront à jour à la prochaine ouverture de l'écran */
     }
-    openRelevePanel(container, lot);
+    openRelevePanel(container, lot, { ancre: '#recoltes-ostrei' });
   };
   const form = panel.querySelector('#form-recolte');
   if (form) {
