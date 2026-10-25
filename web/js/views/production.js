@@ -14,6 +14,16 @@ const TYPES_STRUCTURE_LABEL = { GUIRLANDE: 'Guirlande de coquilles', POCHE: 'Poc
 const ORIGINES_LOT_LABEL = { CAPTAGE: 'Captage', ACHAT: 'Achat de naissain', CUEILLETTE: 'Cueillette de jeunes huîtres' };
 const DESTINATIONS_RECOLTE_LABEL = { FRAIS: 'Vente fraîche', TRANSFORMATION: 'Transformation', FAMILLE: 'Consommation familiale' };
 const ENTRETIEN_LABEL = { NETTOYAGE: 'Nettoyage', DEDOUBLAGE: 'Dédoublage', HAUTEUR: 'Hauteur changée' };
+// Phrase d'aide affichée sous « Type de structure » : une explication simple de ce que l'option choisie désigne.
+const AIDE_STRUCTURE = {
+  '': "Choisissez comment vos huîtres sont installées dans l'eau. Vous pouvez laisser vide.",
+  GUIRLANDE: "Des coquilles enfilées sur une corde : le naissain (les larves) s'y fixe. La guirlande est accrochée à des poteaux dans l'eau.",
+  POCHE: "Un sac en filet où l'on met les jeunes huîtres pour qu'elles grossissent à l'abri.",
+  TABLE: "Une table posée dans l'eau, qui porte plusieurs poches.",
+  LIGNE: "Une longue corde tendue dans l'eau, d'où pendent les huîtres ou les poches.",
+  COLLECTEUR: "Un support fait pour attraper le naissain : coupelles, tuiles, bouteilles recyclées…",
+  AUTRE: "Une autre façon d'installer les huîtres. Précisez-la dans les notes d'un relevé si besoin.",
+};
 const optionsListe = (labels, vide = '—') => `<option value="">${vide}</option>${Object.entries(labels).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}`;
 
 function quantiteLabel(secteurNom) {
@@ -92,7 +102,8 @@ window.Views.production = {
             <input type="text" name="site" maxlength="100" placeholder="ex: Bolong de Toubacouta" />
           </label>
           <label id="champ-structure" class="${secteursAutorises[0]?.nom === SECTEUR_OSTREICULTURE ? '' : 'hidden'}">Type de structure
-            <select name="type_structure">${optionsListe(TYPES_STRUCTURE_LABEL)}</select>
+            <select name="type_structure" id="select-structure">${optionsListe(TYPES_STRUCTURE_LABEL)}</select>
+            <span class="desc" id="aide-structure">${AIDE_STRUCTURE['']}</span>
           </label>
           <label id="champ-origine" class="${secteursAutorises[0]?.nom === SECTEUR_OSTREICULTURE ? '' : 'hidden'}">Origine des huîtres
             <select name="origine_lot">${optionsListe(ORIGINES_LOT_LABEL)}</select>
@@ -129,6 +140,10 @@ window.Views.production = {
       ['#champ-site', '#champ-structure', '#champ-origine'].forEach((id) => container.querySelector(id).classList.toggle('hidden', !optionChoisie?.dataset.ostreiculture));
       const champEspece = container.querySelector('#champ-espece input[name="espece"]');
       if (optionChoisie?.dataset.ostreiculture && champEspece && !champEspece.value) champEspece.value = 'Crassostrea gasar';
+    });
+
+    container.querySelector('#select-structure')?.addEventListener('change', (e) => {
+      container.querySelector('#aide-structure').textContent = AIDE_STRUCTURE[e.target.value] || AIDE_STRUCTURE[''];
     });
 
     container.querySelector('#form-lot').addEventListener('submit', async (e) => {
