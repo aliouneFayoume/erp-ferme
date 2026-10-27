@@ -5,4 +5,5 @@ Description=Renouvellement certificat Let's Encrypt ERP Ferme Massla
 Type=oneshot
 User=ubuntu
 Group=docker
+EnvironmentFile=/home/ubuntu/erp-ferme/server/.env
 ExecStart=/home/ubuntu/erp-ferme/deploy/certbot-renew.sh

@@ -6,3 +6,8 @@ web/js/dist/
 *.log
 deploy/certbot/
 backups/
+# Données de prospection (numéros de tiers) et notes de connexion : jamais dans un dépôt public
+*.xlsx
+liste-fermes-prospection-erp-massla.xlsx
+suivi-appels-hot-v2.xlsx
+connexionauVPS.txt

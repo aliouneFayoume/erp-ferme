@@ -10,7 +10,13 @@
 # (deploy/certbot/conf/renewal/massla.sn.conf) lors de l'obtention initiale.
 set -euo pipefail
 
-NTFY_TOPIC="erp-massla-alertes-97963866109cd7138fe636fb"
+# Le topic ntfy n'est plus codé en dur (il était committé en clair, donc public et compromis) :
+# il vient de l'environnement (EnvironmentFile=server/.env dans erp-ferme-renew.service), sans
+# valeur par défaut — comme monitor.sh et backup.sh.
+if [ -z "${NTFY_TOPIC:-}" ]; then
+  echo "NTFY_TOPIC doit être défini dans server/.env (voir DEPLOIEMENT.md)." >&2
+  exit 1
+fi
 trap 'curl -s -H "Title: Renouvellement certificat ERP Massla en échec" -H "Priority: urgent" -H "Tags: warning" -d "Le renouvellement du $(date -u +%Y-%m-%dT%H:%M:%SZ) a échoué (ligne $LINENO) — vérifier avant expiration." "https://ntfy.sh/$NTFY_TOPIC" > /dev/null' ERR
 
 cd /home/ubuntu/erp-ferme

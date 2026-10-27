@@ -462,6 +462,28 @@ systemctl list-timers erp-ferme-monitor.timer   # vérifier la prochaine exécut
 daemon-reload` n'est nécessaire que si le fichier `.service` lui-même a changé, pas pour une
 simple mise à jour de `NTFY_TOPIC`.
 
+### Dumps de base chiffrés (restauration) et anciens dumps en clair
+
+Depuis l'audit infra, `backup.sh` chiffre chaque dump (`erp-ferme-<horodatage>.dump.gpg`, GPG
+symétrique AES-256) avant l'envoi vers R2 et supprime le dump en clair local. Passphrase : soit un
+fichier `BACKUP_GPG_PASSPHRASE_FILE=/chemin/passphrase` (permissions 600, hors dépôt) dans
+`server/.env`, soit, à défaut, la variable `BACKUP_SECRETS_PASSPHRASE` déjà utilisée pour les
+secrets. Sans aucune des deux, le script continue en clair, écrit un AVERTISSEMENT dans le journal
+et envoie une alerte ntfy à chaque exécution : à corriger. Conserver la passphrase hors du VPS.
+
+```bash
+# Restaurer un dump chiffré : déchiffrer puis pg_restore
+gpg --batch --yes --passphrase-file /chemin/passphrase --decrypt   -o erp-ferme.dump erp-ferme-<horodatage>.dump.gpg
+pg_restore -U postgres -d restore_test --no-owner --no-privileges -j 2 erp-ferme.dump
+```
+
+(la procédure de test ci-dessus s'applique : déchiffrer le `.gpg` avant `docker cp`).
+
+**Anciens dumps en clair à purger** : tous les `*.dump` déjà présents dans le bucket R2 ont été
+envoyés non chiffrés. Une fois le chiffrement actif et un `.dump.gpg` restauré avec succès, les
+supprimer (`rclone delete r2:erp-ferme-backups --include "*.dump"`) ; ils sortent de toute façon
+à l'issue de la rétention de 14 jours, mais le bucket ne doit plus en contenir.
+
 Pour recevoir les alertes : installer l'app **ntfy** (iOS/Android) ou ouvrir
 `https://ntfy.sh/<topic>` dans un navigateur, et s'abonner au topic défini dans `server/.env`
 (`NTFY_TOPIC`).

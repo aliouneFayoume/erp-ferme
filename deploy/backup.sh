@@ -5,6 +5,8 @@
 #         et lancer via le service systemd erp-ferme-backup, voir DEPLOIEMENT.md)
 
 set -euo pipefail
+# Fichiers créés lisibles par le seul propriétaire (dumps, copies chiffrées).
+umask 077
 
 # Anciennement en clair ici (committé dans le dépôt) — un topic ntfy.sh est public par défaut :
 # quiconque lit l'historique du dépôt pouvait s'abonner aux alertes d'exploitation (savoir quand
@@ -60,6 +62,32 @@ fi
 pg_dump "$DUMP_URL" --schema=public --format=custom --file="$FICHIER"
 echo "Sauvegarde créée : $FICHIER"
 
+# --- Chiffrement du dump avant envoi (audit infra) --------------------------------------------
+# Jusqu'ici le dump (toutes les données clients) partait EN CLAIR vers R2. Il est maintenant chiffré
+# (GPG symétrique AES-256). Passphrase : de préférence BACKUP_GPG_PASSPHRASE_FILE (chemin d'un
+# fichier, permissions 600) ; à défaut la variable BACKUP_SECRETS_PASSPHRASE déjà utilisée pour les
+# secrets ci-dessous (passée par stdin, jamais en argument visible dans `ps`).
+# Sans aucune passphrase : on continue comme avant (dump en clair conservé, rien n'est supprimé)
+# mais avec un AVERTISSEMENT dans le journal et une alerte ntfy.
+GPG_PASS_FILE="${BACKUP_GPG_PASSPHRASE_FILE:-}"
+if [ -n "$GPG_PASS_FILE" ] && [ ! -r "$GPG_PASS_FILE" ]; then
+  echo "BACKUP_GPG_PASSPHRASE_FILE ($GPG_PASS_FILE) est illisible." >&2
+  exit 1
+fi
+if [ -n "$GPG_PASS_FILE" ]; then
+  gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase-file "$GPG_PASS_FILE" -o "$FICHIER.gpg" "$FICHIER"
+elif [ -n "${BACKUP_SECRETS_PASSPHRASE:-}" ]; then
+  printf '%s' "$BACKUP_SECRETS_PASSPHRASE" | gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase-fd 0 -o "$FICHIER.gpg" "$FICHIER"
+else
+  echo "AVERTISSEMENT : aucune passphrase de chiffrement (BACKUP_GPG_PASSPHRASE_FILE / BACKUP_SECRETS_PASSPHRASE) — le dump part NON CHIFFRÉ vers le stockage distant." >&2
+  curl -s -H "Title: Sauvegarde ERP Massla NON CHIFFRÉE" -H "Priority: high" -H "Tags: warning"     -d "Aucune passphrase GPG configurée : les dumps partent en clair vers le stockage distant."     "https://ntfy.sh/$NTFY_TOPIC" > /dev/null || true
+fi
+if [ -f "$FICHIER.gpg" ]; then
+  # Chiffrement réussi (set -e aurait sinon interrompu) : on supprime le dump en clair local.
+  rm -f "$FICHIER"
+  echo "Dump chiffré : $FICHIER.gpg (dump en clair supprimé)"
+fi
+
 # --- Secrets du serveur applicatif (audit systèmes 2026-08-11) --------------------------------
 # CREDENTIALS_ENCRYPTION_KEY (chiffre les identifiants PayDunya/WhatsApp de CHAQUE ferme cliente),
 # JWT_SECRET et les identifiants OVH (deploy/certbot/ovh.ini, renouvellement TLS) n'existaient
@@ -94,7 +122,7 @@ RCLONE_REMOTE="${RCLONE_REMOTE:-r2:erp-ferme-backups}"
 rclone sync "$BACKUP_DIR" "$RCLONE_REMOTE"
 echo "Sauvegarde synchronisée vers $RCLONE_REMOTE"
 
-find "$BACKUP_DIR" -name '*.dump' -mtime "+$RETENTION_JOURS" -delete
+find "$BACKUP_DIR" \( -name '*.dump' -o -name '*.dump.gpg' \) -mtime "+$RETENTION_JOURS" -delete
 
 # Ping de succès (dead man's switch, voir plus haut) : signale à Healthchecks.io que ce cycle est
 # allé jusqu'au bout. Sans cela (HEALTHCHECKS_PING_URL non défini), comportement inchangé.

@@ -1,3 +1,5 @@
+# OBSOLÈTE : le déploiement réel utilise Docker Compose (/home/ubuntu/erp-ferme), ne pas activer ce service.
+# Conservé uniquement pour mémoire ; il vise /opt/erp-ferme, qui n'existe pas sur le VPS.
 [Unit]
 Description=ERP Ferme Massla (Node/Express)
 After=network.target

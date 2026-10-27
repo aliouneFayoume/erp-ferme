@@ -360,7 +360,7 @@ Même famille : `methode_paiement` n'est jamais validé contre une liste blanche
 
 `pg_dump --format=custom` ne chiffre rien : les dumps synchronisés vers Cloudflare R2 contiennent en clair l'ensemble des données clients (noms, téléphones, coordonnées GPS des adresses de livraison), les hachages bcrypt et toute la comptabilité de chaque ferme. Seules les clés PayDunya/WhatsApp sont protégées (via M1). Une clé rclone compromise sur le VPS = fuite totale de toutes les fermes.
 
-Par ailleurs, `NTFY_TOPIC="erp-massla-alertes-97963866109cd7138fe636fb"` est **committé dans le dépôt**. Les topics ntfy.sh sont publics par défaut : quiconque lit le dépôt peut s'abonner à vos alertes d'exploitation (il apprend quand vous êtes hors ligne ou quand une sauvegarde échoue — les meilleurs moments pour attaquer) et **publier de fausses alertes** pour provoquer une fatigue d'alerte.
+Par ailleurs, `NTFY_TOPIC="[topic ntfy retiré]"` est **committé dans le dépôt**. Les topics ntfy.sh sont publics par défaut : quiconque lit le dépôt peut s'abonner à vos alertes d'exploitation (il apprend quand vous êtes hors ligne ou quand une sauvegarde échoue — les meilleurs moments pour attaquer) et **publier de fausses alertes** pour provoquer une fatigue d'alerte.
 
 **Recommandation.** Chiffrer le dump avant l'envoi (`gpg --symmetric` ou `age`, clé stockée hors du VPS) ; à défaut, activer le chiffrement côté serveur R2 et vérifier que le bucket est privé avec une clé rclone en écriture seule. Déplacer `NTFY_TOPIC` dans `server/.env` et régénérer le topic.
 
