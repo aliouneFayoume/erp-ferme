@@ -67,9 +67,31 @@ const OfflineQueue = (() => {
     listeners.forEach((fn) => fn(queue));
   }
 
+  // Propriétaire d'une action = utilisateur + ferme connectés au moment de la mise en file. Sans cela,
+  // après un changement de compte sur le même appareil, les actions du premier seraient rejouées avec
+  // le jeton du suivant (mauvais auteur, voire mauvaise ferme).
+  function proprietaireCourant() {
+    try {
+      const u = typeof Api !== 'undefined' && Api.getUser ? Api.getUser() : null; // Api est une const globale (pas une propriété de window)
+      return { utilisateur_id: u && u.id != null ? u.id : null, tenant_id: u && u.tenant_id != null ? u.tenant_id : null };
+    } catch (e) {
+      return { utilisateur_id: null, tenant_id: null };
+    }
+  }
+
+  // Une action sans propriétaire (mise en file par une ancienne version) est rejouée comme avant,
+  // pour ne pas perdre de relevés de terrain. Sinon elle doit appartenir à l'utilisateur ET à la ferme courants.
+  function appartientAuCourant(item, courant) {
+    if (item.utilisateur_id == null && item.tenant_id == null) return true;
+    if (item.utilisateur_id != null && String(item.utilisateur_id) !== String(courant.utilisateur_id)) return false;
+    if (item.tenant_id != null && String(item.tenant_id) !== String(courant.tenant_id)) return false;
+    return true;
+  }
+
   async function ajouter({ method, path, body, label }) {
     const db = await openDB();
     const item = {
+      ...proprietaireCourant(),
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       method,
       path,
@@ -165,9 +187,11 @@ const OfflineQueue = (() => {
     const queue = await lire();
     if (queue.length === 0) return { reussies: 0, restantes: 0, sessionExpiree: false };
 
+    const courant = proprietaireCourant();
     let reussies = 0;
     let sessionExpiree = false;
     for (const item of queue) {
+      if (!appartientAuCourant(item, courant)) continue; // action d'un autre compte : laissée intacte, jamais envoyée
       try {
         await Api[item.method.toLowerCase()](item.path, item.body);
         await retirer(item.id);
@@ -192,6 +216,12 @@ const OfflineQueue = (() => {
     return { reussies, restantes: (await lire()).length, sessionExpiree };
   }
 
-  return { ajouter, taille, lire, lireEchecs, surChangement, synchroniser };
+  /** Nombre d'actions en attente appartenant à l'utilisateur courant (pour avertir à la déconnexion). */
+  async function tailleCourant() {
+    const courant = proprietaireCourant();
+    return (await lire()).filter((it) => appartientAuCourant(it, courant)).length;
+  }
+
+  return { ajouter, taille, tailleCourant, lire, lireEchecs, surChangement, synchroniser };
 })();
 window.OfflineQueue = OfflineQueue;
