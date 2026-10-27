@@ -1,6 +1,7 @@
 // Service worker : cache l'app shell pour un fonctionnement installable et hors-ligne
 // (terrain PWA offline-first, cahier des charges §4). Les appels /api/* ne sont jamais
 // mis en cache : ils doivent toujours refléter l'état réel du serveur.
+// v29 : les URL portant un jeton (?token=…) ne sont plus jamais mises en cache ; l'ancien cache est purgé.
 // v28 : logos allégés, Leaflet chargé à la demande (plus dans le premier écran).
 // v27 : écrans Production, Stock et Finance au format du kit (cartes de lots, recherche, indicateurs).
 // v26 : écran de connexion aux couleurs Massla (logo empilé blanc) et en-têtes de page.
@@ -10,7 +11,7 @@
 // une seule entrée à tenir à jour au lieu d'une par vue (un ancien drift avait laissé paie.js hors
 // de cette liste alors qu'index.html le chargeait déjà). Incrémenté pour que les clients déjà
 // installés purgent l'ancien cache plutôt que de continuer à réclamer les anciens chemins par-vue.
-const CACHE_NAME = 'erp-ferme-shell-v28';
+const CACHE_NAME = 'erp-ferme-shell-v29';
 
 const APP_SHELL = [
   '/',
@@ -46,6 +47,12 @@ self.addEventListener('fetch', (event) => {
 
   if (event.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) {
     return; // laisse passer au réseau : API et requêtes non-GET jamais mises en cache
+  }
+
+  // Pages à jeton à usage unique (vérification e-mail, réinitialisation de mot de passe, approbation
+  // d'avis) : un jeton dans l'URL ne doit jamais atterrir dans le cache de l'appareil.
+  if (/[?&]token=/.test(url.search)) {
+    return;
   }
 
   // Réseau d'abord : l'app shell (HTML/CSS/JS) doit toujours refléter la version courante du

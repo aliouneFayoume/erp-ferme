@@ -44,6 +44,29 @@ const Api = (() => {
     clearSuperviseurSession();
   }
 
+  // Déconnexion volontaire : révoque d'abord le jeton côté serveur (POST /api/auth/deconnexion), puis
+  // efface la session locale. « Au mieux » : hors ligne, route absente, erreur serveur ou délai dépassé
+  // ne bloquent JAMAIS la déconnexion locale (un utilisateur doit toujours pouvoir sortir).
+  async function deconnecter() {
+    const token = getToken();
+    if (token) {
+      try {
+        const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+        const minuteur = ctrl ? setTimeout(() => ctrl.abort(), 4000) : null;
+        await fetch('/api/auth/deconnexion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: '{}',
+          signal: ctrl ? ctrl.signal : undefined,
+        });
+        if (minuteur) clearTimeout(minuteur);
+      } catch (err) {
+        // ignoré volontairement : la révocation serveur est un plus, pas un prérequis
+      }
+    }
+    clearSession();
+  }
+
   // Session superviseur mise de côté pendant une impersonation ("Se connecter en tant
   // qu'administrateur" depuis la vue plateforme) — clé distincte de erp_token/erp_user pour pouvoir
   // restaurer la session d'origine sans avoir à se reconnecter. Voir web/js/views/plateforme.js et
@@ -148,6 +171,7 @@ const Api = (() => {
     getUser,
     setSession,
     clearSession,
+    deconnecter,
     setSuperviseurSession,
     getSuperviseurSession,
     clearSuperviseurSession,

@@ -301,6 +301,8 @@ ameliorerPage(document.body);
 // Petite modale maison (remplace prompt()/confirm() natifs, peu fiables et intrusifs).
 // Usage : Modal.open('Titre', [{ name, label, type, value }]) -> Promise<values|null>
 // type: 'select' attend en plus { options: [{ value, label }, ...] }.
+// Titre, libellés, valeurs et options sont échappés ICI (texte brut attendu) : les appelants ne
+// doivent PAS appeler esc() eux-mêmes, sinon « & » s'afficherait « &amp; ».
 const Modal = {
   open(title, fields) {
     return new Promise((resolve) => {
@@ -308,17 +310,17 @@ const Modal = {
       overlay.className = 'modal-overlay';
       overlay.innerHTML = `
         <div class="modal-box">
-          <h3>${title}</h3>
+          <h3>${esc(title)}</h3>
           <div class="modal-fields">
             ${fields
               .map((f, i) => {
                 if (f.type === 'select') {
-                  return `<label>${f.label}<select data-field="${i}">${(f.options || [])
-                    .map((o) => `<option value="${o.value}" ${String(o.value) === String(f.value) ? 'selected' : ''}>${o.label}</option>`)
+                  return `<label>${esc(f.label)}<select data-field="${i}">${(f.options || [])
+                    .map((o) => `<option value="${esc(o.value)}" ${String(o.value) === String(f.value) ? 'selected' : ''}>${esc(o.label)}</option>`)
                     .join('')}</select></label>`;
                 }
                 const autocomplete = f.type === 'password' ? 'new-password' : 'off';
-                return `<label>${f.label}<input type="${f.type || 'text'}" data-field="${i}" value="${f.value ?? ''}" autocomplete="${autocomplete}" /></label>`;
+                return `<label>${esc(f.label)}<input type="${esc(f.type || 'text')}" data-field="${i}" value="${esc(f.value ?? '')}" autocomplete="${autocomplete}" /></label>`;
               })
               .join('')}
           </div>
@@ -364,9 +366,14 @@ function chargerLeaflet() {
       const css = document.createElement('link');
       css.rel = 'stylesheet';
       css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      // SRI : version exacte épinglée (1.9.4) ; si unpkg servait un fichier modifié, le navigateur le refuse.
+      css.integrity = 'sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H';
+      css.crossOrigin = 'anonymous';
       document.head.appendChild(css);
       const js = document.createElement('script');
       js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      js.integrity = 'sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH';
+      js.crossOrigin = 'anonymous';
       js.onload = () => resolve(window.L || null);
       js.onerror = () => { promesseLeaflet = null; resolve(null); }; // hors ligne : on pourra réessayer plus tard
       document.head.appendChild(js);
@@ -626,7 +633,7 @@ async function selectTab(key) {
   try {
     await module.render(view);
   } catch (err) {
-    view.innerHTML = `<div class="panel"><p class="login-error">${err.message}</p></div>`;
+    view.innerHTML = `<div class="panel"><p class="login-error">${esc(err.message)}</p></div>`;
   }
 }
 
@@ -846,9 +853,21 @@ document.getElementById('btn-mfa-challenge-annuler').addEventListener('click', (
   document.getElementById('login-form').classList.remove('hidden');
 });
 
-document.getElementById('btn-logout').addEventListener('click', () => {
-  Api.clearSession();
+document.getElementById('btn-logout').addEventListener('click', async () => {
+  // Actions hors ligne non encore envoyées : on ne les supprime JAMAIS (elles restent dans IndexedDB,
+  // liées à ce compte) mais on prévient, pour que l'utilisateur sache qu'il doit se reconnecter avec
+  // le même compte, réseau disponible, pour qu'elles partent.
+  let enAttente = 0;
+  try {
+    enAttente = await OfflineQueue.tailleCourant();
+  } catch (e) {
+    enAttente = 0;
+  }
+  await Api.deconnecter(); // révocation serveur au mieux, puis session locale effacée
   showLogin();
+  if (enAttente > 0) {
+    showToast(`${enAttente} action(s) hors ligne en attente restent sur cet appareil : reconnectez-vous avec le même compte, avec du réseau, pour les envoyer.`, 'info');
+  }
 });
 
 document.getElementById('btn-retour-supervision').addEventListener('click', async () => {

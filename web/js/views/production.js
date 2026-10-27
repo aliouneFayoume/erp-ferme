@@ -362,14 +362,14 @@ async function ouvrirDeplacement(container, lots, sourceId) {
     showToast("Aucun autre bassin piscicole en cours : créez d'abord le bassin d'arrivée.", 'error');
     return;
   }
-  const values = await Modal.open(`Déplacer des poissons depuis ${esc(source.code_lot)}${source.espece ? ` (${esc(source.espece)})` : ''}`, [
+  const values = await Modal.open(`Déplacer des poissons depuis ${source.code_lot}${source.espece ? ` (${source.espece})` : ''}`, [
     {
       name: 'lot_destination_id',
       label: "Bassin d'arrivée",
       type: 'select',
       options: destinations.map((l) => ({
         value: l.id,
-        label: `${esc(l.code_lot)} · ${esc(l.secteur_nom)} · ${Number(l.quantite_initiale) > 0 ? `${poissons(l.quantite_initiale)}${l.espece ? ` ${esc(l.espece)}` : ''}` : 'vide'}`,
+        label: `${l.code_lot} · ${l.secteur_nom} · ${Number(l.quantite_initiale) > 0 ? `${poissons(l.quantite_initiale)}${l.espece ? ` ${l.espece}` : ''}` : 'vide'}`,
       })),
     },
     { name: 'quantite', label: `Nombre de poissons déplacés (maximum ${fmt(effectif)})`, type: 'number', value: String(effectif) },

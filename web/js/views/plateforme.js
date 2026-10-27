@@ -507,7 +507,7 @@ async function seConnecterAdmin(tenantId) {
 }
 
 async function supprimerFerme(container, tenantId, nom) {
-  const values = await Modal.open(`Supprimer ${esc(nom)} ?`, [
+  const values = await Modal.open(`Supprimer ${nom} ?`, [
     { name: 'confirmer', label: 'Cette ferme n\'a plus accès à l\'application. Tapez "OUI" pour confirmer', type: 'text', value: '' },
   ]);
   if (!values || values.confirmer.trim().toUpperCase() !== 'OUI') return;
