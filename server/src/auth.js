@@ -224,7 +224,14 @@ function requireAuth(pool, { module: moduleRequis = null } = {}) {
         }
 
         try {
-            req.user = jwt.verify(token, JWT_SECRET);
+            const payload = jwt.verify(token, JWT_SECRET);
+            // Le jeton de défi MFA (émis par /login, valable 5 min) prouve seulement que le mot de passe a été saisi : il ne
+            // doit JAMAIS tenir lieu de session, sinon le second facteur serait contourné. Un vrai jeton de session porte
+            // toujours l'identité, le rôle et la ferme (signToken) ; sans l'un d'eux, on refuse plutôt que de deviner.
+            if (payload.mfaChallenge || !Number.isInteger(payload.id) || !payload.role || !Number.isInteger(payload.tenant_id)) {
+                return res.status(401).json({ erreur: 'Session invalide ou expirée' });
+            }
+            req.user = payload;
             await attachTenantConnection(req, res, pool, req.user.tenant_id);
 
             const etat = await req.db.query(
@@ -262,7 +269,7 @@ function requireAuth(pool, { module: moduleRequis = null } = {}) {
             // "Mon compte" forcé côté frontend n'est qu'une aide visuelle, pas la vraie barrière.
             if (ligne.role === 'admin' && ligne.mfa_obligatoire && !ligne.mfa_actif) {
                 const chemin = req.originalUrl.split('?')[0];
-                const autorise = chemin === '/api/auth/me' || chemin.startsWith('/api/auth/mfa/') || chemin === '/api/auth/mot-de-passe';
+                const autorise = chemin === '/api/auth/me' || chemin === '/api/auth/deconnexion' || chemin.startsWith('/api/auth/mfa/') || chemin === '/api/auth/mot-de-passe';
                 if (!autorise) {
                     return res.status(403).json({ erreur: 'Configuration MFA obligatoire avant de continuer.', code: 'MFA_SETUP_REQUIS' });
                 }

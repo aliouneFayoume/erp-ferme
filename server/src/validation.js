@@ -101,7 +101,9 @@ const LOCAL_PARTS_SUSPECTES = new Set([
  * traiter@massla.sn). Copie de l'esprit de normaliserTelephone ci-dessus, mais pour l'email.
  */
 function emailFarfelue(saisie) {
-    const m = /^([^\s@]+)@([^\s@]+\.[^\s@]+)$/.exec(String(saisie || '').trim());
+    const texte = String(saisie || '').trim();
+    if (texte.length > EMAIL_LONGUEUR_MAX) return true; // avant toute regex : borne le travail sur une entrée géante
+    const m = /^([^\s@]+)@([^\s@.]+(?:\.[^\s@.]+)+)$/.exec(texte);
     if (!m) return true; // format déjà invalide : de toute façon refusé par EMAIL_REGEX
     const local = m[1].toLowerCase();
     const domaine = m[2].toLowerCase();
@@ -112,4 +114,14 @@ function emailFarfelue(saisie) {
     return false;
 }
 
-module.exports = { nomSecteurValide, motDePasseValide, motDePasseErreurs, MOT_DE_PASSE_MIN_LONGUEUR, normaliserTelephone, emailFarfelue };
+// RFC 5321 : 254 caractères au plus. Contrôle fait AVANT les regex d'e-mail : leur ancienne forme `[^\s@]+@[^\s@]+\.[^\s@]+`
+// était quadratique (ReDoS : « a@ » suivi de dizaines de milliers de points bloquait le processus).
+const EMAIL_LONGUEUR_MAX = 254;
+
+/** Format d'e-mail plausible, en temps linéaire (les points séparent les segments, qui n'en contiennent pas : aucun retour arrière). */
+function emailFormatValide(saisie, longueurMax = EMAIL_LONGUEUR_MAX) {
+    if (typeof saisie !== 'string' || saisie.length > longueurMax) return false;
+    return /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(saisie);
+}
+
+module.exports = { emailFormatValide, EMAIL_LONGUEUR_MAX, nomSecteurValide, motDePasseValide, motDePasseErreurs, MOT_DE_PASSE_MIN_LONGUEUR, normaliserTelephone, emailFarfelue };

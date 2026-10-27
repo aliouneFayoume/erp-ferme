@@ -85,7 +85,7 @@ module.exports = function essaiRoutes(pool) {
     async function trouverParTelephone(telephone) {
         const r = await queryPreTenant(
             pool,
-            `SELECT u.id, u.tenant_id, u.actif, u.token_version, u.telephone_verifie, u.login_code_envoye_le, o.deleted_at AS organisation_supprimee_le
+            `SELECT u.id, u.tenant_id, u.actif, u.token_version, u.telephone_verifie, u.login_code_envoye_le, u.mfa_actif, o.deleted_at AS organisation_supprimee_le
              FROM utilisateurs u LEFT JOIN organisations o ON o.id = u.tenant_id
              WHERE u.telephone = $1 AND u.deleted_at IS NULL`,
             [telephone]
@@ -96,6 +96,10 @@ module.exports = function essaiRoutes(pool) {
 
     /** Génère, enregistre et envoie un code — sans rien révéler à l'appelant (mêmes réponses dans tous les cas). */
     async function envoyerNouveauCode(utilisateur, telephone) {
+        // Compte protégé par la double authentification : le code WhatsApp seul ne doit JAMAIS ouvrir de session (il contournerait
+        // le second facteur), donc inutile d'en envoyer un (message facturé, et un code que /verifier refusera). Aucun signal :
+        // la réponse reste identique à celle d'un compte ordinaire.
+        if (utilisateur.mfa_actif) return;
         const dernier = utilisateur.login_code_envoye_le ? new Date(utilisateur.login_code_envoye_le).getTime() : 0;
         if (Date.now() - dernier < DELAI_RENVOI_SECONDES * 1000) return; // trop tôt : on ne renvoie pas, sans le dire
         // Numéro jamais confirmé : 1 code par jour. Même réponse que d'habitude (rien n'est révélé), simplement aucun message de plus
@@ -202,7 +206,7 @@ module.exports = function essaiRoutes(pool) {
             const r = await queryPreTenant(
                 pool,
                 `SELECT u.id, u.nom_complet, u.email, u.telephone, u.secteur_id, u.tenant_id, u.actif, u.token_version,
-                        u.login_code_hash, u.login_code_expire_le, u.login_code_tentatives,
+                        u.login_code_hash, u.login_code_expire_le, u.mfa_actif,
                         r.nom AS role_nom, o.nom AS organisation_nom, o.deleted_at AS organisation_supprimee_le
                  FROM utilisateurs u JOIN roles r ON r.id = u.role_id LEFT JOIN organisations o ON o.id = u.tenant_id
                  WHERE u.telephone = $1 AND u.deleted_at IS NULL`,
@@ -212,21 +216,32 @@ module.exports = function essaiRoutes(pool) {
             if (!user || !user.actif || user.organisation_supprimee_le) {
                 return res.status(401).json({ erreur: MESSAGE_CODE_INVALIDE });
             }
+            // Compteur ATOMIQUE, incrémenté AVANT de comparer : avec « lire puis incrémenter », N requêtes simultanées lisaient
+            // toutes la même valeur et obtenaient chacune un essai de plus que le plafond (course). Ici la base décide : une seule
+            // requête par place restante passe le WHERE ; les autres sont refusées sans même comparer le code.
+            const essai = await queryAvecTenant(
+                pool,
+                user.tenant_id,
+                `UPDATE utilisateurs SET login_code_tentatives = login_code_tentatives + 1
+                 WHERE id = $1 AND login_code_tentatives < $2 AND login_code_hash IS NOT NULL
+                 RETURNING login_code_tentatives`,
+                [user.id, MAX_TENTATIVES_CODE]
+            );
             const expire = user.login_code_expire_le ? new Date(user.login_code_expire_le).getTime() : 0;
-            if (!user.login_code_hash || expire < Date.now() || user.login_code_tentatives >= MAX_TENTATIVES_CODE) {
+            if (essai.rows.length === 0 || !user.login_code_hash || expire < Date.now()) {
                 return res.status(401).json({ erreur: MESSAGE_CODE_INVALIDE });
             }
             if (!codeCorrespond(code, user.login_code_hash)) {
                 // Au dernier essai raté, le code est détruit : il faut en redemander un (et attendre le délai de renvoi).
-                await queryAvecTenant(
-                    pool,
-                    user.tenant_id,
-                    `UPDATE utilisateurs SET login_code_tentatives = login_code_tentatives + 1,
-                            login_code_hash = CASE WHEN login_code_tentatives + 1 >= $2 THEN NULL ELSE login_code_hash END
-                     WHERE id = $1`,
-                    [user.id, MAX_TENTATIVES_CODE]
-                );
+                if (essai.rows[0].login_code_tentatives >= MAX_TENTATIVES_CODE) {
+                    await queryAvecTenant(pool, user.tenant_id, `UPDATE utilisateurs SET login_code_hash = NULL WHERE id = $1`, [user.id]);
+                }
                 return res.status(401).json({ erreur: MESSAGE_CODE_INVALIDE });
+            }
+            // Le bon code prouve la possession du numéro : seulement maintenant on peut dire sans rien révéler à un tiers que ce
+            // compte exige son second facteur. Le code n'est pas consommé (il ne sert à rien d'autre).
+            if (user.mfa_actif) {
+                return res.status(403).json({ erreur: "Ce compte est protégé par la double authentification : connectez-vous avec votre adresse e-mail et votre mot de passe." });
             }
 
             await attachTenantConnection(req, res, pool, user.tenant_id);
