@@ -124,19 +124,19 @@ describe('auth — middlewares requireAuth / checkRole', () => {
     // jamais le raccourci synthétique tokenPour.
 
     test('token valide donne accès à une route protégée', async () => {
-        const token = await creerUtilisateurEtToken(pool, { role: 'livreur' });
+        const token = await creerUtilisateurEtToken(pool, { role: 'livreur', tenant_id: await creerOrganisation(pool) });
         const res = await request(app).get('/protegee').set('Authorization', `Bearer ${token}`);
         expect(res.status).toBe(200);
     });
 
     test('checkRole refuse un rôle non autorisé', async () => {
-        const token = await creerUtilisateurEtToken(pool, { role: 'livreur' });
+        const token = await creerUtilisateurEtToken(pool, { role: 'livreur', tenant_id: await creerOrganisation(pool) });
         const res = await request(app).get('/comptable-seulement').set('Authorization', `Bearer ${token}`);
         expect(res.status).toBe(403);
     });
 
     test('checkRole laisse toujours passer admin, même hors liste', async () => {
-        const token = await creerUtilisateurEtToken(pool, { role: 'admin' });
+        const token = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: await creerOrganisation(pool) });
         const res = await request(app).get('/comptable-seulement').set('Authorization', `Bearer ${token}`);
         expect(res.status).toBe(200);
     });
@@ -203,7 +203,7 @@ describe('auth — middlewares requireAuth / checkRole', () => {
     });
 
     test('un token est rejeté après un changement de mot de passe (token_version incrémenté)', async () => {
-        const token = await creerUtilisateurEtToken(pool, { role: 'admin' });
+        const token = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: await creerOrganisation(pool) });
         const avant = await request(app).get('/protegee').set('Authorization', `Bearer ${token}`);
         expect(avant.status).toBe(200);
 
@@ -215,7 +215,7 @@ describe('auth — middlewares requireAuth / checkRole', () => {
     });
 
     test('un token est rejeté si le compte est désactivé entre-temps', async () => {
-        const token = await creerUtilisateurEtToken(pool, { role: 'admin' });
+        const token = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: await creerOrganisation(pool) });
         const decoded = jwt.decode(token);
         await pool.query(`UPDATE utilisateurs SET actif = FALSE WHERE id = $1`, [decoded.id]);
 

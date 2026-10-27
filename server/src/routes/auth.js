@@ -6,7 +6,8 @@ const rateLimit = require('express-rate-limit');
 const { signToken, requireAuth, attachTenantConnection, queryPreTenant, queryAvecTenant, JWT_SECRET } = require('../auth');
 const { logAudit } = require('../audit');
 const { ongletsAutorises, prixProMensuel, passageProEnLigneActif } = require('../modulesSaas');
-const { motDePasseValide, motDePasseErreurs, emailFarfelue } = require('../validation');
+const { motDePasseValide, motDePasseErreurs, emailFarfelue, emailFormatValide, normaliserTelephone } = require('../validation');
+const { debutJourUtc } = require('../essaiAutonome');
 const mfa = require('../mfa');
 const { chiffrer } = require('../credentials');
 // Nommé `emailService` (pas `email`) : plusieurs routes ci-dessous destructurent `email` du body.
@@ -82,6 +83,18 @@ const limiteurReinitialisation = rateLimit({
     message: { erreur: 'Trop de tentatives. Réessayez plus tard.' },
 });
 
+// Hash bcrypt (coût 10, comme les vrais) d'un mot de passe que personne ne connaît : /login le compare quand l'e-mail est inconnu
+// ou le compte inactif, pour que le temps de réponse ne révèle pas si l'adresse existe (un bcrypt ~100 ms contre un refus immédiat).
+const HASH_FACTICE = '$2a$10$QfaEF8RGg3LHttAijAkZTubfqfd/4K8iGBMkM6WhVZtwQCtn7OKXe';
+
+// Verrou par COMPTE du second facteur TOTP : le limiteur par IP (limiteurMfaVerifier) ne protège pas contre un attaquant qui
+// change d'adresse ; 6 chiffres = 1 million de combinaisons. Réutilise mfa_code_tentatives / mfa_code_expire_le (inutilisés par TOTP).
+const TOTP_MAX_ECHECS = 5;
+const TOTP_DUREE_VERROU_MS = 15 * 60 * 1000;
+// MFA WhatsApp : chaque code est un message facturé envoyé à un numéro choisi par l'appelant.
+const MFA_WHATSAPP_MAX_ENVOIS_PAR_JOUR = 3;
+const ACTION_MFA_WHATSAPP_ENVOYE = 'MFA_WHATSAPP_ENVOYE';
+
 const DUREE_LIEN_REINITIALISATION_MS = 60 * 60 * 1000;
 const DELAI_ENTRE_DEMANDES_MS = 2 * 60 * 1000;
 
@@ -111,12 +124,9 @@ module.exports = function authRoutes(pool) {
             );
 
             const user = result.rows[0];
-            if (!user || !user.actif) {
-                return res.status(401).json({ erreur: 'Identifiants incorrects.' });
-            }
-
-            const valide = await bcrypt.compare(password, user.mot_de_passe_hash);
-            if (!valide) {
+            // bcrypt TOUJOURS exécuté (hash factice si compte absent) : sinon un e-mail inconnu répond bien plus vite qu'un e-mail connu.
+            const valide = await bcrypt.compare(String(password), user ? user.mot_de_passe_hash : HASH_FACTICE);
+            if (!user || !user.actif || !valide) {
                 return res.status(401).json({ erreur: 'Identifiants incorrects.' });
             }
 
@@ -241,6 +251,25 @@ module.exports = function authRoutes(pool) {
 
             let valide = false;
             if (user.mfa_methode === 'TOTP') {
+                // Incrément ATOMIQUE avant de comparer (pas de lecture-puis-écriture : des essais simultanés ne dépassent pas le
+                // plafond). Passent seulement les comptes sous le plafond OU dont le verrou de 15 min est expiré (le compteur
+                // repart alors à 1). La date « maintenant » est calculée en JS (pg-mem ne compare pas TIMESTAMP à now()).
+                const maintenant = new Date();
+                const essai = await req.db.query(
+                    `UPDATE utilisateurs
+                     SET mfa_code_tentatives = CASE WHEN mfa_code_tentatives >= $2 THEN 1 ELSE mfa_code_tentatives + 1 END,
+                         mfa_code_expire_le = $3
+                     WHERE id = $1 AND (mfa_code_tentatives < $2 OR mfa_code_expire_le IS NULL OR mfa_code_expire_le <= $4)
+                     RETURNING mfa_code_tentatives`,
+                    [user.id, TOTP_MAX_ECHECS, new Date(maintenant.getTime() + TOTP_DUREE_VERROU_MS), maintenant]
+                );
+                if (essai.rows.length === 0) {
+                    return res.status(429).json({ erreur: "Trop d'essais, réessayez dans 15 minutes" });
+                }
+                // Le verrou n'a de sens qu'une fois le plafond atteint : tant qu'il reste des essais, pas d'échéance posée.
+                if (essai.rows[0].mfa_code_tentatives < TOTP_MAX_ECHECS) {
+                    await req.db.query(`UPDATE utilisateurs SET mfa_code_expire_le = NULL WHERE id = $1`, [user.id]);
+                }
                 valide = mfa.verifierTotp(code, user.mfa_totp_secret_chiffre);
             } else if (user.mfa_methode === 'WHATSAPP') {
                 const nonExpire = user.mfa_code_expire_le && new Date(user.mfa_code_expire_le) > new Date();
@@ -257,7 +286,7 @@ module.exports = function authRoutes(pool) {
                 return res.status(401).json({ erreur: 'Code invalide ou expiré.' });
             }
 
-            if (user.mfa_methode === 'WHATSAPP') {
+            if (user.mfa_methode === 'WHATSAPP' || user.mfa_methode === 'TOTP') {
                 await req.db.query(
                     `UPDATE utilisateurs SET mfa_code_hash = NULL, mfa_code_expire_le = NULL, mfa_code_tentatives = 0 WHERE id = $1`,
                     [user.id]
@@ -284,6 +313,25 @@ module.exports = function authRoutes(pool) {
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: 'Erreur lors de la vérification.' });
+        }
+    });
+
+    /**
+     * Déconnexion côté serveur : incrémente token_version, ce qui invalide immédiatement le jeton (et tout autre jeton encore
+     * valide du compte) — sans cela, « se déconnecter » n'effaçait le jeton que dans le navigateur, valable ensuite 12 h.
+     * Une session d'impersonation du support n'incrémente rien : le compte est celui du client, le déconnecter couperait sa
+     * propre session (la session de support expire seule en 45 min).
+     */
+    router.post('/deconnexion', requireAuth(pool), async (req, res) => {
+        try {
+            if (!req.user.impersonation) {
+                await req.db.query(`UPDATE utilisateurs SET token_version = token_version + 1 WHERE id = $1`, [req.user.id]);
+            }
+            await logAudit(req.db, { req, table: 'utilisateurs', rowId: req.user.id, action: 'LOGOUT', userId: req.user.id, tenantId: req.user.tenant_id });
+            res.json({ message: 'Déconnecté.' });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la déconnexion.' });
         }
     });
 
@@ -343,7 +391,7 @@ module.exports = function authRoutes(pool) {
         if (!emailSaisi || !password) {
             return res.status(400).json({ erreur: 'Adresse e-mail et mot de passe requis.' });
         }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailSaisi) || emailSaisi.length > 100 || emailFarfelue(emailSaisi)) {
+        if (emailSaisi.length > 100 || !emailFormatValide(emailSaisi) || emailFarfelue(emailSaisi)) {
             return res.status(400).json({ erreur: 'Adresse e-mail invalide. Utilisez une adresse que vous consultez vraiment.' });
         }
         if (!motDePasseValide(password)) {
@@ -360,6 +408,14 @@ module.exports = function authRoutes(pool) {
             if (!compte) return res.status(404).json({ erreur: 'Utilisateur introuvable.' });
             if (compte.email && compte.email_verifie) {
                 return res.status(409).json({ erreur: 'Votre compte est déjà sécurisé. Modifiez votre mot de passe depuis « Mot de passe ».' });
+            }
+
+            // Unicité testée AVANT l'envoi : sinon l'e-mail de vérification partait vers n'importe quelle adresse (même celle d'un
+            // tiers déjà inscrit), ce qui permettait d'envoyer des e-mails Massla à des inconnus. Lecture hors contexte ferme
+            // (l'adresse est unique sur toute la plateforme), lignes supprimées comprises (la contrainte UNIQUE les compte aussi).
+            const prise = await queryPreTenant(pool, `SELECT id FROM utilisateurs WHERE LOWER(email) = $1 AND id <> $2`, [emailSaisi, req.user.id]);
+            if (prise.rows.length > 0) {
+                return res.status(409).json({ erreur: 'Cette adresse e-mail est déjà utilisée sur Massla. Utilisez-en une autre.' });
             }
 
             // Envoi AVANT d'écrire : si l'e-mail ne part pas, rien n'a changé et la personne peut réessayer proprement.
@@ -505,11 +561,11 @@ module.exports = function authRoutes(pool) {
                         `UPDATE utilisateurs SET reset_token_hash = $1, reset_expire_le = now() + interval '1 hour' WHERE id = $2`,
                         [hashToken(token), row.id]
                     );
-                    try {
-                        await emailService.envoyerEmailReinitialisation(row.email, row.nom_complet, token);
-                    } catch (err) {
-                        console.error("Échec de l'envoi de l'e-mail de réinitialisation :", err);
-                    }
+                    // En tâche de fond : attendre l'envoi rendait la réponse mesurablement plus lente pour une adresse connue,
+                    // donc énumérable par le temps de réponse. L'échec est journalisé, la réponse reste identique.
+                    Promise.resolve()
+                        .then(() => emailService.envoyerEmailReinitialisation(row.email, row.nom_complet, token))
+                        .catch((err) => console.error("Échec de l'envoi de l'e-mail de réinitialisation :", err));
                 }
             }
             res.json(messageGenerique);
@@ -629,14 +685,26 @@ module.exports = function authRoutes(pool) {
         }
         const { currentPassword, numero: numeroBrut } = req.body;
         if (!currentPassword) return res.status(400).json({ erreur: 'Mot de passe requis pour configurer le MFA.' });
-        const numero = String(numeroBrut || '').replace(/[^0-9+]/g, '');
-        if (!numero) return res.status(400).json({ erreur: 'Numéro WhatsApp requis.' });
+        // Même validation que partout ailleurs (E.164) : le numéro reçoit un message facturé, il ne doit pas être n'importe quoi.
+        const numero = normaliserTelephone(numeroBrut);
+        if (!numero) return res.status(400).json({ erreur: 'Numéro WhatsApp invalide. Exemple : +221 77 000 00 00.' });
         try {
             // Même exigence que /mfa/totp/init (audit sécurité 2026-08-27) : brancher un nouveau
             // second facteur doit reprouver le mot de passe, pas juste posséder un jeton en cours.
             const actuel = await req.db.query(`SELECT mot_de_passe_hash FROM utilisateurs WHERE id = $1`, [req.user.id]);
             const valide = actuel.rows[0] && (await bcrypt.compare(currentPassword, actuel.rows[0].mot_de_passe_hash));
             if (!valide) return res.status(401).json({ erreur: 'Mot de passe incorrect.' });
+
+            // Plafond d'envois par compte et par jour, compté dans le journal d'audit (comme les codes de l'essai autonome).
+            const envoyes = await req.db.query(
+                `SELECT COUNT(*) AS n FROM audit_logs WHERE table_name = 'utilisateurs' AND action = $1 AND utilisateur_id = $2 AND cree_le >= $3`,
+                [ACTION_MFA_WHATSAPP_ENVOYE, req.user.id, debutJourUtc()]
+            );
+            if (Number(envoyes.rows[0].n) >= MFA_WHATSAPP_MAX_ENVOIS_PAR_JOUR) {
+                return res.status(429).json({ erreur: "Trop de codes demandés aujourd'hui. Réessayez demain." });
+            }
+            // Tracé AVANT l'envoi : un envoi qui échoue peut tout de même avoir coûté.
+            await logAudit(req.db, { req, table: 'utilisateurs', rowId: req.user.id, action: ACTION_MFA_WHATSAPP_ENVOYE, userId: req.user.id, tenantId: req.user.tenant_id });
 
             const { code, hash, expireLe } = mfa.genererCodeWhatsapp();
             await req.db.query(

@@ -1,7 +1,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const email = require('../email');
-const { normaliserTelephone, emailFarfelue } = require('../validation');
+const { normaliserTelephone, emailFarfelue, emailFormatValide } = require('../validation');
 
 const PREFERENCES_VALIDES = ['whatsapp', 'telephone', 'email'];
 // D'où vient la demande : « Essayer gratuitement » ou « Demander ma démo ». Sert à mesurer quelle porte d'entrée amène
@@ -10,7 +10,6 @@ const SOURCES_VALIDES = ['essai', 'demo'];
 // Mêmes valeurs que le formulaire de web/decouvrir.html (puces de secteur et liste de villes).
 const SECTEURS_VALIDES = ['avicole', 'piscicole', 'maraicher', 'elevage'];
 const VILLES_VALIDES = ['Thiès', 'Mbour', 'Petite Côte', 'Kaolack', 'Saint-Louis', 'Rufisque', 'Bambilor', 'Sangalkam', 'Dakar', 'Autre'];
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Public, pas de compte à ce stade — le seul garde-fou contre le spam est le rate-limit, plus
 // strict que la connexion (auth.js) mais plus large que l'inscription (une vraie visite peut
@@ -46,7 +45,7 @@ module.exports = function contactRoutes(pool) {
         if (!nom || nom.length > 100) {
             return res.status(400).json({ erreur: 'Nom et prénom requis.' });
         }
-        if (!EMAIL_REGEX.test(emailVisiteur) || emailFarfelue(emailVisiteur)) {
+        if (!emailFormatValide(emailVisiteur) || emailFarfelue(emailVisiteur)) {
             return res.status(400).json({ erreur: 'Adresse email invalide. Utilisez une adresse où nous pouvons vraiment vous recontacter.' });
         }
         if (!whatsapp) {
