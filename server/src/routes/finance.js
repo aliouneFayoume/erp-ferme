@@ -21,6 +21,8 @@ const limiteurIPN = rateLimit({
     message: { erreur: 'Trop de requêtes.' },
 });
 
+const DELAI_MIN_RAPPEL_MS = 10 * 60 * 1000;
+
 module.exports = function financeRoutes(pool) {
     const router = express.Router();
 
@@ -62,7 +64,7 @@ module.exports = function financeRoutes(pool) {
     router.post('/factures/:id/rappel-whatsapp', requireAuth(pool, { module: 'finance' }), checkRole(['comptable']), async (req, res) => {
         try {
             const factureRes = await req.db.query(
-                `SELECT f.id, f.montant_restant, cl.telephone as client_telephone, o.est_plateforme
+                `SELECT f.id, f.montant_restant, f.dernier_rappel_le, cl.telephone as client_telephone, o.est_plateforme
                  FROM factures f
                  JOIN commandes c ON f.commande_id = c.id
                  JOIN clients cl ON c.client_id = cl.id
@@ -74,6 +76,11 @@ module.exports = function financeRoutes(pool) {
             const facture = factureRes.rows[0];
             if (!facture.client_telephone) {
                 return res.status(400).json({ erreur: 'Ce client n\'a pas de numéro de téléphone enregistré.' });
+            }
+
+            // Anti-spam : pas plus d'une relance par facture toutes les 10 minutes (manuelle ou automatique).
+            if (facture.dernier_rappel_le && Date.now() - new Date(facture.dernier_rappel_le).getTime() < DELAI_MIN_RAPPEL_MS) {
+                return res.status(429).json({ erreur: "Une relance vient d'être envoyée pour cette facture. Réessayez dans quelques minutes." });
             }
 
             let config;
@@ -153,19 +160,37 @@ module.exports = function financeRoutes(pool) {
      */
     router.post('/paiements/initier', requireAuth(pool, { module: 'finance' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const tenantId = req.user.tenant_id;
-        const { commande_id, client_id, montant, provider } = req.body;
+        const { commande_id, montant, provider } = req.body;
 
         const [commandeRes, organisationRes, credentials] = await Promise.all([
-            req.db.query(`SELECT numero_commande FROM commandes WHERE id = $1 AND tenant_id = $2`, [commande_id, tenantId]),
+            req.db.query(`SELECT numero_commande, client_id FROM commandes WHERE id = $1 AND tenant_id = $2`, [commande_id, tenantId]),
             req.db.query(`SELECT nom FROM organisations WHERE id = $1`, [tenantId]),
             getPaydunyaConfig(req.db, tenantId),
         ]);
         if (commandeRes.rows.length === 0) return res.status(404).json({ erreur: 'Commande introuvable.' });
+
         if (!credentials) {
             return res.status(400).json({
                 erreur: "Aucun agrégateur de paiement configuré pour votre organisation. Renseignez vos identifiants PayDunya dans Réglages > Paiements.",
             });
         }
+
+        // Le montant et le client ne sont jamais crus sur parole : la facture en base fait foi. Le client
+        // est celui de la commande (le `client_id` du corps est ignoré) et le montant ne peut dépasser
+        // ce qui reste dû.
+        const factureRes = await req.db.query(
+            `SELECT montant_restant FROM factures WHERE commande_id = $1 AND tenant_id = $2`,
+            [commande_id, tenantId]
+        );
+        if (factureRes.rows.length === 0) return res.status(404).json({ erreur: 'Facture introuvable pour cette commande.' });
+        const montantRestant = Number(factureRes.rows[0].montant_restant);
+        if (!Number.isInteger(montant) || montant <= 0) {
+            return res.status(400).json({ erreur: 'Le montant doit être un entier strictement positif (FCFA).' });
+        }
+        if (montant > montantRestant) {
+            return res.status(400).json({ erreur: `Le montant dépasse le reste dû sur la facture (${montantRestant} FCFA).` });
+        }
+        const clientId = commandeRes.rows[0].client_id;
 
         // Générée ici (avant l'appel PayDunya) et stockée dès l'INSERT ci-dessous : c'est cette
         // même valeur, renvoyée telle quelle par PayDunya dans l'IPN de confirmation, qui permet la
@@ -191,7 +216,7 @@ module.exports = function financeRoutes(pool) {
         const result = await req.db.query(
             `INSERT INTO paiements (tenant_id, commande_id, client_id, montant, methode_paiement, reference_transaction, reference_interne, statut)
              VALUES ($1, $2, $3, $4, $5, $6, $7, 'EN_ATTENTE') RETURNING *`,
-            [tenantId, commande_id, client_id, montant, provider || 'WAVE', facture.token, referenceInterne]
+            [tenantId, commande_id, clientId, montant, provider || 'WAVE', facture.token, referenceInterne]
         );
         await logAudit(req.db, { req, table: 'paiements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: { commande_id, montant, provider } });
         res.status(201).json({ ...result.rows[0], checkout_url: facture.url });

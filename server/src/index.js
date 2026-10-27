@@ -113,10 +113,10 @@ async function main() {
     app.get('/api/health', async (req, res) => {
         try {
             await pool.query('SELECT 1');
-            res.json({ statut: 'En ligne', version: '1.0.0', mode, environnement: process.env.NODE_ENV || 'development' });
+            res.json({ statut: 'En ligne', version: '1.0.0' });
         } catch (err) {
             console.error('Health check : base de données injoignable.', err);
-            res.status(503).json({ statut: 'Dégradé', erreur: 'Base de données injoignable.', mode });
+            res.status(503).json({ statut: 'Dégradé', erreur: 'Base de données injoignable.' });
         }
     });
 

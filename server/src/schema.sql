@@ -184,7 +184,7 @@ CREATE TABLE abonnements (
     tenant_id INT REFERENCES organisations(id),
     client_id INT REFERENCES clients(id),
     produit_id INT, -- FK ajoutée après création de produits
-    quantite INT NOT NULL DEFAULT 1,
+    quantite INT NOT NULL DEFAULT 1 CHECK (quantite > 0),
     frequence VARCHAR(20) CHECK (frequence IN ('HEBDOMADAIRE', 'BIMENSUEL', 'MENSUEL')) DEFAULT 'HEBDOMADAIRE',
     jour_livraison VARCHAR(10), -- 'LUNDI', 'MARDI', ...
     actif BOOLEAN DEFAULT TRUE,
@@ -433,7 +433,7 @@ CREATE TABLE lignes_commande (
     id SERIAL PRIMARY KEY,
     commande_id INT REFERENCES commandes(id) ON DELETE CASCADE,
     produit_id INT REFERENCES produits(id),
-    quantite INT NOT NULL,
+    quantite INT NOT NULL CHECK (quantite > 0),
     prix_unitaire_applique NUMERIC NOT NULL, -- Fige le prix au moment de l'achat
     sous_total NUMERIC NOT NULL,
     lot_id INT REFERENCES lots_production(id) -- lot d'où viennent les sujets vendus sur cette ligne (facultatif) : base du bilan par lot (migration-36)

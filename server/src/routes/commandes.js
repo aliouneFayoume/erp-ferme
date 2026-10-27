@@ -2,6 +2,22 @@ const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
 const { genererNumeroUnique } = require('../numero');
+const { estQuantiteValide, QUANTITE_MAX } = require('../quantites');
+
+/**
+ * Transitions de statut autorisées pour une commande. Le flux normal avance : EN_ATTENTE → PREPAREE →
+ * EN_LIVRAISON → LIVREE (on tolère de sauter des étapes vers l'avant, ex. EN_ATTENTE → LIVREE, mais
+ * jamais de revenir en arrière). ANNULEE est terminal : sinon ANNULEE → EN_ATTENTE → ANNULEE libérerait
+ * le stock et l'encours à chaque cycle. LIVREE est terminal aussi (pas d'annulation après livraison).
+ */
+const TRANSITIONS_COMMANDE = {
+    EN_ATTENTE: ['PREPAREE', 'EN_LIVRAISON', 'LIVREE', 'ANNULEE'],
+    PREPAREE: ['EN_LIVRAISON', 'LIVREE', 'ANNULEE'],
+    EN_LIVRAISON: ['LIVREE', 'ANNULEE'],
+    LIVREE: [],
+    ANNULEE: [],
+};
+const STATUTS_LIVREUR = ['EN_LIVRAISON', 'LIVREE'];
 
 /**
  * Multitarification à 3 niveaux (cahier des charges §3.2) : standard (B2C), restaurant (B2B),
@@ -51,6 +67,13 @@ module.exports = function commandesRoutes(pool) {
         const { client_id, lignes } = req.body;
         if (!client_id || !Array.isArray(lignes) || lignes.length === 0) {
             return res.status(400).json({ erreur: 'Client et au moins une ligne de commande sont requis.' });
+        }
+
+        // Chaque quantité doit être un entier > 0 (un négatif gonflerait le stock au lieu de le réserver).
+        for (const ligne of lignes) {
+            if (!ligne || !estQuantiteValide(ligne.quantite)) {
+                return res.status(400).json({ erreur: `Chaque quantité doit être un entier strictement positif (maximum ${QUANTITE_MAX}).` });
+            }
         }
 
         const client = req.db;
@@ -170,6 +193,20 @@ module.exports = function commandesRoutes(pool) {
             );
             if (commandeRes.rows.length === 0) throw { statut: 404, message: 'Commande introuvable.' };
             const commande = commandeRes.rows[0];
+
+            // Un livreur ne fait avancer une commande que vers la livraison.
+            if (req.user.role === 'livreur' && !STATUTS_LIVREUR.includes(statut)) {
+                throw { statut: 403, message: 'Un livreur ne peut mettre une commande qu\'en livraison ou livrée.' };
+            }
+            if (commande.statut === statut) {
+                throw { statut: 409, message: `La commande est déjà au statut « ${statut} ».` };
+            }
+            if (statut === 'ANNULEE' && commande.statut === 'LIVREE') {
+                throw { statut: 400, message: 'Impossible d\'annuler une commande déjà livrée.' };
+            }
+            if (!(TRANSITIONS_COMMANDE[commande.statut] || []).includes(statut)) {
+                throw { statut: 409, message: `Changement de statut impossible : « ${commande.statut} » → « ${statut} ».` };
+            }
 
             // Annulation : libère le stock réservé et l'encours B2B consommés à la création, pour ne
             // pas bloquer indéfiniment de la capacité de pool ou du crédit sur une commande abandonnée.

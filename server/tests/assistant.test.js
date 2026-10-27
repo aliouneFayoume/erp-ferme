@@ -75,6 +75,38 @@ describe('assistant — conseil agricole (Claude API)', () => {
         expect(res.status).toBe(503);
     });
 
+    test("l'historique envoyé au modèle est réduit à 6 messages et 4 000 caractères, dernier message conservé", async () => {
+        const messages = [];
+        for (let i = 0; i < 10; i++) {
+            messages.push({ role: 'user', content: `Q${i} ` + 'x'.repeat(1500) });
+            messages.push({ role: 'assistant', content: `R${i} ` + 'y'.repeat(1500) });
+        }
+        messages.pop(); // finit par une question de l'utilisateur (19 messages)
+        const res = await request(app).post('/api/assistant/chat').set('Authorization', `Bearer ${token}`).send({ messages });
+        expect(res.status).toBe(200);
+        const envoyes = mockCreerMessage.mock.calls[0][0].messages;
+        expect(envoyes.length).toBeLessThanOrEqual(6);
+        expect(envoyes.reduce((n, m) => n + m.content.length, 0)).toBeLessThanOrEqual(4000);
+        expect(envoyes[envoyes.length - 1]).toEqual(messages[messages.length - 1]);
+        expect(envoyes[0].role).toBe('user');
+    });
+
+    test('rejette plus de 20 messages', async () => {
+        const messages = Array.from({ length: 21 }, (_, i) => ({ role: i % 2 === 0 ? 'user' : 'assistant', content: 'a' }));
+        messages.push({ role: 'user', content: 'fin' });
+        const res = await request(app).post('/api/assistant/chat').set('Authorization', `Bearer ${token}`).send({ messages });
+        expect(res.status).toBe(400);
+    });
+
+    test('les requêtes invalides ne consomment pas la limite quotidienne', async () => {
+        for (let i = 0; i < 60; i++) {
+            const res = await request(app).post('/api/assistant/chat').set('Authorization', `Bearer ${token}`).send({ messages: [] });
+            expect(res.status).toBe(400);
+        }
+        const ok = await request(app).post('/api/assistant/chat').set('Authorization', `Bearer ${token}`).send({ messages: [{ role: 'user', content: 'Bonjour' }] });
+        expect(ok.status).toBe(200);
+    });
+
     test('deux tenants différents ont des quotas de rate-limit indépendants', async () => {
         const tenantB = await creerOrganisation(pool, 'Ferme B');
         const tokenB = await creerUtilisateurEtToken(pool, { role: 'admin', tenant_id: tenantB });

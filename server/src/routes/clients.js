@@ -1,7 +1,13 @@
 const express = require('express');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+
+// Colonnes renvoyées à l'API : JAMAIS pin_hash (hash du code portail) ni les colonnes de
+// verrouillage (pin_version, pin_tentatives_echouees, pin_bloque_jusqu), qui aident une attaque hors-ligne.
+const COLONNES_CLIENT = `id, tenant_id, nom, type_client, categorie_tarifaire, telephone, adresse, gps_lat, gps_lng,
+    limite_credit, solde_encours, est_abonne, est_demo, cree_le`;
 
 module.exports = function clientsRoutes(pool) {
     const router = express.Router();
@@ -14,7 +20,7 @@ module.exports = function clientsRoutes(pool) {
             params.push(type);
             where += ` AND type_client = $${params.length}`;
         }
-        const result = await req.db.query(`SELECT * FROM clients WHERE ${where} ORDER BY nom`, params);
+        const result = await req.db.query(`SELECT ${COLONNES_CLIENT} FROM clients WHERE ${where} ORDER BY nom`, params);
         res.json(result.rows);
     });
 
@@ -26,7 +32,7 @@ module.exports = function clientsRoutes(pool) {
         try {
             const result = await req.db.query(
                 `INSERT INTO clients (tenant_id, nom, type_client, categorie_tarifaire, telephone, adresse, gps_lat, gps_lng, limite_credit, est_abonne)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING ${COLONNES_CLIENT}`,
                 [req.user.tenant_id, nom, type_client, categorie_tarifaire || 'standard', telephone, adresse, gps_lat, gps_lng, limite_credit || 0, !!est_abonne]
             );
             await logAudit(req.db, { req, table: 'clients', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });
@@ -45,7 +51,7 @@ module.exports = function clientsRoutes(pool) {
                         telephone = COALESCE($3, telephone), adresse = COALESCE($4, adresse),
                         gps_lat = COALESCE($5, gps_lat), gps_lng = COALESCE($6, gps_lng),
                         limite_credit = COALESCE($7, limite_credit)
-                 WHERE id = $8 AND tenant_id = $9 AND deleted_at IS NULL RETURNING *`,
+                 WHERE id = $8 AND tenant_id = $9 AND deleted_at IS NULL RETURNING ${COLONNES_CLIENT}`,
                 [nom, categorie_tarifaire, telephone, adresse, gps_lat, gps_lng, limite_credit, req.params.id, req.user.tenant_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ erreur: 'Client introuvable.' });
@@ -65,7 +71,7 @@ module.exports = function clientsRoutes(pool) {
      */
     router.post('/:id/pin', requireAuth(pool, { module: 'clients_abonnements' }), checkRole(['admin', 'comptable']), async (req, res) => {
         try {
-            const pin = String(Math.floor(100000 + Math.random() * 900000));
+            const pin = String(crypto.randomInt(100000, 1000000));
             const pinHash = await bcrypt.hash(pin, 10);
             const result = await req.db.query(
                 `UPDATE clients SET pin_hash = $1, pin_version = pin_version + 1
