@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+const { estQuantiteValide, QUANTITE_MAX } = require('../quantites');
 
 module.exports = function abonnementsRoutes(pool) {
     const router = express.Router();
@@ -23,11 +24,15 @@ module.exports = function abonnementsRoutes(pool) {
         if (!client_id || !produit_id || !jour_livraison) {
             return res.status(400).json({ erreur: 'Client, produit et jour de livraison sont requis.' });
         }
+        const quantiteAbo = quantite === undefined || quantite === null || quantite === '' ? 1 : quantite;
+        if (!estQuantiteValide(quantiteAbo)) {
+            return res.status(400).json({ erreur: `La quantité doit être un entier strictement positif (maximum ${QUANTITE_MAX}).` });
+        }
         try {
             const result = await req.db.query(
                 `INSERT INTO abonnements (tenant_id, client_id, produit_id, quantite, frequence, jour_livraison, actif)
                  VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING *`,
-                [req.user.tenant_id, client_id, produit_id, quantite || 1, frequence || 'HEBDOMADAIRE', jour_livraison]
+                [req.user.tenant_id, client_id, produit_id, Number(quantiteAbo), frequence || 'HEBDOMADAIRE', jour_livraison]
             );
             await req.db.query(`UPDATE clients SET est_abonne = TRUE WHERE id = $1 AND tenant_id = $2`, [client_id, req.user.tenant_id]);
             await logAudit(req.db, { req, table: 'abonnements', rowId: result.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: req.user.tenant_id, details: req.body });

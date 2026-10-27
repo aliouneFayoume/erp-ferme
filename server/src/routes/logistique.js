@@ -90,13 +90,25 @@ module.exports = function logistiqueRoutes(pool) {
 
     // Mise à jour terrain : statut, preuve de livraison, et éventuel encaissement espèces (caisse chauffeur virtuelle).
     const METHODES_PAIEMENT_VALIDES = ['ESPECES', 'WAVE', 'ORANGE_MONEY', 'VIREMENT'];
+    const STATUTS_LIVRAISON_VALIDES = ['A_FAIRE', 'EN_COURS', 'TERMINEE', 'ECHOUEE'];
 
     router.put('/livraisons/:id/statut', requireAuth(pool, { module: 'logistique' }), checkRole(['livreur']), async (req, res) => {
         const { statut, notes_livreur, preuve_livraison, montant_encaisse } = req.body;
         // Le livreur encaisse aussi bien en espèces qu'en Wave/Orange Money reçu sur place au
         // moment de la livraison — la caisse chauffeur virtuelle doit refléter le mode réel.
         const methode_paiement = req.body.methode_paiement || 'ESPECES';
-        if (montant_encaisse && !METHODES_PAIEMENT_VALIDES.includes(methode_paiement)) {
+        if (!STATUTS_LIVRAISON_VALIDES.includes(statut)) {
+            return res.status(400).json({ erreur: 'Statut de livraison invalide.' });
+        }
+        // Montant encaissé : entier de FCFA >= 0 (ni négatif, ni décimal, ni texte).
+        let montantEncaisse = 0;
+        if (montant_encaisse !== undefined && montant_encaisse !== null && montant_encaisse !== '') {
+            montantEncaisse = typeof montant_encaisse === 'string' && /^\d+$/.test(montant_encaisse.trim()) ? Number(montant_encaisse) : montant_encaisse;
+            if (!Number.isInteger(montantEncaisse) || montantEncaisse < 0 || montantEncaisse > Number.MAX_SAFE_INTEGER) {
+                return res.status(400).json({ erreur: 'Le montant encaissé doit être un entier supérieur ou égal à 0.' });
+            }
+        }
+        if (montantEncaisse && !METHODES_PAIEMENT_VALIDES.includes(methode_paiement)) {
             return res.status(400).json({ erreur: 'Mode de paiement invalide.' });
         }
         const client = req.db;
@@ -113,6 +125,21 @@ module.exports = function logistiqueRoutes(pool) {
                 throw { statut: 403, message: "Cette livraison n'est pas assignée à votre compte." };
             }
 
+            // Idempotence : une livraison terminée est figée. Sans ce garde-fou, renvoyer TERMINEE
+            // rejouait l'encaissement (nouveau paiement à chaque appel) et la libération du stock.
+            if (livraison.statut === 'TERMINEE') {
+                throw { statut: 409, message: 'Cette livraison est déjà terminée.' };
+            }
+
+            // Le montant encaissé ne peut pas dépasser ce qui reste dû sur la facture.
+            if (statut === 'TERMINEE' && montantEncaisse > 0) {
+                const factureRes = await client.query(`SELECT montant_restant FROM factures WHERE commande_id = $1 AND tenant_id = $2 FOR UPDATE`, [livraison.commande_id, tenantId]);
+                if (factureRes.rows.length === 0) throw { statut: 404, message: 'Facture introuvable pour cette livraison.' };
+                if (montantEncaisse > Number(factureRes.rows[0].montant_restant)) {
+                    throw { statut: 400, message: `Le montant encaissé dépasse le reste dû sur la facture (${Number(factureRes.rows[0].montant_restant)} FCFA).` };
+                }
+            }
+
             const updated = await client.query(
                 `UPDATE livraisons SET statut = $1, notes_livreur = COALESCE($2, notes_livreur),
                         preuve_livraison = COALESCE($3, preuve_livraison), mise_a_jour_le = CURRENT_TIMESTAMP
@@ -123,6 +150,7 @@ module.exports = function logistiqueRoutes(pool) {
             if (statut === 'TERMINEE') {
                 const commandeRes = await client.query(`SELECT * FROM commandes WHERE id = $1 AND tenant_id = $2`, [livraison.commande_id, tenantId]);
                 const commande = commandeRes.rows[0];
+                if (commande.statut === 'ANNULEE') throw { statut: 409, message: 'Cette commande est annulée : livraison impossible.' };
                 await client.query(`UPDATE commandes SET statut = 'LIVREE' WHERE id = $1`, [commande.id]);
 
                 // Libère le pool réservé : le stock est désormais consommé (livré).
@@ -138,13 +166,13 @@ module.exports = function logistiqueRoutes(pool) {
                     );
                 }
 
-                if (montant_encaisse && Number(montant_encaisse) > 0) {
+                if (montantEncaisse > 0) {
                     await client.query(
                         `INSERT INTO paiements (tenant_id, commande_id, client_id, montant, methode_paiement, statut, livreur_id)
                          VALUES ($1, $2, $3, $4, $5, 'VALIDE', $6)`,
-                        [tenantId, commande.id, commande.client_id, montant_encaisse, methode_paiement, req.user.id]
+                        [tenantId, commande.id, commande.client_id, montantEncaisse, methode_paiement, req.user.id]
                     );
-                    const moinsEncaissement = -Number(montant_encaisse);
+                    const moinsEncaissement = -montantEncaisse;
                     await client.query(
                         `UPDATE factures SET montant_restant = GREATEST(montant_restant + $1, 0),
                                 statut = CASE WHEN montant_restant + $1 <= 0 THEN 'PAYEE' ELSE 'PAYEE_PARTIEL' END
@@ -167,7 +195,7 @@ module.exports = function logistiqueRoutes(pool) {
                         await client.query(
                             `UPDATE caisses_chauffeur SET montant_theorique = montant_theorique + $1
                              WHERE livreur_id = $2 AND date_caisse = $3 AND statut = 'OUVERTE' AND tenant_id = $4`,
-                            [montant_encaisse, req.user.id, aujourdhui, tenantId]
+                            [montantEncaisse, req.user.id, aujourdhui, tenantId]
                         );
                     }
                 }
