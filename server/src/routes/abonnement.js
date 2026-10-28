@@ -54,10 +54,11 @@ module.exports = function abonnementRoutes(pool) {
                 const credentials = await getPaydunyaConfig(db, emetteur);
                 if (!credentials) throw erreurHttp(503, 'Paiement indisponible pour le moment. Utilisez « Parler à un conseiller ».');
 
-                const existantes = await db.query(
+                const lireExistantes = () => db.query(
                     `SELECT id, statut FROM factures_saas WHERE tenant_id = $1 AND type = 'ABONNEMENT' AND notes = $2 ORDER BY id DESC`,
                     [tenantId, NOTE_PASSAGE_PRO]
                 );
+                const existantes = await lireExistantes();
                 // Déjà payée mais le Pro n'est pas encore actif : la confirmation de PayDunya est en route, ne pas faire payer deux fois.
                 if (existantes.rows.some((f) => f.statut === 'PAYEE')) {
                     throw erreurHttp(409, 'Votre paiement a bien été reçu et est en cours de traitement. Rechargez la page dans quelques instants.');
@@ -65,10 +66,21 @@ module.exports = function abonnementRoutes(pool) {
                 const aPayer = existantes.rows.find((f) => STATUTS_PAYABLES.includes(f.statut));
                 if (aPayer) return { id: aPayer.id, reutilisee: true };
 
-                const cree = await db.query(
-                    `INSERT INTO factures_saas (tenant_id, type, periode, montant, date_echeance, notes) VALUES ($1, 'ABONNEMENT', $2, $3, $4, $5) RETURNING id`,
-                    [tenantId, periode, montant, dansNJours(DELAI_PAIEMENT_JOURS), NOTE_PASSAGE_PRO]
-                );
+                let cree;
+                try {
+                    cree = await db.query(
+                        `INSERT INTO factures_saas (tenant_id, type, periode, montant, date_echeance, notes) VALUES ($1, 'ABONNEMENT', $2, $3, $4, $5) RETURNING id`,
+                        [tenantId, periode, montant, dansNJours(DELAI_PAIEMENT_JOURS), NOTE_PASSAGE_PRO]
+                    );
+                } catch (err) {
+                    // Deux demandes simultanées ont toutes deux lu « aucune facture ouverte » : l'index unique partiel
+                    // (migration-44, une seule facture PASSAGE_PRO ouverte par ferme) refuse la seconde. On reprend alors la
+                    // facture créée par l'autre demande plutôt que de répondre 500 ou d'en créer un doublon.
+                    if (err.code !== '23505') throw err;
+                    const apresCourse = (await lireExistantes()).rows.find((f) => STATUTS_PAYABLES.includes(f.statut));
+                    if (!apresCourse) throw err;
+                    return { id: apresCourse.id, reutilisee: true };
+                }
                 await logAudit(db, { req, table: 'factures_saas', rowId: cree.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId, details: { passage_pro: true, montant } });
                 return { id: cree.rows[0].id, reutilisee: false };
             });
