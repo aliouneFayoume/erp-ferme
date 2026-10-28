@@ -227,6 +227,25 @@ describe('pages marketing générées', () => {
         expect(robots).toContain('Sitemap: https://massla.sn/sitemap.xml');
         expect(robots).toContain('Disallow: /api/');
     });
+
+    test('le plan du site liste aussi l\'accueil et l\'inscription, avec une date par page', () => {
+        const plan = lire('sitemap.xml');
+        expect(plan).toContain('<loc>https://massla.sn/</loc>');
+        expect(plan).toContain('<loc>https://massla.sn/inscription.html</loc>');
+        expect(plan.match(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/g)).toHaveLength(plan.match(/<url>/g).length);
+    });
+
+    test('l\'accueil (écran de connexion) a une description et un canonical', () => {
+        const html = lire('index.html');
+        expect(html).toContain('<meta name="description"');
+        expect(html).toContain('<link rel="canonical" href="https://massla.sn/" />');
+        expect(html).not.toContain('noindex');
+    });
+
+    test.each(['portail', 'verifier-email', 'approuver-avis', 'essai', 'mot-de-passe-oublie', 'reinitialiser-mot-de-passe'])(
+        '%s.html est exclue de l\'index Google',
+        (nom) => expect(lire(`${nom}.html`)).toContain('<meta name="robots" content="noindex" />')
+    );
 });
 
 describe('pages marketing — sécurité (CSP)', () => {
