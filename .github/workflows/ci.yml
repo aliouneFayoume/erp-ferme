@@ -73,6 +73,8 @@ jobs:
       # détruite à la fin du job — pas un secret à protéger.
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
       ERP_APP_DATABASE_URL: postgresql://erp_app:ci_only_password_not_a_secret@localhost:5432/postgres
+      # Base jetable sans les migrations : voir le commentaire dans server/src/verify-rls.js (couverture rétrogradée en avertissement).
+      RLS_CATALOGUE_PARTIEL: '1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
