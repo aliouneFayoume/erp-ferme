@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+const { premiereReferenceInvalide } = require('../references');
 
 module.exports = function ticketsRoutes(pool) {
     const router = express.Router();
@@ -46,6 +47,9 @@ module.exports = function ticketsRoutes(pool) {
     router.put('/:id', requireAuth(pool, { module: 'support' }), checkRole(['admin', 'comptable']), async (req, res) => {
         const tenantId = req.user.tenant_id;
         const { statut, priorite, assigne_a } = req.body;
+        // La personne assignée doit être un compte de CETTE ferme (la clé étrangère ne passe pas par la RLS).
+        const refInvalide = await premiereReferenceInvalide(req.db, tenantId, [['utilisateurs', assigne_a, 'Personne assignée']]);
+        if (refInvalide) return res.status(400).json({ erreur: refInvalide });
         const result = await req.db.query(
             `UPDATE tickets SET statut = COALESCE($1, statut), priorite = COALESCE($2, priorite),
                     assigne_a = COALESCE($3, assigne_a), mis_a_jour_le = CURRENT_TIMESTAMP

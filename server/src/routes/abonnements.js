@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
 const { estQuantiteValide, QUANTITE_MAX } = require('../quantites');
+const { premiereReferenceInvalide } = require('../references');
 
 module.exports = function abonnementsRoutes(pool) {
     const router = express.Router();
@@ -29,6 +30,9 @@ module.exports = function abonnementsRoutes(pool) {
             return res.status(400).json({ erreur: `La quantité doit être un entier strictement positif (maximum ${QUANTITE_MAX}).` });
         }
         try {
+            // Le client et le produit doivent être ceux de CETTE ferme : la clé étrangère ne passe pas par la RLS.
+            const refInvalide = await premiereReferenceInvalide(req.db, req.user.tenant_id, [['clients', client_id, 'Client'], ['produits', produit_id, 'Produit']]);
+            if (refInvalide) return res.status(400).json({ erreur: refInvalide });
             const result = await req.db.query(
                 `INSERT INTO abonnements (tenant_id, client_id, produit_id, quantite, frequence, jour_livraison, actif)
                  VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING *`,

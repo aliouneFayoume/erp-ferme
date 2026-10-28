@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+const { premiereReferenceInvalide } = require('../references');
 
 const ROLES_IMMOBILISATION = ['comptable'];
 const CATEGORIE_DEPENSE_MATERIEL = 'Machines & Équipements';
@@ -58,6 +59,8 @@ module.exports = function immobilisationsRoutes(pool) {
         } = req.body;
         if (!nom) return res.status(400).json({ erreur: "Le nom de l'équipement est requis." });
         try {
+            const refInvalide = await premiereReferenceInvalide(req.db, tenantId, [['secteurs', secteur_id, 'Secteur'], ['fournisseurs', fournisseur_id, 'Fournisseur']]);
+            if (refInvalide) return res.status(400).json({ erreur: refInvalide });
             const result = await req.db.query(
                 `INSERT INTO equipements (tenant_id, nom, categorie, secteur_id, fournisseur_id, etat, quantite,
                     date_achat, valeur_achat, duree_amortissement_mois, valeur_residuelle, notes, cree_par)
@@ -83,6 +86,8 @@ module.exports = function immobilisationsRoutes(pool) {
             date_achat, valeur_achat, duree_amortissement_mois, valeur_residuelle, notes,
         } = req.body;
         try {
+            const refInvalide = await premiereReferenceInvalide(req.db, tenantId, [['secteurs', secteur_id, 'Secteur'], ['fournisseurs', fournisseur_id, 'Fournisseur']]);
+            if (refInvalide) return res.status(400).json({ erreur: refInvalide });
             const result = await req.db.query(
                 `UPDATE equipements SET
                     nom = COALESCE($1, nom), categorie = COALESCE($2, categorie),
