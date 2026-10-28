@@ -1,6 +1,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { requireAuth } = require('../auth');
+const { requireAuth, queryPreTenantPlateforme } = require('../auth');
+const { logAudit } = require('../audit');
 const { demanderConseil, estConfigure } = require('../assistant');
 
 const MAX_MESSAGES = 20;
@@ -22,6 +23,25 @@ const limiteurAssistant = rateLimit({
     keyGenerator: (req) => String(req.user.tenant_id),
     message: { erreur: "Limite quotidienne de questions à l'assistant atteinte pour votre ferme. Réessayez demain." },
 });
+
+// Plafond GLOBAL (toutes fermes confondues) : le plafond par ferme ci-dessus borne chaque ferme, pas la facture totale
+// (100 fermes x 50 appels = 5 000 appels/jour). Compté dans le journal d'audit (durable : survit à un redémarrage du serveur,
+// contrairement au compteur en mémoire du limiteur par ferme). Une valeur absente ou invalide retombe sur le défaut, jamais sur 0.
+const PLAFOND_GLOBAL_DEFAUT = 500;
+function plafondGlobalQuotidien() {
+    const n = Number(process.env.ASSISTANT_PLAFOND_QUOTIDIEN_GLOBAL);
+    return Number.isInteger(n) && n > 0 ? n : PLAFOND_GLOBAL_DEFAUT;
+}
+
+/** Nombre d'appels à l'assistant des dernières 24 h, toutes fermes (lecture cross-tenant réservée au contexte plateforme). */
+async function appelsGlobauxDernieres24h(pool) {
+    const res = await queryPreTenantPlateforme(
+        pool,
+        `SELECT COUNT(*)::int AS n FROM audit_logs WHERE table_name = 'assistant' AND action = 'CHAT' AND cree_le > $1`,
+        [new Date(Date.now() - 24 * 60 * 60 * 1000)]
+    );
+    return res.rows[0].n;
+}
 
 function messagesValides(messages) {
     // Le dernier message doit être la question de l'utilisateur.
@@ -63,6 +83,11 @@ module.exports = function assistantRoutes(pool) {
     // l'onglet "Mon compte" dans web/js/app.js.
     router.post('/chat', requireAuth(pool), validerCorps, limiteurAssistant, async (req, res) => {
         try {
+            if ((await appelsGlobauxDernieres24h(pool)) >= plafondGlobalQuotidien()) {
+                return res.status(429).json({ erreur: "L'assistant IA a atteint sa limite quotidienne pour toute la plateforme. Réessayez demain." });
+            }
+            // Journalisé AVANT l'appel : un appel qui échoue côté fournisseur peut quand même avoir été facturé.
+            await logAudit(req.db, { req, table: 'assistant', action: 'CHAT', userId: req.user.id, tenantId: req.user.tenant_id });
             const reponse = await demanderConseil(tronquerHistorique(req.body.messages));
             res.json({ reponse });
         } catch (err) {
