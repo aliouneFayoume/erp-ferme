@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+const { premiereReferenceInvalide } = require('../references');
 
 const ROLES_INTRANTS = ['chef_prod', 'comptable'];
 const CATEGORIES_VALIDES = ['Aliment', 'Engrais', 'Phytosanitaire', 'Vétérinaire', 'Semences', 'Autre'];
@@ -33,6 +34,9 @@ module.exports = function intrantsRoutes(pool) {
             return res.status(400).json({ erreur: 'Catégorie invalide.' });
         }
         try {
+            // Le secteur doit être un secteur de CETTE ferme (la clé étrangère ne passe pas par la RLS).
+            const refInvalide = await premiereReferenceInvalide(req.db, req.user.tenant_id, [['secteurs', secteur_id, 'Secteur']]);
+            if (refInvalide) return res.status(400).json({ erreur: refInvalide });
             const result = await req.db.query(
                 `INSERT INTO intrants (tenant_id, secteur_id, nom, categorie, unite, quantite_stock, seuil_alerte, cree_par)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
@@ -52,6 +56,8 @@ module.exports = function intrantsRoutes(pool) {
             return res.status(400).json({ erreur: 'Catégorie invalide.' });
         }
         try {
+            const refInvalide = await premiereReferenceInvalide(req.db, req.user.tenant_id, [['secteurs', secteur_id, 'Secteur']]);
+            if (refInvalide) return res.status(400).json({ erreur: refInvalide });
             const result = await req.db.query(
                 `UPDATE intrants SET
                     nom = COALESCE($1, nom),
@@ -135,6 +141,9 @@ module.exports = function intrantsRoutes(pool) {
     router.post('/:id/sortie', requireAuth(pool), checkRole(ROLES_INTRANTS), async (req, res) => {
         const quantite = Number(req.body.quantite);
         if (!(quantite > 0)) return res.status(400).json({ erreur: 'La quantité doit être positive.' });
+        // Le lot (facultatif) doit être un lot de CETTE ferme : sinon le mouvement de stock s'afficherait dans l'historique d'une autre ferme.
+        const lotInvalide = await premiereReferenceInvalide(req.db, req.user.tenant_id, [['lots_production', req.body.lot_id, 'Lot']]);
+        if (lotInvalide) return res.status(400).json({ erreur: lotInvalide });
         const client = req.db;
         try {
             await client.query('BEGIN');

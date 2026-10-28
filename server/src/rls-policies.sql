@@ -40,8 +40,11 @@ $$;
 -- Tables globales, partagées par toutes les organisations (pas de notion de tenant)
 -- ------------------------------------------------------------------------------
 
+-- roles : LECTURE seule (migration-45). L'application ne fait que lire cette table ; sans policy d'écriture, erp_app ne peut ni
+-- créer, ni renommer, ni supprimer un rôle. Les écritures (seed pg-mem, migrations) passent par le propriétaire des tables.
 DROP POLICY IF EXISTS allow_all ON roles;
-CREATE POLICY allow_all ON roles USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS roles_lecture ON roles;
+CREATE POLICY roles_lecture ON roles FOR SELECT USING (true);
 
 -- ------------------------------------------------------------------------------
 -- organisations : policy sur `id` (c'est elle-même le tenant), pas sur `tenant_id`.

@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+const { premiereReferenceInvalide } = require('../references');
 
 const ROLES_PAIE = ['admin', 'comptable'];
 
@@ -28,6 +29,8 @@ module.exports = function paieRoutes(pool) {
             return res.status(400).json({ erreur: 'Le taux journalier est requis pour un journalier.' });
         }
         try {
+            const refInvalide = await premiereReferenceInvalide(req.db, tenantId, [['secteurs', secteur_id, 'Secteur']]);
+            if (refInvalide) return res.status(400).json({ erreur: refInvalide });
             const result = await req.db.query(
                 `INSERT INTO employes (tenant_id, nom_complet, poste, secteur_id, telephone, date_embauche, salaire_brut_mensuel, type_contrat, taux_journalier, notes, cree_par)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
@@ -52,6 +55,8 @@ module.exports = function paieRoutes(pool) {
             return res.status(400).json({ erreur: 'Le taux journalier doit être supérieur à zéro.' });
         }
         try {
+            const refInvalide = await premiereReferenceInvalide(req.db, tenantId, [['secteurs', secteur_id, 'Secteur']]);
+            if (refInvalide) return res.status(400).json({ erreur: refInvalide });
             const result = await req.db.query(
                 `UPDATE employes SET
                     nom_complet = COALESCE($1, nom_complet), poste = COALESCE($2, poste),

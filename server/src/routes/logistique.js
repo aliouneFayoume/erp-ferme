@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+const { premiereReferenceInvalide } = require('../references');
 const { FARM_DEPOT, optimiserTournee, itineraireReel } = require('../routing');
 
 module.exports = function logistiqueRoutes(pool) {
@@ -79,6 +80,9 @@ module.exports = function logistiqueRoutes(pool) {
         const { commande_id, livreur_id, date_prevue } = req.body;
         const commandeRes = await req.db.query(`SELECT id FROM commandes WHERE id = $1 AND tenant_id = $2`, [commande_id, req.user.tenant_id]);
         if (commandeRes.rows.length === 0) return res.status(400).json({ erreur: 'Commande invalide.' });
+        // Le livreur doit être un compte de CETTE ferme (la clé étrangère ne passe pas par la RLS).
+        const refInvalide = await premiereReferenceInvalide(req.db, req.user.tenant_id, [['utilisateurs', livreur_id, 'Livreur']]);
+        if (refInvalide) return res.status(400).json({ erreur: refInvalide });
         const result = await req.db.query(
             `INSERT INTO livraisons (tenant_id, commande_id, livreur_id, date_prevue, statut) VALUES ($1, $2, $3, $4, 'A_FAIRE') RETURNING *`,
             [req.user.tenant_id, commande_id, livreur_id, date_prevue]

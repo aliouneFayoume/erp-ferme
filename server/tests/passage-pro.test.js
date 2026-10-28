@@ -112,6 +112,33 @@ describe('passage en Pro depuis l’application — paiement en ligne et demande
             expect(await factures()).toHaveLength(1);
         });
 
+        // Course : deux clics quasi simultanés lisent tous deux « aucune facture ouverte ». En base, l'index unique partiel
+        // (migration-44) fait échouer le second INSERT (23505) ; la route doit alors reprendre la facture ouverte par l'autre
+        // requête au lieu de répondre 500. pg-mem ne gère pas l'index partiel : on simule l'échec au moment de l'INSERT.
+        test('deux demandes simultanées : l’INSERT perdant (23505) réutilise la facture déjà ouverte, sans 500 ni doublon', async () => {
+            const connecterOrigine = pool.connect.bind(pool);
+            pool.connect = async () => {
+                const client = await connecterOrigine();
+                const requeteOrigine = client.query.bind(client);
+                client.query = async (sql, params) => {
+                    if (typeof sql === 'string' && /INSERT INTO factures_saas/.test(sql)) {
+                        // L'autre requête a gagné la course : sa facture existe déjà quand la nôtre est refusée.
+                        await requeteOrigine(sql, params);
+                        throw Object.assign(new Error('duplicate key value violates unique constraint "uniq_facture_passage_pro_ouverte"'), { code: '23505' });
+                    }
+                    return requeteOrigine(sql, params);
+                };
+                return client;
+            };
+
+            const res = await post('/api/abonnement/passer-pro');
+
+            expect(res.status).toBe(200);
+            const lignes = await factures();
+            expect(lignes).toHaveLength(1);
+            expect(res.body.url).toContain(`/api/payer/${lignes[0].id}.`);
+        });
+
         test('le paiement confirmé par PayDunya active le Pro (plan, prix mensuel, conversion mesurée) et trace l’opération', async () => {
             const { body } = await post('/api/abonnement/passer-pro');
             const ligne = await ouvrirLienEtPayer(body.url);

@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { requireAuth, checkRole } = require('../auth');
 const { logAudit } = require('../audit');
+const { premiereReferenceInvalide } = require('../references');
 const { motDePasseValide, motDePasseErreurs } = require('../validation');
 const { LIMITES_ESSAI } = require('../modulesSaas');
 // Nommé `emailService` (pas `email`) : cette route destructure déjà `email` depuis req.body.
@@ -61,6 +62,11 @@ module.exports = function utilisateursRoutes(pool) {
             }
             const roleRes = await req.db.query(`SELECT id FROM roles WHERE nom = $1`, [role]);
             if (roleRes.rows.length === 0) return res.status(400).json({ erreur: 'Rôle invalide.' });
+            // Le secteur d'un chef de production doit être un secteur de CETTE ferme (la clé étrangère ne passe pas par la RLS).
+            if (role === 'chef_prod') {
+                const refInvalide = await premiereReferenceInvalide(req.db, req.user.tenant_id, [['secteurs', secteur_id, 'Secteur']]);
+                if (refInvalide) return res.status(400).json({ erreur: refInvalide });
+            }
 
             const hash = await bcrypt.hash(password, 10);
             const tokenVerification = crypto.randomBytes(32).toString('hex');
@@ -106,6 +112,10 @@ module.exports = function utilisateursRoutes(pool) {
                 const roleRes = await req.db.query(`SELECT id FROM roles WHERE nom = $1`, [role]);
                 if (roleRes.rows.length === 0) return res.status(400).json({ erreur: 'Rôle invalide.' });
                 roleId = roleRes.rows[0].id;
+            }
+            if (role === 'chef_prod') {
+                const refInvalide = await premiereReferenceInvalide(req.db, req.user.tenant_id, [['secteurs', secteur_id, 'Secteur']]);
+                if (refInvalide) return res.status(400).json({ erreur: refInvalide });
             }
 
             // Un admin ne peut pas se désactiver lui-même : ça pourrait verrouiller l'accès admin.
