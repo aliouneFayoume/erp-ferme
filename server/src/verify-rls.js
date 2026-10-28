@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const { analyserCouverture, collecterCatalogue } = require('./rlsAudit');
 
 /**
  * Vérifie que les policies RLS (rls-policies.sql) filtrent réellement les lignes pour le rôle
@@ -8,6 +9,8 @@ const { Pool } = require('pg');
  *
  * Usage :
  *   DATABASE_URL=<connexion rôle propriétaire> ERP_APP_DATABASE_URL=<connexion erp_app> node src/verify-rls.js
+ *
+ * En plus des scénarios ci-dessous, le script fait une revue de couverture de TOUT le schéma public (src/rlsAudit.js).
  *
  * DATABASE_URL (rôle propriétaire, contourne RLS) sert uniquement à créer/nettoyer les données de
  * test : c'est le même rôle que celui qui crée une organisation aujourd'hui (SQL Editor Supabase),
@@ -37,6 +40,7 @@ async function main() {
     const admin = new Pool({ connectionString: process.env.DATABASE_URL });
     const app = new Pool({ connectionString: process.env.ERP_APP_DATABASE_URL });
 
+    let avertissementsCouverture = [];
     let tenantA, tenantB, secteurA, secteurB, lotA, lotB, clientA, clientB, ticketA, ticketB;
 
     try {
@@ -268,6 +272,15 @@ async function main() {
         } finally {
             client.release();
         }
+
+        // --- Couverture de TOUT le schéma public (catalogues PostgreSQL en lecture seule, rôle propriétaire) : chaque table à tenant_id
+        //     (ou qui en dépend par clé étrangère) doit avoir RLS + au moins une policy ; aucune policy d'écriture ne doit contenir
+        //     l'échappatoire « current_tenant_id() IS NULL » ; anon/authenticated ne doivent plus rien pouvoir lire (migration-43).
+        //     Les ERREUR font échouer le script ; les AVERTISSEMENT sont listés mais n'empêchent pas la bascule. ---
+        const constats = analyserCouverture(await collecterCatalogue(admin));
+        for (const c of constats.filter((x) => x.niveau === 'ERREUR')) verifier(`Couverture RLS — ${c.message}`, false);
+        avertissementsCouverture = constats.filter((x) => x.niveau === 'AVERTISSEMENT').map((x) => x.message);
+        verifier('Couverture RLS : toutes les tables à tenant_id (ou dépendantes) ont RLS + policies, sans échappatoire en écriture ni droit résiduel anon/authenticated', !constats.some((x) => x.niveau === 'ERREUR'));
     } finally {
         // --- Nettoyage (rôle propriétaire, ordre inverse des FK). ---
         await admin.query(`DELETE FROM avis_publics WHERE nom LIKE 'verify-rls%'`).catch(() => {});
@@ -288,6 +301,10 @@ async function main() {
     for (const r of resultats) {
         console.log(`  ${r.ok ? '✓' : '✗'} ${r.nom}`);
         if (!r.ok) echecs += 1;
+    }
+    if (avertissementsCouverture.length > 0) {
+        console.log('\nAvertissements (n\'empêchent pas la bascule, à relire) :\n');
+        for (const a of avertissementsCouverture) console.log(`  ! ${a}`);
     }
     console.log(`\n${resultats.length - echecs}/${resultats.length} vérifications passées.`);
     if (echecs > 0) {
