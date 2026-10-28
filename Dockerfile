@@ -32,5 +32,17 @@ ENV NODE_ENV=production
 ENV PORT=4000
 EXPOSE 4000
 
+# Durcissement 2026-10 : exécution en utilisateur non-root. L'analyse du code montre que l'app n'écrit
+# AUCUN fichier (fs n'est utilisé qu'en lecture : schema.sql ; PDF de facture générés en mémoire ;
+# pas de logs fichier ni d'uploads ; aucun volume monté sur le conteneur app). Les fichiers de
+# l'image restent donc propriété de root, en lecture seule pour "node" : en cas de compromission,
+# l'attaquant ne peut pas modifier le code de l'application. Aucun chown de volume hôte requis.
+USER node
+
+# Sonde de santé Docker (sans curl, absent d'alpine) : /api/health interroge réellement la base.
+# start-period large : le démarrage applique schéma/migrations avant d'écouter.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
 WORKDIR /app/server
 CMD ["node", "src/index.js"]

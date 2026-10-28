@@ -540,3 +540,68 @@ strictement inchangé**, rien à faire pour l'activer plus tard.
 - [x] Vérifier que `server/.env` n'est jamais commité (déjà exclu par `.gitignore`).
 - [x] Externaliser les sauvegardes hors du VPS (`rclone sync` vers Cloudflare R2, voir section
       "Sauvegardes toutes les 6h" ci-dessus).
+
+## Durcissement 2026-10
+
+Tous les changements sont réversibles (un revert du commit suffit). Ordre de déploiement
+recommandé : **nginx d'abord (1), puis l'image app (2-3)**, puis le secret d'empreinte (4).
+Le conteneur `app` n'utilise aucun volume bind : **aucun `chown` à faire sur l'hôte**
+(si un volume bind était ajouté un jour pour l'app : `sudo chown -R 1000:1000 <dossier>`, uid de `node`).
+Les volumes de nginx (`deploy/certbot/conf`, `deploy/certbot/www`) sont en lecture seule et nginx
+tourne toujours en root : rien à corriger.
+
+### 1. nginx : limitation de débit, taille, timeouts (`deploy/nginx.conf`)
+
+- **Ce qui change** : `limit_req` général 20 r/s par IP (rafale 40) sur `/`, strict 5 r/s (rafale 10)
+  sur `/api/auth/`, réponse 429 ; `limit_conn` 50 par IP ; `client_max_body_size 1m` (l'app plafonne
+  déjà le JSON à 100 Ko et n'accepte aucun upload) ; `client_header_timeout`/`client_body_timeout` 15 s,
+  `send_timeout` 30 s, `keepalive_timeout` 30 s ; `proxy_read_timeout` inchangé. Exemptés de limite :
+  l'IPN PayDunya (`/api/finance/paiements/ipn`) et `/api/health`. Il n'existe aucune route webhook
+  WhatsApp entrante dans l'app. En-têtes de sécurité : posés par l'app (helmet/CSP), nginx n'en ajoute ni n'en retire.
+- **Hypothèse** : nginx est directement exposé (pas de CDN devant) ; sinon configurer `real_ip` d'abord.
+- **Déployer** (après le `git pull`/déploiement habituel, le fichier est monté en lecture seule) :
+  ```bash
+  cd /home/ubuntu/erp-ferme
+  docker compose exec nginx nginx -t          # valide la syntaxe AVANT (nginx -s reload ensuite)
+  docker compose up -d --force-recreate nginx
+  ```
+- **Vérifier** : `curl -sI https://massla.sn/api/health` -> 200 ; puis
+  `for i in $(seq 60); do curl -s -o /dev/null -w '%{http_code}\n' https://massla.sn/api/auth/me; done | sort | uniq -c`
+  doit montrer des 429 ; l'usage normal de l'app ne doit en produire aucun.
+- **Retour arrière** : revert du commit puis `docker compose up -d --force-recreate nginx`.
+
+### 2. Dockerfile : utilisateur non-root + HEALTHCHECK
+
+- **Ce qui change** : `USER node` (uid 1000) dans l'image finale ; `HEALTHCHECK` (node + fetch sur
+  `/api/health`, sans curl). L'app n'écrit aucun fichier (lecture de `schema.sql`, PDF générés en mémoire).
+- **À tester sur le VPS avant de pousser en production** (non vérifiable sans Docker).
+- **Déployer** : `docker compose up -d --build app` ; puis `docker compose ps` (état `healthy` après ~40 s)
+  et `docker compose logs app | tail`.
+- **Retour arrière** : `docker tag erp-ferme-app:<sha-precedent> erp-ferme-app:latest && docker compose up -d --no-build app`
+  (le workflow garde les 5 dernières images taguées par SHA).
+
+### 3. docker-compose.yml : `read_only`, `cap_drop`, `no-new-privileges` (service app seulement)
+
+- **Ce qui change** : `read_only: true` + `tmpfs: /tmp`, `cap_drop: [ALL]`, `security_opt: no-new-privileges:true`.
+  Justification : aucune écriture disque dans l'app, port 4000 non privilégié. Non appliqué à nginx
+  (ports 80/443, maître en root).
+- **Déployer** : même commande qu'en 2. **Vérifier** : `docker compose exec app sh -c 'touch /app/x'` doit
+  échouer (« Read-only file system ») et l'application doit répondre normalement.
+- **Si l'app plante au démarrage** (écriture imprévue, erreur EROFS dans `docker compose logs app`) :
+  retirer temporairement la ligne `read_only: true` et relancer `docker compose up -d app`.
+- **Retour arrière** : revert du commit + `docker compose up -d app`.
+
+### 4. GitHub Actions : actions épinglées, empreinte d'hôte, permissions
+
+- **Ce qui change** : `actions/checkout` (v4.2.2), `actions/setup-node` (v4.4.0) et `appleboy/ssh-action`
+  (v1.0.3) sont épinglées sur le SHA complet du commit (version en commentaire). Pour mettre à jour une
+  action, résoudre le SHA avec `git ls-remote https://github.com/<org>/<action> 'refs/tags/<version>*'`.
+  `permissions: contents: read` était déjà présent dans `ci.yml` et `deploy.yml`.
+- **Empreinte d'hôte SSH** (anti man-in-the-middle) : le paramètre `fingerprint` est branché sur le secret
+  `VPS_HOST_FINGERPRINT`. **Tant que ce secret n'existe pas, la vérification est inactive** et le
+  déploiement fonctionne comme avant. Pour l'activer :
+  1. Depuis votre poste : `ssh-keyscan -t ed25519 <ip-du-vps> | ssh-keygen -lf -` ; noter la valeur `SHA256:...`
+     (à recouper sur le VPS : `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`).
+  2. GitHub -> dépôt -> Settings -> Secrets and variables -> Actions -> New repository secret ->
+     nom `VPS_HOST_FINGERPRINT`, valeur `SHA256:...`.
+  3. Relancer un déploiement. Après une réinstallation du VPS (nouvelle clé d'hôte) : mettre à jour ou supprimer le secret.

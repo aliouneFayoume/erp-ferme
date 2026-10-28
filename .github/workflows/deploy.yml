@@ -24,11 +24,15 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Déploiement sur le VPS (git pull + rebuild Docker)
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          # Empreinte de la clé d'hôte du VPS (anti man-in-the-middle). Secret absent => chaîne vide =>
+          # aucune vérification (comportement historique) ; dès que VPS_HOST_FINGERPRINT est créé
+          # (format "SHA256:..."), la connexion est refusée si l'hôte présente une autre clé.
+          fingerprint: ${{ secrets.VPS_HOST_FINGERPRINT }}
           script: |
             set -e
             cd /home/ubuntu/erp-ferme

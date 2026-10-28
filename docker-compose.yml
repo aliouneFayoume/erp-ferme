@@ -15,6 +15,17 @@ services:
       - PORT=4000
     expose:
       - "4000"
+    # Durcissement 2026-10 : l'app n'écrit nulle part (voir Dockerfile) -> système de fichiers en
+    # lecture seule (+ /tmp en mémoire par précaution pour les libs), aucune capability Linux
+    # (port 4000 > 1024, pas de chown/setuid) et interdiction d'élever ses privilèges.
+    # nginx est volontairement exclu : il lie 80/443 et son maître tourne en root.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     # Décommenter pour exposer directement sans nginx (utile en test) :
     # ports:
     #   - "4000:4000"
