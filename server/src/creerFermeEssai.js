@@ -446,7 +446,7 @@ async function creerSecteursEssai(client, tenantId, filiere) {
  * - email_verifie reste FALSE : il n'y a pas d'e-mail à vérifier, et aucun parcours ne permet d'en ajouter un sans vérification ;
  * - le numéro est enregistré non vérifié (telephone_verifie = FALSE) tant que le premier code n'a pas été saisi.
  */
-async function creerFermeEssai(pool, { nomFerme, telephone, source, filiere: filiereDemandee }) {
+async function creerFermeEssai(pool, { nomFerme, telephone, source, filiere: filiereDemandee, partenaire = null }) {
     const filiere = filiereValide(filiereDemandee);
     const client = await pool.connect();
     try {
@@ -456,7 +456,11 @@ async function creerFermeEssai(pool, { nomFerme, telephone, source, filiere: fil
         await client.query("SELECT set_config('app.is_plateforme_admin', 'true', false)");
 
         const slug = await genererSlugUnique(client, nomFerme);
-        const orgRes = await client.query(`INSERT INTO organisations (nom, slug) VALUES ($1, $2) RETURNING id`, [nomFerme, slug]);
+        // `partenaire` ({ id, code }) : déjà vérifié par la route (routes/essai.js). Rattachement seul, aucun avantage pour la ferme.
+        const orgRes = await client.query(
+            `INSERT INTO organisations (nom, slug, partenaire_id, code_partenaire_saisi) VALUES ($1, $2, $3, $4) RETURNING id`,
+            [nomFerme, slug, partenaire ? partenaire.id : null, partenaire ? partenaire.code : null]
+        );
         const tenantId = orgRes.rows[0].id;
         await client.query('SELECT set_config($1, $2, false)', ['app.current_tenant_id', String(tenantId)]);
 
@@ -491,7 +495,7 @@ async function creerFermeEssai(pool, { nomFerme, telephone, source, filiere: fil
             action: 'CREATE',
             userId: admin.id,
             tenantId,
-            details: { nomFerme, origine: 'essai_autonome', source: source === 'demo' ? 'demo' : 'essai', filiere },
+            details: { nomFerme, origine: 'essai_autonome', source: source === 'demo' ? 'demo' : 'essai', filiere, ...(partenaire ? { partenaire: partenaire.code } : {}) },
         });
 
         await client.query('COMMIT');

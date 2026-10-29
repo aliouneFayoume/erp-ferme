@@ -105,7 +105,9 @@
         // Depuis la page Pisciculture, l'inscription arrive avec « Pisciculture » déjà cochée.
         const parPage = { '/pisciculture': 'piscicole', '/maraichage': 'maraicher', '/elevage': 'elevage', '/aviculture': 'avicole' };
         const filiere = el.dataset.filiere || parPage[Object.keys(parPage).find((p) => window.location.pathname.startsWith(p))] || '';
-        window.location.href = `/essai.html?source=essai${filiere ? `&filiere=${filiere}` : ''}`;
+        // Affiliation : le ?ref=CODE du lien du partenaire suit le visiteur jusqu'au formulaire d'essai (code déjà nettoyé, puis encodé).
+        const ref = window.MassiaCodePartenaire ? window.MassiaCodePartenaire.codePartenaireDuLien() : '';
+        window.location.href = `/essai.html?source=essai${filiere ? `&filiere=${filiere}` : ''}${ref ? `&ref=${encodeURIComponent(ref)}` : ''}`;
         return;
       }
       ouvrir(el.dataset.source);

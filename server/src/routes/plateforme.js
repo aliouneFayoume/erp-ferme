@@ -6,6 +6,7 @@ const { creerNouvelleFerme } = require('../creerFerme');
 const { envoyerMessageWhatsapp } = require('../whatsapp');
 const { envoyerEmailRappelSaas } = require('../email');
 const { nomSecteurValide } = require('../validation');
+const { normaliserCodePartenaire } = require('../partenaires');
 const { getPaydunyaConfig } = require('../paymentConfig');
 const { creerJeton, chargerFactureSaas, verifierFacturePayable, erreurHttp } = require('../paiementsSaas');
 
@@ -910,6 +911,200 @@ module.exports = function plateformeRoutes(pool) {
         } catch (err) {
             console.error(err);
             res.status(500).json({ erreur: err.message || "Erreur lors de l'envoi du rappel par email." });
+        }
+    });
+
+    // ---- Programme d'affiliation (migration-46) ------------------------------------------------------------------------------------
+    // Un partenaire est rémunéré UNIQUEMENT sur les paiements réels de l'abonnement (paiements_saas au statut VALIDE) de ses fermes,
+    // pendant `commission_mois` mois après la création de chaque ferme. Montants en FCFA entiers.
+
+    /** Entier strict dans [min, max] : accepte un nombre ou une chaîne d'entier (« 20 »), refuse 12.5, « 12abc », null, NaN. */
+    function entierBorne(valeur, min, max) {
+        if (typeof valeur === 'number' ? !Number.isInteger(valeur) : !(typeof valeur === 'string' && /^-?\d{1,12}$/.test(valeur.trim()))) return null;
+        const n = Number(valeur);
+        return n >= min && n <= max ? n : null;
+    }
+
+    /** Date de fin de la fenêtre de commission d'une ferme : sa création + `mois` mois (en UTC). */
+    function finFenetreCommission(creeLe, mois) {
+        const fin = new Date(creeLe);
+        fin.setUTCMonth(fin.getUTCMonth() + mois);
+        return fin;
+    }
+
+    /**
+     * Partenaires avec leurs compteurs et la commission due. Calculs faits en JavaScript sur des lectures à plat : les sous-requêtes
+     * corrélées et COUNT(DISTINCT CASE ...) font planter pg-mem (voir GET /organisations), et les volumes (quelques partenaires,
+     * quelques centaines de fermes) rendent le cumul en mémoire insignifiant.
+     */
+    async function listerPartenaires(db) {
+        const partenaires = (await db.query(`SELECT id, code, nom, commission_pct, commission_mois, actif, notes, cree_le FROM partenaires ORDER BY actif DESC, code ASC`)).rows;
+        const fermes = (await db.query(`SELECT id, partenaire_id, cree_le FROM organisations WHERE partenaire_id IS NOT NULL`)).rows;
+        const versements = (await db.query(`SELECT partenaire_id, SUM(montant_fcfa) AS total FROM versements_partenaires GROUP BY partenaire_id`)).rows;
+        // « Active » = a saisi au moins un relevé sur une donnée RÉELLE : les lots et animaux de la ferme démo (est_demo), créés d'office
+        // avec leurs relevés à l'ouverture de l'essai, ne prouvent rien.
+        const avecReleves = (await db.query(
+            `SELECT l.tenant_id FROM releves_journaliers r JOIN lots_production l ON l.id = r.lot_id
+             WHERE l.est_demo = FALSE AND l.tenant_id IN (SELECT id FROM organisations WHERE partenaire_id IS NOT NULL) GROUP BY l.tenant_id`
+        )).rows;
+        const avecRelevesAnimaux = (await db.query(
+            `SELECT a.tenant_id FROM releves_animal r JOIN animaux a ON a.id = r.animal_id
+             WHERE a.est_demo = FALSE AND a.tenant_id IN (SELECT id FROM organisations WHERE partenaire_id IS NOT NULL) GROUP BY a.tenant_id`
+        )).rows;
+        const paiements = (await db.query(
+            `SELECT tenant_id, montant, date_paiement, cree_le FROM paiements_saas
+             WHERE statut = 'VALIDE' AND tenant_id IN (SELECT id FROM organisations WHERE partenaire_id IS NOT NULL)`
+        )).rows;
+
+        const actifs = new Set([...avecReleves, ...avecRelevesAnimaux].map((r) => r.tenant_id));
+        const fermeParId = new Map(fermes.map((f) => [f.id, f]));
+        const verseParPartenaire = new Map(versements.map((v) => [v.partenaire_id, Number(v.total)]));
+
+        return partenaires.map((p) => {
+            const siennes = fermes.filter((f) => f.partenaire_id === p.id);
+            const payantes = new Set();
+            let baseCommissionnable = 0;
+            for (const paiement of paiements) {
+                const ferme = fermeParId.get(paiement.tenant_id);
+                if (!ferme || ferme.partenaire_id !== p.id) continue;
+                payantes.add(ferme.id);
+                const date = new Date(paiement.date_paiement || paiement.cree_le);
+                // Ni avant la création de la ferme ni après la fin de la fenêtre (borne de fin exclue).
+                if (date >= new Date(ferme.cree_le) && date < finFenetreCommission(ferme.cree_le, p.commission_mois)) {
+                    baseCommissionnable += Number(paiement.montant);
+                }
+            }
+            const commission = Math.floor((baseCommissionnable * p.commission_pct) / 100);
+            const verse = verseParPartenaire.get(p.id) || 0;
+            return {
+                ...p,
+                inscriptions: siennes.length,
+                actives: siennes.filter((f) => actifs.has(f.id)).length,
+                payantes: payantes.size,
+                base_commissionnable_fcfa: baseCommissionnable,
+                commission_totale_fcfa: commission,
+                verse_fcfa: verse,
+                // Négatif = acompte versé en avance sur des paiements à venir ; affiché tel quel plutôt que masqué.
+                commission_due_fcfa: commission - verse,
+            };
+        });
+    }
+
+    router.get('/partenaires', ...garde, async (req, res) => {
+        try {
+            res.json(await listerPartenaires(req.db));
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la récupération des partenaires.' });
+        }
+    });
+
+    /** Valide le corps d'un partenaire ; `partiel` (modification) n'exige aucun champ mais refuse un corps sans aucun champ reconnu. */
+    function lirePartenaire(corps, { partiel }) {
+        const out = {};
+        if (!partiel || corps.code !== undefined) {
+            const code = normaliserCodePartenaire(corps.code);
+            if (!code) return { erreur: 'Code invalide : 1 à 40 caractères parmi lettres, chiffres, tiret et tiret bas (sans espace).' };
+            out.code = code;
+        }
+        if (!partiel || corps.nom !== undefined) {
+            const nom = typeof corps.nom === 'string' ? corps.nom.trim() : '';
+            if (nom.length < 1 || nom.length > 100) return { erreur: 'Le nom est requis (100 caractères au plus).' };
+            out.nom = nom;
+        }
+        if (corps.commission_pct !== undefined) {
+            const pct = entierBorne(corps.commission_pct, 0, 100);
+            if (pct === null) return { erreur: 'La commission doit être un pourcentage entier entre 0 et 100.' };
+            out.commission_pct = pct;
+        }
+        if (corps.commission_mois !== undefined) {
+            const mois = entierBorne(corps.commission_mois, 0, 1200);
+            if (mois === null) return { erreur: 'La durée de commission doit être un nombre entier de mois (0 à 1200).' };
+            out.commission_mois = mois;
+        }
+        if (corps.actif !== undefined) {
+            if (typeof corps.actif !== 'boolean') return { erreur: '« actif » doit être vrai ou faux.' };
+            out.actif = corps.actif;
+        }
+        if (corps.notes !== undefined && corps.notes !== null) {
+            if (typeof corps.notes !== 'string' || corps.notes.length > 2000) return { erreur: 'Notes : texte de 2000 caractères au plus.' };
+            out.notes = corps.notes;
+        }
+        return { valeurs: out };
+    }
+
+    router.post('/partenaires', ...garde, async (req, res) => {
+        const { valeurs, erreur } = lirePartenaire(req.body || {}, { partiel: false });
+        if (erreur) return res.status(400).json({ erreur });
+        try {
+            const r = await req.db.query(
+                `INSERT INTO partenaires (code, nom, commission_pct, commission_mois, actif, notes) VALUES ($1, $2, $3, $4, $5, $6)
+                 RETURNING id, code, nom, commission_pct, commission_mois, actif, notes, cree_le`,
+                [valeurs.code, valeurs.nom, valeurs.commission_pct ?? 20, valeurs.commission_mois ?? 12, valeurs.actif ?? true, valeurs.notes ?? null]
+            );
+            await logAudit(req.db, { req, table: 'partenaires', rowId: r.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: null, details: { ...valeurs, superviseur: req.user.nom } });
+            res.status(201).json(r.rows[0]);
+        } catch (err) {
+            if (err.code === '23505') return res.status(409).json({ erreur: 'Ce code partenaire existe déjà.' });
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la création du partenaire.' });
+        }
+    });
+
+    router.put('/partenaires/:id', ...garde, async (req, res) => {
+        const id = entierBorne(req.params.id, 1, 2147483647);
+        if (id === null) return res.status(404).json({ erreur: 'Partenaire introuvable.' });
+        // Le code n'est pas modifiable : il est déjà dans des liens publiés et sur les fermes rattachées (code_partenaire_saisi).
+        const { code, ...corps } = req.body || {};
+        const { valeurs, erreur } = lirePartenaire(corps, { partiel: true });
+        if (erreur) return res.status(400).json({ erreur });
+        const colonnes = Object.keys(valeurs);
+        if (colonnes.length === 0) return res.status(400).json({ erreur: 'Aucune modification à enregistrer.' });
+        try {
+            const r = await req.db.query(
+                `UPDATE partenaires SET ${colonnes.map((c, i) => `${c} = $${i + 2}`).join(', ')} WHERE id = $1
+                 RETURNING id, code, nom, commission_pct, commission_mois, actif, notes, cree_le`,
+                [id, ...colonnes.map((c) => valeurs[c])]
+            );
+            if (r.rows.length === 0) return res.status(404).json({ erreur: 'Partenaire introuvable.' });
+            await logAudit(req.db, { req, table: 'partenaires', rowId: id, action: 'UPDATE', userId: req.user.id, tenantId: null, details: { ...valeurs, superviseur: req.user.nom } });
+            res.json(r.rows[0]);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: 'Erreur lors de la modification du partenaire.' });
+        }
+    });
+
+    router.post('/partenaires/:id/versements', ...garde, async (req, res) => {
+        const id = entierBorne(req.params.id, 1, 2147483647);
+        if (id === null) return res.status(404).json({ erreur: 'Partenaire introuvable.' });
+        const corps = req.body || {};
+        const montant = entierBorne(corps.montant_fcfa, 1, 1000000000);
+        if (montant === null) return res.status(400).json({ erreur: 'Le montant doit être un nombre entier de FCFA, supérieur à 0.' });
+        let note = null;
+        if (corps.note !== undefined && corps.note !== null && corps.note !== '') {
+            if (typeof corps.note !== 'string' || corps.note.length > 500) return res.status(400).json({ erreur: 'La note ne doit pas dépasser 500 caractères.' });
+            note = corps.note.trim() || null;
+        }
+        let dateVersement = null; // absente : la base met la date du jour
+        if (corps.date_versement !== undefined && corps.date_versement !== null && corps.date_versement !== '') {
+            const valide = typeof corps.date_versement === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(corps.date_versement) && !Number.isNaN(new Date(corps.date_versement).getTime());
+            if (!valide) return res.status(400).json({ erreur: 'Date invalide (format AAAA-MM-JJ).' });
+            dateVersement = corps.date_versement;
+        }
+        try {
+            const existe = await req.db.query(`SELECT id FROM partenaires WHERE id = $1`, [id]);
+            if (existe.rows.length === 0) return res.status(404).json({ erreur: 'Partenaire introuvable.' });
+            const r = await req.db.query(
+                `INSERT INTO versements_partenaires (partenaire_id, montant_fcfa, date_versement, note) VALUES ($1, $2, COALESCE($3::date, CURRENT_DATE), $4)
+                 RETURNING id, partenaire_id, montant_fcfa, date_versement, note, cree_le`,
+                [id, montant, dateVersement, note]
+            );
+            await logAudit(req.db, { req, table: 'versements_partenaires', rowId: r.rows[0].id, action: 'CREATE', userId: req.user.id, tenantId: null, details: { partenaire_id: id, montant_fcfa: montant, note, superviseur: req.user.nom } });
+            res.status(201).json(r.rows[0]);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ erreur: "Erreur lors de l'enregistrement du versement." });
         }
     });
 

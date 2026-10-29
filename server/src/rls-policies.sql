@@ -330,6 +330,18 @@ CREATE POLICY demandes_lecture ON demandes_contact FOR SELECT TO erp_app
 CREATE POLICY demandes_traitement ON demandes_contact FOR UPDATE TO erp_app
     USING (true) WITH CHECK (true);
 
+-- Programme d'affiliation (migration-46) : partenaires et versements, globales SANS tenant_id, réservées au superviseur plateforme
+-- (lecture ET écriture). La vérification d'un code à l'inscription passe par queryPreTenantPlateforme : pas d'échappatoire
+-- « pré-tenant » plus large. Pas de policy DELETE : un partenaire se désactive.
+DROP POLICY IF EXISTS plateforme_seulement ON partenaires;
+CREATE POLICY plateforme_seulement ON partenaires TO erp_app
+    USING (is_plateforme_admin())
+    WITH CHECK (is_plateforme_admin());
+DROP POLICY IF EXISTS plateforme_seulement ON versements_partenaires;
+CREATE POLICY plateforme_seulement ON versements_partenaires TO erp_app
+    USING (is_plateforme_admin())
+    WITH CHECK (is_plateforme_admin());
+
 -- Récoltes ostréicoles (migration-41) : table de tenant, mêmes règles que les autres tables de production.
 DROP POLICY IF EXISTS tenant_isolation ON recoltes_ostreicoles;
 CREATE POLICY tenant_isolation ON recoltes_ostreicoles

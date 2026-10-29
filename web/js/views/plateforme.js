@@ -9,7 +9,7 @@ const FACTURE_SAAS_STATUT_BADGE = { A_PAYER: 'warn', PAYEE: 'ok', EN_RETARD: 'da
 
 window.Views.plateforme = {
   async render(container) {
-    const [organisations, tickets, catalogue, facturesSaas, avis, activite, essaisNonConfirmes, demandes] = await Promise.all([
+    const [organisations, tickets, catalogue, facturesSaas, avis, activite, essaisNonConfirmes, demandes, partenaires] = await Promise.all([
       Api.get('/plateforme/organisations'),
       Api.get('/plateforme/tickets'),
       Api.get('/plateforme/modules-saas'),
@@ -20,6 +20,8 @@ window.Views.plateforme = {
       Api.get('/plateforme/essais-non-confirmes').catch(() => ({ jours: 7, fermes: [] })),
       // Demandes du formulaire public : même précaution (table migration-38 pas encore collée = liste vide, pas de vue cassée).
       Api.get('/plateforme/demandes-contact').catch(() => []),
+      // Partenaires (migration-46) : même précaution tant que la migration n'est pas collée dans Supabase.
+      Api.get('/plateforme/partenaires').catch(() => []),
     ]);
 
     container.innerHTML = `
@@ -76,6 +78,19 @@ window.Views.plateforme = {
             ${renderLignesFacturesSaas(facturesSaas)}
           </tbody>
         </table>
+      </div>
+
+      <div class="panel">
+        <h2>Partenaires (${partenaires.length})</h2>
+        <p class="desc">Un partenaire recommande Massla avec son lien. Ses inscrits ont le même essai de 30 jours que les autres (aucun avantage). Il est payé uniquement sur les paiements réels d'abonnement de ses fermes, pendant la durée de commission indiquée. « Actifs » = au moins un relevé saisi sur de vraies données (hors ferme démo).</p>
+        <button id="btn-ajouter-partenaire" style="margin-bottom: 1rem;">Ajouter un partenaire</button>
+        <button class="secondary" id="btn-verser-partenaire" style="margin-bottom: 1rem;" ${partenaires.length ? '' : 'disabled'}>Enregistrer un versement</button>
+        <div style="overflow-x: auto;">
+          <table>
+            <thead><tr><th>Code</th><th>Nom</th><th>Inscrits</th><th>Actifs</th><th>Payants</th><th>Commission due</th><th>Lien à donner</th><th></th></tr></thead>
+            <tbody id="partenaires-body">${renderLignesPartenaires(partenaires)}</tbody>
+          </table>
+        </div>
       </div>
 
       <div class="panel">
@@ -176,6 +191,32 @@ window.Views.plateforme = {
       } catch (err) {
         showToast(err.message, 'error');
       }
+    });
+
+    container.querySelector('#btn-ajouter-partenaire').addEventListener('click', () => ouvrirAjoutPartenaire(container));
+    container.querySelector('#btn-verser-partenaire').addEventListener('click', () => ouvrirVersementPartenaire(container, partenaires));
+    container.querySelectorAll('#partenaires-body button[data-partenaire-modifier]').forEach((btn) => {
+      btn.addEventListener('click', () => modifierPartenaire(container, partenaires.find((p) => p.id === Number(btn.dataset.partenaireModifier))));
+    });
+    container.querySelectorAll('#partenaires-body button[data-partenaire-actif]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          await Api.put(`/plateforme/partenaires/${btn.dataset.partenaireActif}`, { actif: btn.dataset.actif === 'true' });
+          window.Views.plateforme.render(container);
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+    });
+    container.querySelectorAll('#partenaires-body button[data-copier-lien]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(btn.dataset.copierLien);
+          showToast('Lien copié.', 'success');
+        } catch (err) {
+          showToast('Copie impossible : sélectionnez le lien et copiez-le à la main.', 'error');
+        }
+      });
     });
 
     attacherOuvrirTicket(container.querySelector('#plateforme-tickets-body'), tickets);
@@ -284,6 +325,102 @@ function renderLignesActivite(fermes) {
       </tr>`;
     })
     .join('');
+}
+
+// Lien à donner à un partenaire : la page de présentation, qui fait suivre ?ref= jusqu'au formulaire d'essai (js/contact-decouvrir.js).
+function lienPartenaire(code) {
+  return `https://massla.sn/decouvrir?ref=${encodeURIComponent(code)}`;
+}
+
+function renderLignesPartenaires(partenaires) {
+  if (partenaires.length === 0) return '<tr><td colspan="8" class="empty">Aucun partenaire. « Ajouter un partenaire » crée son code et son lien.</td></tr>';
+  return partenaires
+    .map((p) => {
+      const lien = lienPartenaire(p.code);
+      const due = Number(p.commission_due_fcfa);
+      return `<tr>
+        <td><strong>${esc(p.code)}</strong>${p.actif ? '' : ' <span class="badge muted">Inactif</span>'}</td>
+        <td>${esc(p.nom)}<br><span class="desc">${esc(p.commission_pct)} % pendant ${esc(p.commission_mois)} mois</span></td>
+        <td>${esc(p.inscriptions)}</td>
+        <td>${esc(p.actives)}</td>
+        <td>${esc(p.payantes)}</td>
+        <td><strong>${due.toLocaleString('fr-FR')} FCFA</strong><br><span class="desc">${Number(p.commission_totale_fcfa).toLocaleString('fr-FR')} gagnés, ${Number(p.verse_fcfa).toLocaleString('fr-FR')} versés</span></td>
+        <td style="max-width:260px;word-break:break-all;"><span class="desc">${esc(lien)}</span><br><button class="secondary" data-copier-lien="${esc(lien)}">Copier le lien</button></td>
+        <td style="white-space:nowrap">
+          <button class="secondary" data-partenaire-modifier="${p.id}">Modifier</button>
+          <button class="secondary" data-partenaire-actif="${p.id}" data-actif="${p.actif ? 'false' : 'true'}">${p.actif ? 'Désactiver' : 'Réactiver'}</button>
+        </td>
+      </tr>`;
+    })
+    .join('');
+}
+
+async function ouvrirAjoutPartenaire(container) {
+  const values = await Modal.open('Ajouter un partenaire', [
+    { name: 'code', label: 'Code (lettres, chiffres, tiret ; ex. TERANGA)', type: 'text', value: '' },
+    { name: 'nom', label: 'Nom du partenaire', type: 'text', value: '' },
+    { name: 'commission_pct', label: 'Commission (% des paiements)', type: 'number', value: '20' },
+    { name: 'commission_mois', label: 'Durée de la commission (mois après la création de chaque ferme)', type: 'number', value: '12' },
+  ]);
+  if (!values) return;
+  try {
+    const p = await Api.post('/plateforme/partenaires', {
+      code: values.code,
+      nom: values.nom,
+      commission_pct: Number(values.commission_pct),
+      commission_mois: Number(values.commission_mois),
+    });
+    showToast(`Partenaire ${p.code} créé. Lien : ${lienPartenaire(p.code)}`, 'success');
+    window.Views.plateforme.render(container);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function modifierPartenaire(container, partenaire) {
+  if (!partenaire) return;
+  const values = await Modal.open(`Modifier ${partenaire.code}`, [
+    { name: 'nom', label: 'Nom du partenaire', type: 'text', value: partenaire.nom },
+    { name: 'commission_pct', label: 'Commission (% des paiements)', type: 'number', value: String(partenaire.commission_pct) },
+    { name: 'commission_mois', label: 'Durée de la commission (mois)', type: 'number', value: String(partenaire.commission_mois) },
+  ]);
+  if (!values) return;
+  try {
+    await Api.put(`/plateforme/partenaires/${partenaire.id}`, {
+      nom: values.nom,
+      commission_pct: Number(values.commission_pct),
+      commission_mois: Number(values.commission_mois),
+    });
+    showToast('Partenaire mis à jour.', 'success');
+    window.Views.plateforme.render(container);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function ouvrirVersementPartenaire(container, partenaires) {
+  const values = await Modal.open('Enregistrer un versement', [
+    {
+      name: 'partenaire_id',
+      label: 'Partenaire',
+      type: 'select',
+      value: String(partenaires[0].id),
+      options: partenaires.map((p) => ({ value: String(p.id), label: `${p.code} — reste dû ${Number(p.commission_due_fcfa).toLocaleString('fr-FR')} FCFA` })),
+    },
+    { name: 'montant_fcfa', label: 'Montant versé (FCFA, entier)', type: 'number', value: '' },
+    { name: 'note', label: 'Note (facultatif : Wave, virement, date…)', type: 'text', value: '' },
+  ]);
+  if (!values) return;
+  try {
+    await Api.post(`/plateforme/partenaires/${values.partenaire_id}/versements`, {
+      montant_fcfa: Number(values.montant_fcfa),
+      note: values.note.trim() || undefined,
+    });
+    showToast('Versement enregistré.', 'success');
+    window.Views.plateforme.render(container);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 function renderLignesDemandes(demandes) {

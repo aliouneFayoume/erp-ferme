@@ -1,6 +1,7 @@
 // Service worker : cache l'app shell pour un fonctionnement installable et hors-ligne
 // (terrain PWA offline-first, cahier des charges §4). Les appels /api/* ne sont jamais
 // mis en cache : ils doivent toujours refléter l'état réel du serveur.
+// v30 : vue plateforme — section Partenaires (programme d'affiliation).
 // v29 : les URL portant un jeton (?token=…) ne sont plus jamais mises en cache ; l'ancien cache est purgé.
 // v28 : logos allégés, Leaflet chargé à la demande (plus dans le premier écran).
 // v27 : écrans Production, Stock et Finance au format du kit (cartes de lots, recherche, indicateurs).
@@ -11,7 +12,7 @@
 // une seule entrée à tenir à jour au lieu d'une par vue (un ancien drift avait laissé paie.js hors
 // de cette liste alors qu'index.html le chargeait déjà). Incrémenté pour que les clients déjà
 // installés purgent l'ancien cache plutôt que de continuer à réclamer les anciens chemins par-vue.
-const CACHE_NAME = 'erp-ferme-shell-v29';
+const CACHE_NAME = 'erp-ferme-shell-v30';
 
 const APP_SHELL = [
   '/',

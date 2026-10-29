@@ -8,6 +8,7 @@ const { logAudit } = require('../audit');
 const { normaliserTelephone } = require('../validation');
 const { creerFermeEssai, filiereValide } = require('../creerFermeEssai');
 const { modeOstreiculture } = require('../ostreiculture');
+const { normaliserCodePartenaire, trouverPartenaireActif, MESSAGE_CODE_INCONNU } = require('../partenaires');
 const {
     MAX_TENTATIVES_CODE,
     DELAI_RENVOI_SECONDES,
@@ -159,11 +160,23 @@ module.exports = function essaiRoutes(pool) {
         if (!telephone) {
             return res.status(400).json({ erreur: 'Numéro WhatsApp invalide. Exemple : +221 77 000 00 00.' });
         }
+        // Code partenaire (affiliation, facultatif ; `ref` = le paramètre d'URL du lien du partenaire). Vérifié ICI, avant la création
+        // de la ferme et l'envoi du code WhatsApp : un code erroné ne doit pas faire dépenser un message. Il n'ouvre aucun avantage
+        // (l'essai reste de 30 jours) : il rattache seulement la ferme au partenaire, pour sa commission sur les paiements réels.
+        const codePartenaire = normaliserCodePartenaire(req.body.code_partenaire ?? req.body.ref);
+        if (codePartenaire === null) {
+            return res.status(400).json({ erreur: MESSAGE_CODE_INCONNU });
+        }
         try {
+            let partenaire = null;
+            if (codePartenaire !== '') {
+                partenaire = await trouverPartenaireActif(pool, codePartenaire);
+                if (!partenaire) return res.status(400).json({ erreur: MESSAGE_CODE_INCONNU });
+            }
             let utilisateur = await trouverParTelephone(telephone);
             if (!utilisateur) {
                 try {
-                    await creerFermeEssai(pool, { nomFerme, telephone, source, filiere });
+                    await creerFermeEssai(pool, { nomFerme, telephone, source, filiere, partenaire });
                 } catch (err) {
                     // Deux inscriptions simultanées avec le même numéro : la base tranche (téléphone UNIQUE) ; la perdante
                     // continue simplement comme une connexion. Toute autre erreur remonte.

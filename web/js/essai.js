@@ -56,6 +56,13 @@
     if (radio) radio.checked = true;
   }
 
+  // Code partenaire : prérempli par ?ref= (lien du partenaire), nettoyé par code-partenaire.js et posé via .value (jamais en HTML).
+  const champPartenaire = document.getElementById('essai-code-partenaire');
+  champPartenaire.value = window.MassiaCodePartenaire.codePartenaireDuLien();
+  champPartenaire.addEventListener('input', () => {
+    champPartenaire.value = window.MassiaCodePartenaire.nettoyerCodePartenaire(champPartenaire.value);
+  });
+
   document.getElementById('essai-form-numero').addEventListener('submit', async (e) => {
     e.preventDefault();
     masquerErreur('essai-erreur-numero');
@@ -64,7 +71,14 @@
     bouton.disabled = true;
     try {
       telephone = String(form.get('telephone') || '').trim();
-      const data = await appeler('/inscription', { nomFerme: form.get('nomFerme'), telephone, source, filiere: FILIERES.includes(form.get('filiere')) ? form.get('filiere') : 'avicole' });
+      const codePartenaire = window.MassiaCodePartenaire.nettoyerCodePartenaire(String(form.get('codePartenaire') || ''));
+      const data = await appeler('/inscription', {
+        nomFerme: form.get('nomFerme'),
+        telephone,
+        source,
+        filiere: FILIERES.includes(form.get('filiere')) ? form.get('filiere') : 'avicole',
+        ...(codePartenaire ? { code_partenaire: codePartenaire } : {}),
+      });
       window.MassiaAnalytics?.track('essai_demarre');
       document.getElementById('essai-message-code').textContent = data.message;
       montrer('code');

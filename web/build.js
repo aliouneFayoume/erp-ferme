@@ -52,11 +52,12 @@ const BUNDLES = {
   // analytics.js dans les deux fichiers alors qu'il est déjà chargé une fois dans le <head>.
   'inscription.min.js': ['js/inscription.js'],
   // essai.html (essai gratuit autonome : téléphone + code WhatsApp), fin de <body>.
-  'essai.min.js': ['js/essai.js'],
+  // code-partenaire.js d'abord : essai.js s'appuie sur window.MassiaCodePartenaire (affiliation, ?ref=).
+  'essai.min.js': ['js/code-partenaire.js', 'js/essai.js'],
   // decouvrir.html, fin de <body> — modal de demande de démonstration (section #contact) et section "Avis
   // clients" (chargement + modal de soumission) : deux fonctionnalités propres à cette page,
   // regroupées dans un seul bundle plutôt qu'un fichier par mini-fonctionnalité.
-  'contact-decouvrir.min.js': ['js/contact-decouvrir.js', 'js/avis-decouvrir.js', 'js/decouvrir-ui.js'],
+  'contact-decouvrir.min.js': ['js/code-partenaire.js', 'js/contact-decouvrir.js', 'js/avis-decouvrir.js', 'js/decouvrir-ui.js'],
   // portail.html
   'portail.min.js': ['js/branding.js', 'js/portail.js'],
   // verifier-email.html (lien reçu par email, voir server/src/email.js)

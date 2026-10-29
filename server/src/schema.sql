@@ -25,9 +25,36 @@ CREATE TABLE schema_migrations (
 -- tout le reste des données métier (utilisateurs, clients, secteurs, produits, commandes, lots,
 -- caisses chauffeur) est rattaché à une organisation via tenant_id.
 
+-- Partenaires d'affiliation (migration-46) : déclarés AVANT organisations, qui les référence. Réservés au superviseur
+-- plateforme (rls-policies.sql). Le code est toujours en MAJUSCULES ([A-Z0-9_-]), vérifié par le serveur.
+CREATE TABLE partenaires (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(40) NOT NULL UNIQUE,
+    nom VARCHAR(100) NOT NULL,
+    commission_pct INT NOT NULL DEFAULT 20 CHECK (commission_pct >= 0 AND commission_pct <= 100),
+    commission_mois INT NOT NULL DEFAULT 12 CHECK (commission_mois >= 0), -- durée de la commission, en mois après la création de chaque ferme
+    actif BOOLEAN NOT NULL DEFAULT TRUE,
+    notes TEXT,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Sommes réellement versées à un partenaire : sert à calculer le « reste dû » (routes/plateforme.js).
+CREATE TABLE versements_partenaires (
+    id SERIAL PRIMARY KEY,
+    partenaire_id INT NOT NULL REFERENCES partenaires(id),
+    montant_fcfa INT NOT NULL CHECK (montant_fcfa > 0),
+    date_versement DATE NOT NULL DEFAULT CURRENT_DATE,
+    note TEXT,
+    cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE organisations (
     id SERIAL PRIMARY KEY,
     nom VARCHAR(100) NOT NULL,
+    -- Affiliation (migration-46) : partenaire qui a recommandé la ferme, et le code tel que la personne l'a saisi (audit).
+    -- Sans effet pour la ferme (aucun avantage) ; ne sert qu'à calculer la commission du partenaire sur les paiements réels.
+    partenaire_id INT REFERENCES partenaires(id),
+    code_partenaire_saisi VARCHAR(40),
     -- Sous-domaine (<slug>.massla.sn) utilisé UNIQUEMENT pour l'image de marque avant connexion
     -- (routes/public.js) : la ferme racine massla.sn continue de servir Massla par défaut, sans
     -- changer la logique de connexion elle-même (email reste global, voir utilisateurs.email).
