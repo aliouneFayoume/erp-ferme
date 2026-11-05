@@ -8,12 +8,23 @@
 // ne tourne ni en production ni dans la construction de l'image Docker.
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const { SITE, SECTEURS, MENTIONS, CONFIDENTIALITE } = require('./contenu-marketing');
 const { PAGES_PUBLIQUES } = require('../server/src/pagesPubliques');
 
 const WEB = path.join(__dirname, '..', 'web');
 const accueil = fs.readFileSync(path.join(WEB, 'decouvrir.html'), 'utf8').replace(/\r\n/g, '\n');
-const DATE_SITEMAP = '2026-10-05';
+
+// Date de dernière modification d'un fichier de web/ pour le <lastmod> du plan du site : date du dernier commit qui
+// l'a touché, ou aujourd'hui s'il a des changements non commités. Évite une date figée identique pour toutes les pages
+// (Google finit par ignorer un lastmod qu'il juge peu fiable).
+function dateModification(fichier) {
+  const rel = path.join('web', fichier);
+  const racine = path.join(__dirname, '..');
+  const git = (...args) => execFileSync('git', ['-C', racine, ...args], { encoding: 'utf8' }).trim();
+  if (git('status', '--porcelain', '--', rel)) return new Date().toISOString().slice(0, 10);
+  return git('log', '-1', '--format=%cs', '--', rel) || new Date().toISOString().slice(0, 10);
+}
 
 function extraire(debut, fin, inclureFin = true) {
   const i = accueil.indexOf(debut);
@@ -255,11 +266,19 @@ ecrire('confidentialite.html', pageLegale(CONFIDENTIALITE, { avecSuivi: true, sc
 const generees = [...SECTEURS.map((s) => s.slug), MENTIONS.slug, CONFIDENTIALITE.slug].sort().join(',');
 if (generees !== [...PAGES_PUBLIQUES].sort().join(',')) throw new Error(`pagesPubliques.js (${PAGES_PUBLIQUES}) ne correspond pas aux pages générées (${generees})`);
 
-const urls = ['/decouvrir', ...SECTEURS.map((s) => `/${s.slug}`), '/mentions', '/confidentialite'];
+// [URL publique, fichier source dont on lit la date]. « / » est l'application (écran de connexion), indexable.
+const urls = [
+  ['/', 'index.html'],
+  ['/decouvrir', 'decouvrir.html'],
+  ...SECTEURS.map((s) => [`/${s.slug}`, `${s.slug}.html`]),
+  ['/inscription.html', 'inscription.html'],
+  ['/mentions', 'mentions.html'],
+  ['/confidentialite', 'confidentialite.html'],
+];
 ecrire(
   'sitemap.xml',
   `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-    urls.map((u) => `  <url><loc>${SITE}${u}</loc><lastmod>${DATE_SITEMAP}</lastmod></url>`).join('\n') +
+    urls.map(([u, f]) => `  <url><loc>${SITE}${u}</loc><lastmod>${dateModification(f)}</lastmod></url>`).join('\n') +
     `\n</urlset>\n`
 );
 ecrire('robots.txt', `User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: ${SITE}/sitemap.xml\n`);
