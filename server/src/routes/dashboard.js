@@ -19,7 +19,8 @@ module.exports = function dashboardRoutes(pool) {
 
             const [caJour, commandesB2C, stockTotal, encoursB2B, caissesOuvertes, lotsActifs, lotsRecolte, caParJour, produitsSousSeuil] = await Promise.all([
                 req.db.query(
-                    `SELECT COALESCE(SUM(montant_total), 0) as total FROM commandes WHERE tenant_id = $1 AND cree_le >= $2 AND cree_le < $3 AND statut != 'ANNULEE' AND deleted_at IS NULL`,
+                    // est_demo = FALSE : les ventes de la « Ferme démo » d'un essai (creerFermeEssai.js) ne sont pas de vrais chiffres.
+                    `SELECT COALESCE(SUM(montant_total), 0) as total FROM commandes WHERE tenant_id = $1 AND cree_le >= $2 AND cree_le < $3 AND statut != 'ANNULEE' AND deleted_at IS NULL AND est_demo = FALSE`,
                     [tenantId, debutJour, finJour]
                 ),
                 req.db.query(
@@ -47,12 +48,12 @@ module.exports = function dashboardRoutes(pool) {
                 req.db.query(
                     `SELECT cree_le, montant_total
                      FROM commandes
-                     WHERE tenant_id = $1 AND cree_le >= $2 AND statut != 'ANNULEE' AND deleted_at IS NULL`,
+                     WHERE tenant_id = $1 AND cree_le >= $2 AND statut != 'ANNULEE' AND deleted_at IS NULL AND est_demo = FALSE`,
                     [tenantId, new Date(Date.now() - 13 * 86400000).toISOString()]
                 ),
                 req.db.query(
                     `SELECT COUNT(*) as count FROM stocks st JOIN produits p ON p.id = st.produit_id
-                     WHERE p.tenant_id = $1 AND p.deleted_at IS NULL AND p.actif = TRUE AND st.quantite_disponible <= st.seuil_alerte`,
+                     WHERE p.tenant_id = $1 AND p.deleted_at IS NULL AND p.actif = TRUE AND p.est_demo = FALSE AND st.quantite_disponible <= st.seuil_alerte`,
                     [tenantId]
                 ),
             ]);
